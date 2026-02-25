@@ -332,7 +332,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { CatalogoProducto } from './catalogo-producto.entity';
+import { Producto } from './producto.entity';
 
 @Entity('catalogos')
 export class Catalogo {
@@ -357,16 +357,14 @@ export class Catalogo {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @OneToMany(
-    () => CatalogoProducto,
-    (catalogoProducto) => catalogoProducto.catalogo,
-  )
-  productos: CatalogoProducto[];
+  @ManyToMany(() => Producto, (producto) => producto.catalogos)
+  @JoinTable()
+  productos: Producto[];
 }
 
 ```  
 
-Note que con `typeorm` definimos el ID con el decorador `@PrimaryGeneratedColumn('uuid')` usando `uuid` como el tipo de dato del ID. Adicionalmente se usa `@Column(<tipo>)` para definir cada columna y su tipo, y `@CreateDateColumn()` y `@UpdateDateColumn()` para manejar automáticamente los timestamps de creación y actualización. La relación con `CatalogoProducto` se define con `@OneToMany`, para la relación adicionalmente se define dentro del decorador la función que retorna la entidad relacionada y la función que indica el campo de relación inversa.
+Note que con `typeorm` definimos el ID con el decorador `@PrimaryGeneratedColumn('uuid')` usando `uuid` como el tipo de dato del ID. Adicionalmente se usa `@Column(<tipo>)` para definir cada columna y su tipo, y `@CreateDateColumn()` y `@UpdateDateColumn()` para manejar automáticamente los timestamps de creación y actualización. La relación con `Producto` se define como `ManyToMany` dado que un catálogo puede tener múltiples productos y un producto puede estar en múltiples catálogos. TypeORM se encargará de crear la tabla intermedia para esta relación.
 
 ### Paso 2 — Repositorio (persistencia)
 
@@ -391,18 +389,19 @@ export class CatalogoRepository {
   ) {}
 
   async create(catalogo: Partial<Catalogo>): Promise<Catalogo> {
-  const newCatalogo = this.repository.create(catalogo);
+    const newCatalogo = this.repository.create(catalogo);
     return this.repository.save(newCatalogo);
   }
 
   async findAll(query: QueryCatalogoDto): Promise<Catalogo[]> {
     const queryBuilder = this.repository.createQueryBuilder('catalogo');
-    
+
     if (query.tiendaId) {
       queryBuilder.andWhere('catalogo.tiendaId = :tiendaId', {
         tiendaId: query.tiendaId,
       });
     }
+
     return queryBuilder.getMany();
   }
 
@@ -410,8 +409,10 @@ export class CatalogoRepository {
     return this.repository.findOne({ where: { id } });
   }
 
-  async update(id: string, updates: Partial<Catalogo>): 
-  Promise<Catalogo | null> {
+  async update(
+    id: string,
+    updates: Partial<Catalogo>,
+  ): Promise<Catalogo | null> {
     await this.repository.update(id, updates);
     return this.findById(id);
   }
@@ -421,6 +422,7 @@ export class CatalogoRepository {
     return (result.affected ?? 0) > 0;
   }
 }
+
 ```
 
 Consejos de implementación:
