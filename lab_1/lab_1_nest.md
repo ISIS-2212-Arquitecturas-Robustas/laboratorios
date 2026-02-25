@@ -46,7 +46,7 @@
 ---
 
 ## 1. Introducción a Nest
-<img src="nest_logo.png" alt="Nest Logo" width="200"/>
+<img src="recursos/nest_logo.png" alt="Nest Logo" width="200"/>
 
 NestJS es un framework para construir aplicaciones backend en Node.js, con un enfoque fuerte en TypeScript y en la organización estructurada del código.
   
@@ -96,7 +96,7 @@ Estructura general:
 3. Service (capa de aplicación / negocio)
 4. Providers de infraestructura (repositorios, monitoreo, almacenamiento, colas)
 
-![](nest_arch.png)
+![](recursos/nest_arch.png)
 Algunos ejemplos de providers de infraestructura:
 - Repository (persistencia en base de datos)
 - Monitoring (logs, métricas, trazas)
@@ -203,10 +203,10 @@ Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicac
 
 ### 5.1 Vista de Información y Funcional de Chiper
 Antes de empezar con el código, es importante entender el modelamiento que se hizo de Chiper, a partir del enunciado se pudo comprender el dominio de la aplicación el cual nos permite entender que entidades tenemos que implementar y como se comporta la aplicación:
-- [Diagrama de Dominio](./Modelo_Dominio_Chiper.pdf)
+- [Diagrama de Dominio](recursos/Modelo_Dominio_Chiper.pdf)
 
 A partir de este modelado, tenemos un entendimiento más profundo de como funciona Chiper, el siguiente paso es comprender la estructura funcional de Chiper. Es decir, cómo podemos organizar y dividir nuestra aplicación en unidades lógicas que tengan sentido entre si. Los diagramas de componentes y conectores nos permiten modelar estas estructuras, sin embargo para lograr esto vamos a separar el modelo de dominio en múltiples subdominios que tengan sentido entre si, recuerde que un subdominio es un conjunto de elementos del dominio que tienen sentido en conjunto. A partir de esta separación llegamos al siguiente diagrama en donde vemos cada subdominio identificado con un color
-- [Subdominios](./Subdominios.pdf)
+- [Subdominios](recursos/Subdominios.pdf)
 
 Por último podemos identificar cada uno de estos subdominios como componentes, estos componentes definirán la estructura de nuestra aplicación Nest pues cada componente puede mapearse a un módulo.
 
@@ -391,7 +391,7 @@ export class CatalogoRepository {
   ) {}
 
   async create(catalogo: Partial<Catalogo>): Promise<Catalogo> {
-	const newCatalogo = this.repository.create(catalogo);
+  const newCatalogo = this.repository.create(catalogo);
     return this.repository.save(newCatalogo);
   }
 
