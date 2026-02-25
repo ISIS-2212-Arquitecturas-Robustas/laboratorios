@@ -1,4 +1,50 @@
 # Lab 1 - Fundamentos de Nest
+
+## Objetivos
+
+- Comprender la arquitectura modular y por capas de NestJS, identificando las responsabilidades de cada componente (Middleware, Controller, Service, Repository).
+- Explicar el mecanismo de Inyección de Dependencias de Nest y su papel en la construcción de sistemas con bajo acoplamiento.
+- Implementar un CRUD completo en NestJS aplicando las capas de Controller, Service y Repository con TypeORM.
+- Definir y validar DTOs usando `class-validator` y `ValidationPipe`.
+- Reflexionar sobre decisiones de arquitectura como la descomposición en módulos y la elección de tecnologías de persistencia.
+
+---
+
+## Índice
+
+- [Lab 1 - Fundamentos de Nest](#lab-1---fundamentos-de-nest)
+  - [Objetivos](#objetivos)
+  - [Índice](#índice)
+  - [1. Introducción a Nest](#1-introducción-a-nest)
+  - [2. Componentes principales de Nest](#2-componentes-principales-de-nest)
+    - [2.1 Middleware](#21-middleware)
+    - [2.2 Controladores (Controllers)](#22-controladores-controllers)
+    - [2.3 Providers](#23-providers)
+    - [2.4 Módulos (Modules)](#24-módulos-modules)
+  - [3. Arquitectura que seguiremos en el curso](#3-arquitectura-que-seguiremos-en-el-curso)
+  - [4. Inyección de dependencias](#4-inyección-de-dependencias)
+    - [¿Cómo funciona?](#cómo-funciona)
+    - [Ejemplo concreto](#ejemplo-concreto)
+    - [¿Por qué esto importa?](#por-qué-esto-importa)
+  - [5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Chiper](#5-creación-de-un-crud-en-nest-construyendo-un-crud-para-la-aplicación-de-chiper)
+    - [5.1 Vista de Información y Funcional de Chiper](#51-vista-de-información-y-funcional-de-chiper)
+    - [Instalación del ambiente de desarrollo](#instalación-del-ambiente-de-desarrollo)
+      - [Requisitos previos](#requisitos-previos)
+      - [Instalación del CLI de Nest](#instalación-del-cli-de-nest)
+      - [Creación del proyecto](#creación-del-proyecto)
+      - [Instalación de dependencias necesarias](#instalación-de-dependencias-necesarias)
+      - [Configuración de base de datos](#configuración-de-base-de-datos)
+    - [Paso 0 — Módulo de datasources](#paso-0--módulo-de-datasources)
+      - [Componentes principales:](#componentes-principales)
+    - [Paso 1 — Definir la entidad](#paso-1--definir-la-entidad)
+    - [Paso 2 — Repositorio (persistencia)](#paso-2--repositorio-persistencia)
+    - [Paso 3 — Servicio (lógica de aplicación)](#paso-3--servicio-lógica-de-aplicación)
+    - [Paso 4 — Controller (rutas HTTP)](#paso-4--controller-rutas-http)
+    - [Paso 5 — Wiring en el módulo](#paso-5--wiring-en-el-módulo)
+  - [Entregables](#entregables)
+
+---
+
 ## 1. Introducción a Nest
 <img src="nest_logo.png" alt="Nest Logo" width="200"/>
 
@@ -31,14 +77,15 @@ En este curso utilizaremos principalmente dos tipos:
 Un módulo agrupa controladores y providers relacionados bajo un mismo contexto funcional.
 
 Permiten definir límites claros dentro del sistema. Cuando estos límites están bien definidos, el sistema es más fácil de evolucionar. Por ejemplo si se tiene un módulo de logística y uno de ventas, la separación de estos hace que un cambio en uno no afecte al otro. La separación de una aplicación en módulos no es una tarea trivial.
-#### Pregunta
-Separar una aplicación en módulos es una tarea importante de arquitectura, una mala separación puede hacer que un pequeño cambio afecte funcionalidades que no debería. Por el contrario una buena separación hace que diferentes equipos de desarrollo puedan trabajar en una misma base de código con baja necesidad de comunicación
-
-Investigue estos dos patrones de descomposición de aplicaciones, el patrón está orientado a el estilo de arquitectura de microservicios que veremos más adelante en el curso. Sin embargo los conceptos mencionados funcionan para Nest dada su capacidad de encapsular aplicaciones en módulos
-- [Descomposición por capacidades de negocio](https://microservices.io/patterns/decomposition/decompose-by-business-capability.html)
-- [Descomposición por subdominios](https://microservices.io/patterns/decomposition/decompose-by-subdomain.html)
-
-¿Si usted tuviera que realizar la descomposición de Chiper, teniendo en cuenta su contexto y madurez, qué patrón escogería?
+> [!IMPORTANT]
+> **Pregunta 1:**
+> Separar una aplicación en módulos es una tarea importante de arquitectura, una mala separación puede hacer que un pequeño cambio afecte funcionalidades que no debería. Por el contrario una buena separación hace que diferentes equipos de desarrollo puedan trabajar en una misma base de código con baja necesidad de comunicación
+>
+> Investigue estos dos patrones de descomposición de aplicaciones, el patrón está orientado a el estilo de arquitectura de microservicios que veremos más adelante en el curso. Sin embargo los conceptos mencionados funcionan para Nest dada su capacidad de encapsular aplicaciones en módulos
+> - [Descomposición por capacidades de negocio](https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-business-capability.html)
+> - [Descomposición por subdominios](https://docs.aws.amazon.com/es_es/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-subdomain.html)
+>
+> ¿Si usted tuviera que realizar la descomposición de Chiper, teniendo en cuenta su contexto y madurez, qué patrón escogería?
 ## 3. Arquitectura que seguiremos en el curso
 
 Como se mencionó anteriormente, la arquitectura que utilizaremos es una arquitectura por capas, estas capas vivirán dentro de cada módulo.
@@ -62,13 +109,92 @@ Una ventaja importante de Nest es que permite agregar, quitar o reemplazar provi
 - Reemplazar una implementación de cola de mensajería por otra.
 - Simular integraciones externas sin afectar la capa de negocio.
 
-#### Pregunta
-Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos relacional por una no relacional. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
+> [!IMPORTANT]
+> **Pregunta 2:**
+> Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos SQL por una no SQL. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
 
 ## 4. Inyección de dependencias
-Nest adicionalmente utiliza el patrón de Inyección de Dependencias para controlar todas las capas que se ejecutan.
 
-No lo desarrollaremos en detalle aquí. Se recomienda revisar la documentación oficial:
+Nest utiliza el patrón de Inyección de Dependencias para gestionar la creación y el ciclo de vida de todos sus componentes. En lugar de que una clase cree sus propias dependencias con `new`, el contenedor de Nest se encarga de instanciarlas y entregarlas automáticamente.
+
+### ¿Cómo funciona?
+
+El flujo es el siguiente:
+
+1. Se marca una clase como inyectable con `@Injectable()`.
+2. Se declara esa clase como provider en un módulo.
+3. Nest registra el provider en su contenedor.
+4. Cuando otra clase la solicita en su constructor, Nest la resuelve y entrega automáticamente.
+
+### Ejemplo concreto
+
+Suponga que tiene un servicio de notificaciones que necesita enviar emails. En lugar de que el servicio de usuarios cree el cliente de email directamente, Nest lo inyecta:
+
+**1. Definir el provider inyectable:**
+
+```typescript
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class EmailService {
+  send(to: string, subject: string): void {
+    console.log(`Enviando email a ${to}: ${subject}`);
+  }
+}
+```
+
+**2. Inyectarlo en otro servicio a través del constructor:**
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { EmailService } from './email.service';
+
+@Injectable()
+export class UserService {
+  constructor(private readonly emailService: EmailService) {}
+
+  register(email: string): void {
+    this.emailService.send(email, 'Bienvenido a Chiper');
+  }
+}
+```
+
+`UserService` no sabe cómo se construye `EmailService`, ni le importa. Solo declara que lo necesita y Nest se lo entrega.
+
+**3. Registrar ambos en el módulo:**
+
+```typescript
+import { Module } from '@nestjs/common';
+import { EmailService } from './email.service';
+import { UserService } from './user.service';
+
+@Module({
+  providers: [EmailService, UserService],
+})
+export class UserModule {}
+```
+
+Con solo listar los providers en el módulo, Nest construye el grafo de dependencias, instancia `EmailService` primero y luego lo pasa al constructor de `UserService`. Todo ocurre de forma automática.
+
+### ¿Por qué esto importa?
+
+La gran es que permite **reemplazar implementaciones sin tocar el código que las usa**. Por ejemplo, para pruebas se puede sustituir `EmailService` por un mock que no envíe emails reales:
+
+```typescript
+const moduleRef = await Test.createTestingModule({
+  providers: [
+    UserService,
+    {
+      provide: EmailService,
+      useValue: { send: jest.fn() },
+    },
+  ],
+}).compile();
+```
+
+`UserService` se comporta exactamente igual sin necesidad de modificar su código.
+
+Se recomienda revisar la documentación oficial para profundizar en providers personalizados y scopes:
 [https://docs.nestjs.com/fundamentals/custom-providers](https://docs.nestjs.com/fundamentals/custom-providers)
 
 ## 5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Chiper
@@ -152,6 +278,14 @@ npm install uuid
 ```
 
 #### Configuración de base de datos
+
+**¿Qué es Docker?**
+
+Docker es una herramienta que permite ejecutar aplicaciones dentro de **contenedores**: entornos aislados y ligeros que incluyen todo lo necesario para que una aplicación funcione (sistema operativo base, librerías, configuración). A diferencia de una máquina virtual, un contenedor no virtualiza hardware completo, sino que comparte el kernel del sistema operativo anfitrión, haciéndolo mucho más rápido y liviano.
+
+En el contexto de este laboratorio, Docker permite levantar una base de datos PostgreSQL en segundos, sin necesidad de instalarla directamente en el sistema. Cuando el contenedor se elimina, no queda ningún rastro en la máquina.
+
+Para la instalación se recomienda instalar [Docker Desktop](https://docs.docker.com/get-started/get-docker/)
 
 Se recomienda levantar una instancia PostgreSQL con Docker:
 
@@ -318,7 +452,7 @@ export const repositoryProviders = [
 - Lanza `NotFoundException` si se consulta/actualiza/elimina un catálogo inexistente.
 - Mappea la entidad a `CatalogoResponseDto` con `mapToResponse`.
 
->[!tip] Consulta de servicios externos
+>[!TIP]
 > Dado que el servicio que trae los datos de la tienda no se ha implementado, se mockea el servicio externo de tienda para crear la lógica teniendo en cuenta este servicio para que en el momento en el que sea implementado, el cambio sea mínimo.
   
 ``` typescript
@@ -403,10 +537,22 @@ export class CatalogoService {
 }
 
 ```
-#### Preguntas:
-Para un entendimiento más profundo de esta capa, revise en la documentación de Nest los siguientes temas y responda las preguntas:
-- ¿Qué es un token de inyección y cuándo es necesario usarlo explícitamente?
-- ¿Qué significa que un provider tenga scope singleton, request o transient? ¿En qué escenarios cambia su comportamiento real?
+> [!IMPORTANT]
+> **Pregunta 3:**
+> Suponga que en el módulo de Logística y Pedidos se crea un PedidoService que depende de:
+> - Un `RepositorioPedido`
+> - Un `ServicioDisponibilidadZona`
+> - Un `ServicioCalculoPromociones`
+>
+> Además, la aplicación opera en múltiples países (COP, MXN, BRL) y debe soportar alta concurrencia en quincenas.
+> Con base en la documentación oficial de Nest:
+> Si desea intercambiar la implementación de RepositorioPedido por una versión distinta (por ejemplo, una que use otro motor de base de datos o una implementación mock para pruebas), ¿cómo debería definir y registrar el provider para evitar acoplamiento directo a la clase concreta?
+> Imagine que `ServicioCalculoPromociones` mantiene información temporal del request (por ejemplo, reglas dinámicas por país y tipo de tienda).
+> - ¿Qué implicaciones tendría dejarlo como singleton?
+> - ¿En qué caso sería más apropiado usar request scope?
+> - ¿Qué impacto real tendría esto en memoria y rendimiento bajo alta carga?
+> - Si `ServicioDisponibilidadZona` realiza llamadas frecuentes a infraestructura externa (por ejemplo, inventario en tiempo real), ¿en qué escenario un transient provider cambiaría el comportamiento observable del sistema?
+> Argumente sus respuestas con base en cómo Nest gestiona el ciclo de vida de los providers y la resolución de dependencias en tiempo de ejecución.
 
 ### Paso 4 — Controller (rutas HTTP)
 
@@ -505,9 +651,10 @@ export class CreateCatalogoDto {
 
 El DTO además de tener los tipos que debe transportar, una serie de decoradores que van a señalar las validaciones que debe cumplir una instancia de esta clase que llegue en la petición
 
-#### Preguntas:
-- ¿Qué diferencia existe entre Guards, Interceptors, Pipes y Middleware?
-- ¿En qué orden exacto se ejecutan dentro del ciclo de vida de una petición? 
+> [!IMPORTANT]
+> **Pregunta 4:**
+> - ¿Qué diferencia existe entre Guards, Interceptors, Pipes y Middleware?
+> - ¿En qué orden exacto se ejecutan dentro del ciclo de vida de una petición?
 
 ### Paso 5 — Wiring en el módulo
 
@@ -559,8 +706,9 @@ export class LogisticaModule {}
 
 ```  
 
-#### Pregunta
-Note que el módulo exporta `CatalogoService` ¿Cómo funciona el mecanismo de exports e imports entre módulos y qué implicaciones tiene en el acoplamiento? ¿Por qué no se exporta el `CatalogoRepository`?
+> [!IMPORTANT]
+> **Pregunta 5:**
+> Note que el módulo exporta `CatalogoService` ¿Cómo funciona el mecanismo de exports e imports entre módulos y qué implicaciones tiene en el acoplamiento? ¿Por qué no se exporta el `CatalogoRepository`?
 
 ## Entregables
 
@@ -569,3 +717,31 @@ El estudiante debe entregar un documento en PDF que incluya:
 1. Respuestas argumentadas a las preguntas del laboratorio
 
 **Nota:** Debe responder con profundidad arquitectónica, no definiciones superficiales.
+
+
+2. Implementación funcional de los siguientes componentes, con el código fuente adjunto o enlace al repositorio:
+
+   **2.1 CRUD de Producto (módulo de Logística)**
+
+   Tomando como base el diagrama de dominio y el diagrama de componentes, implementar un CRUD completo para la entidad `Producto` dentro del módulo de logística (`LogisticaModule`). Debe seguir la misma arquitectura del CRUD de `Catalogo`:
+   - Entidad `Producto` mapeada con TypeORM.
+   - `ProductoRepository` con operaciones CRUD y filtros relevantes.
+   - `ProductoService` con validaciones y manejo de excepciones.
+   - `ProductoController` con rutas RESTful y validación de DTOs.
+   - DTOs de creación, actualización y consulta con `class-validator`.
+
+   **2.2 Módulo de Autenticación e Identificación con CRUD de Tienda**
+
+   Crear un nuevo módulo `IdentificacionModule` que encapsule la gestión de tiendas:
+   - Entidad `Tienda` mapeada con TypeORM según el diagrama de dominio.
+   - `TiendaRepository`, `TiendaService` y `TiendaController` siguiendo la misma arquitectura por capas.
+   - CRUD completo expuesto vía HTTP con validación de DTOs.
+   - El módulo debe exportar `TiendaService` para que pueda ser consumido por otros módulos.
+
+   **2.3 Reemplazo del mock de Tienda en el servicio de Catálogo**
+
+   Eliminar `TiendaClientMock` del módulo de logística y reemplazar su uso en `CatalogoService` por una llamada real a `TiendaService`:
+   - `LogisticaModule` debe importar `IdentificacionModule`.
+   - `CatalogoService` debe inyectar `TiendaService` en lugar de `TiendaClientMock`.
+   - La verificación de existencia de la tienda al crear un catálogo debe realizarse a través del servicio real.
+
