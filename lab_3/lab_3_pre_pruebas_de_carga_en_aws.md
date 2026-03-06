@@ -34,7 +34,7 @@
 1. Ingrese a AWS Academy con su cuenta institucional.
 2. Inicie el **Learning Lab** (esto habilita los créditos del curso).
 
-**Placeholder imagen**
+TODO
 - `[Imagen 1: AWS Academy / Learning Lab iniciado]`
 
 ### 1.2 Herramientas locales
@@ -55,7 +55,7 @@
 - **EC2 chiper-app**: NestJS (monolito)
 - Cliente: su computador (JMeter se usará el día del laboratorio)
 
-**Placeholder imagen**
+TODO
 - `[Imagen 2: Diagrama de despliegue (cliente -> chiper-app -> chiper-db)]`
 
 ---
@@ -74,7 +74,7 @@ Cree los siguientes Security Groups en EC2 (VPC por defecto del lab):
 | Descripción | Acceso SSH a instancias |
 | Inbound rule | SSH (22) desde `Anywhere-IPv4` |
 
-**Placeholder imagen**
+TODO
 - `[Imagen 3: Security Group chiper-ssh creado con regla 22]`
 
 ### 3.2 Security Group 2 — PostgreSQL
@@ -87,7 +87,7 @@ Cree los siguientes Security Groups en EC2 (VPC por defecto del lab):
 
 > En un entorno real, 5432 **no** se abre a todo internet. Para el laboratorio lo haremos así por simplicidad.
 
-**Placeholder imagen**
+TODO
 - `[Imagen 4: Security Group chiper-db creado con regla 5432]`
 
 ### 3.3 Security Group 3 — HTTP API (Chiper)
@@ -100,7 +100,7 @@ Cree los siguientes Security Groups en EC2 (VPC por defecto del lab):
 
 > Si su backend corre en otro puerto, ajuste esta regla para que coincida con su configuración.
 
-**Placeholder imagen**
+TODO
 - `[Imagen 5: Security Group chiper-http creado con regla 3000]`
 
 ---
@@ -118,7 +118,7 @@ Cree una instancia EC2 con los parámetros:
 | Security Groups | `chiper-ssh` + `chiper-db` |
 | Almacenamiento | 8 GB |
 
-**Placeholder imagen**
+TODO
 - `[Imagen 6: Instancia EC2 chiper-db creada (resumen)]`
 
 ### 4.1 Conexión por SSH
@@ -210,7 +210,7 @@ max_connections = 2000
 sudo service postgresql restart
 ```
 
-**Placeholder imagen**
+TODO
 - `[Imagen 8: Archivos pg_hba.conf y postgresql.conf configurados]`
 
 ---
@@ -228,7 +228,7 @@ Cree una instancia EC2 con los parámetros:
 | Security Groups | `chiper-ssh` + `chiper-http` |
 | Almacenamiento | 8 GB |
 
-**Placeholder imagen**
+TODO
 - `[Imagen 9: Instancia EC2 chiper-app creada (resumen)]`
 
 ### 5.1 Conexión por SSH
@@ -237,7 +237,7 @@ Cree una instancia EC2 con los parámetros:
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_APP>
 ```
 
-**Placeholder imagen**
+TODO
 - `[Imagen 10: Conexión SSH exitosa a chiper-app]`
 
 ### 5.2 Instalación de Node.js (LTS), npm y Git
@@ -254,7 +254,7 @@ node -v
 npm -v
 ```
 
-**Placeholder imagen**
+TODO
 - `[Imagen 11: node -v y npm -v en chiper-app]`
 
 ### 5.3 Clonar el repositorio del backend
@@ -289,7 +289,7 @@ PORT=3000
 
 > Si su proyecto usa TypeORM con `ormconfig` o `TypeOrmModule.forRoot`, ajuste donde corresponda.
 
-**Placeholder imagen**
+TODO
 - `[Imagen 12: Configuración DB_HOST apuntando a IP privada de chiper-db]`
 
 ### 5.5 Migraciones / seed de datos (si aplica)
@@ -342,7 +342,7 @@ En su navegador, pruebe:
 
 - `http://<IP_PUBLICA_APP>:3000/health`
 
-**Placeholder imagen**
+TODO
 - `[Imagen 14: /health respondiendo OK]`
 
 ---
@@ -362,7 +362,7 @@ Antes de terminar:
 **Acción final (obligatoria):**
 - Detenga `chiper-db` y `chiper-app` desde la consola EC2.
 
-**Placeholder imagen**
+TODO
 - `[Imagen 15: Instancias detenidas (stopped)]`
 
 ---
