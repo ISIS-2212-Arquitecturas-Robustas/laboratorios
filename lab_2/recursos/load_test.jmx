@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Plan de Pruebas">
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Variables definidas por el Usuario">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Grupo GET Request">
+        <intProp name="ThreadGroup.num_threads">5</intProp>
+        <intProp name="ThreadGroup.ramp_time">5</intProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Controlador Bucle">
+          <stringProp name="LoopController.loops">1</stringProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Request">
+          <stringProp name="HTTPSampler.domain">localhost</stringProp>
+          <stringProp name="HTTPSampler.port">3000</stringProp>
+          <stringProp name="HTTPSampler.protocol">http</stringProp>
+          <stringProp name="HTTPSampler.path">/logistics/tenderos/productos-disponibles</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="Variables definidas por el Usuario">
+            <collectionProp name="Arguments.arguments"/>
+          </elementProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Grupo POST Request">
+        <intProp name="ThreadGroup.num_threads">1</intProp>
+        <intProp name="ThreadGroup.ramp_time">1</intProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Controlador Bucle">
+          <stringProp name="LoopController.loops">1</stringProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Request">
+          <stringProp name="HTTPSampler.domain">localhost</stringProp>
+          <stringProp name="HTTPSampler.port">3000</stringProp>
+          <stringProp name="HTTPSampler.protocol">http</stringProp>
+          <stringProp name="HTTPSampler.path">/logistics/pedidos</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{&#xd;
+	identificador: &quot;pedido productos aseo 11/05&quot;,&#xd;
+	tiendaId: &quot;bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb&quot;,&#xd;
+	fechaHoraCreacion: &quot;2025/10/10&quot;,&#xd;
+	montoTotal: 500000,&#xd;
+	monedaId: &quot;550e8400-e29b-41d4-a716-446655440000&quot;,&#xd;
+	estado: &quot;creado&quot;,&#xd;
+	items: [&#xd;
+	  {&#xd;
+	    productoId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&apos;,&#xd;
+	    cantidad: 10,&#xd;
+	    precioUnitario: 25.5,&#xd;
+	    descuento: 0,&#xd;
+	    monedaId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&apos;,&#xd;
+	    lote: &apos;lote-1&apos;,&#xd;
+	    fechaVencimiento: &apos;2023-12-31&apos;,&#xd;
+	  },&#xd;
+	  {&#xd;
+	    productoId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab&apos;,&#xd;
+	    cantidad: 10,&#xd;
+	    precioUnitario: 25.5,&#xd;
+	    descuento: 0,&#xd;
+	    monedaId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&apos;,&#xd;
+	    lote: &apos;lote-1&apos;,&#xd;
+	    fechaVencimiento: &apos;2023-12-31&apos;,&#xd;
+	  },&#xd;
+	  {&#xd;
+	    productoId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac&apos;,&#xd;
+	    cantidad: 10,&#xd;
+	    precioUnitario: 25.5,&#xd;
+	    descuento: 0,&#xd;
+	    monedaId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&apos;,&#xd;
+	    lote: &apos;lote-1&apos;,&#xd;
+	    fechaVencimiento: &apos;2023-12-31&apos;,&#xd;
+	  },&#xd;
+	  {&#xd;
+	    productoId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad&apos;,&#xd;
+	    cantidad: 10,&#xd;
+	    precioUnitario: 25.5,&#xd;
+	    descuento: 0,&#xd;
+	    monedaId: &apos;aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&apos;,&#xd;
+	    lote: &apos;lote-1&apos;,&#xd;
+	    fechaVencimiento: &apos;2023-12-31&apos;,&#xd;
+	  },&#xd;
+	]&#xd;
+}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
