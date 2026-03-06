@@ -5,7 +5,6 @@
 >
 > **IMPORTANTE:** En este documento se dejan *placeholders* para imágenes/capturas.
 
----
 
 ## Objetivos
 
@@ -13,7 +12,6 @@
 - Configurar **red** (Security Groups) y acceso **SSH**.
 - Dejar listas dos instancias **EC2** (App y DB) para que el día del laboratorio solo sea necesario **iniciarlas**.
 
----
 
 ## Índice
 
@@ -22,10 +20,8 @@
 - [3. Configuración de seguridad (Security Groups)](#3-configuración-de-seguridad-security-groups)
 - [4. Crear instancia EC2 para Base de Datos (PostgreSQL)](#4-crear-instancia-ec2-para-base-de-datos-postgresql)
 - [5. Crear instancia EC2 para la App (Chiper Monolito)](#5-crear-instancia-ec2-para-la-app-chiper-monolito)
-- [6. Verificaciones mínimas](#6-verificaciones-mínimas)
-- [7. Checklist de cierre del pre-lab](#7-checklist-de-cierre-del-pre-lab)
+- [6. Checklist de cierre del pre-lab](#6-checklist-de-cierre-del-pre-lab)
 
----
 
 ## 1. Pre-requisitos
 
@@ -45,7 +41,6 @@ TODO
 > Si es su primera vez usando llaves SSH, tenga presente que el archivo `.pem` debe tener permisos restringidos:
 > - `chmod 400 <archivo>.pem`
 
----
 
 ## 2. Arquitectura de despliegue objetivo
 
@@ -58,7 +53,6 @@ TODO
 TODO
 - `[Imagen 2: Diagrama de despliegue (cliente -> chiper-app -> chiper-db)]`
 
----
 
 ## 3. Configuración de seguridad (Security Groups)
 
@@ -103,7 +97,6 @@ TODO
 TODO
 - `[Imagen 5: Security Group chiper-http creado con regla 3000]`
 
----
 
 ## 4. Crear instancia EC2 para Base de Datos (PostgreSQL)
 
@@ -124,97 +117,71 @@ TODO
 ### 4.1 Conexión por SSH
 
 Conéctese a la instancia:
-
 ```bash
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
 ```
 
-**Placeholder imagen**
+TODO
 - `[Imagen 7: Conexión SSH exitosa a chiper-db]`
 
-### 4.2 Instalación y configuración de PostgreSQL
+### 4.2 Ejecutar la base de datos (chiper-db)
 
-Ejecute:
+> En este laboratorio la base de datos corre en **Docker** dentro de la instancia `chiper-db`.
 
-```bash
-sudo apt update
-sudo apt install postgresql postgresql-contrib -y
+1. Conéctese por SSH a `chiper-db`.
+2. Verifique que Docker está instalado y corriendo:
+``` bash
+docker --version
+sudo service docker status
 ```
 
-Entre a psql y cree DB/usuario:
+3. Levante PostgreSQL con Docker (si no existe el contenedor, créelo; si existe, inícielo):
+``` bash
+# Opción A: crear y levantar (primera vez)
+docker run --name chiper-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=chiper \
+  -p 5432:5432 \
+  -d postgres
 
-```bash
-sudo -u postgres psql
+# Opción B: si ya existe, solo iniciar
+docker start chiper-db
 ```
 
-En el prompt de postgres:
-
-```sql
-CREATE USER chiper_user;
-CREATE DATABASE chiper_db OWNER chiper_user;
-ALTER USER chiper_user WITH PASSWORD 'chiper_pwd';
-\q
-```
-
-> El password es de laboratorio. Si desea, cámbielo.
-
-### 4.3 Permitir conexiones remotas
-
-1) Identifique la versión instalada:
-
-```bash
-ls /etc/postgresql/
-```
-
-2) Edite `pg_hba.conf`:
-
-```bash
-sudo nano /etc/postgresql/<VERSION>/main/pg_hba.conf
-```
-
-Busque la sección de IPv4 local connections y reemplace la línea:
-
-```text
-host    all             all             127.0.0.1/32            md5
-```
-
-Por:
-
-```text
-host    all             all             0.0.0.0/0               trust
-```
-
-3) Edite `postgresql.conf`:
-
-```bash
-sudo nano /etc/postgresql/<VERSION>/main/postgresql.conf
-```
-
-Asegúrese de:
-
-- Descomentar y poner:
-
-```text
-listen_addresses = '*'
-```
-
-- Ajustar (opcional para pruebas):
-
-```text
-max_connections = 2000
-```
-
-4) Reinicie PostgreSQL:
-
-```bash
-sudo service postgresql restart
+4. Verifique que está arriba:
+``` bash
+docker ps
 ```
 
 TODO
-- `[Imagen 8: Archivos pg_hba.conf y postgresql.conf configurados]`
+- `[Imagen X: docker ps mostrando chiper-db (postgres) activo]`
+### 4.3 Ejecutar el monolito (chiper-app)
+1. Conéctese por SSH.
+2. Entre al repo.
+3. Verifique variables de entorno/archivo `.env`:
 
----
+- `DB_HOST` debe apuntar a la **IP privada** de `chiper-db`
+- `PORT=3000` (o el puerto que use el backend)
 
+4. Levante la app: 
+
+``` bash
+npm install
+npm run start:dev
+```
+
+> Si su repo está listo para producción, puede usar `npm run start`.
+
+TODO
+- `[Imagen 4: logs del backend levantado en 0.0.0.0:3000]`
+### 4.4 Verificación rápida desde el navegador
+
+En su computador:
+- `http://<IP_PUBLICA_APP>:3000/health`
+
+**Placeholder imagen**
+TODO
+- `[Imagen 5: /health OK]`
 ## 5. Crear instancia EC2 para la App (Chiper Monolito)
 
 Cree una instancia EC2 con los parámetros:
@@ -267,7 +234,6 @@ cd <CARPETA_REPO>
 ```
 
 Instale dependencias:
-
 ```bash
 npm install
 ```
@@ -308,46 +274,7 @@ npm run migration:run
 
 > El Lab 3 asume que el backend ya tiene datos suficientes para ejecutar las pruebas del Lab 2 (consulta con JOINs y escritura de entidad grande).
 
----
-
-## 6. Verificaciones mínimas
-
-### 6.1 Verificar que la DB responde
-
-Desde `chiper-app`, instale `psql` para probar conexión:
-
-```bash
-sudo apt install -y postgresql-client
-psql -h <IP_PRIVADA_DB> -U chiper_user -d chiper_db
-```
-
-Si logra entrar, salga con:
-
-```text
-\q
-```
-
-**Placeholder imagen**
-- `[Imagen 13: Conexión exitosa a PostgreSQL desde chiper-app]`
-
-### 6.2 Levantar la aplicación y probar healthcheck
-
-Levante la app (ajuste a su repo):
-
-```bash
-npm run start:dev
-```
-
-En su navegador, pruebe:
-
-- `http://<IP_PUBLICA_APP>:3000/health`
-
-TODO
-- `[Imagen 14: /health respondiendo OK]`
-
----
-
-## 7. Checklist de cierre del pre-lab
+## 6. Checklist de cierre del pre-lab
 
 Antes de terminar:
 
@@ -357,7 +284,7 @@ Antes de terminar:
   - IP pública de `chiper-app`
   - IP privada de `chiper-db`
   - Usuario/DB/password
-- [ ] **DETENGO** (no elimino) las instancias para conservar créditos.
+- [ ] **DETENER** (no eliminar) las instancias para conservar créditos.
 
 **Acción final (obligatoria):**
 - Detenga `chiper-db` y `chiper-app` desde la consola EC2.
@@ -365,10 +292,8 @@ Antes de terminar:
 TODO
 - `[Imagen 15: Instancias detenidas (stopped)]`
 
----
 
 ## Notas para el día del laboratorio
-
 - El Lab 3 usará esta infraestructura para correr pruebas de carga (JMeter) y encontrar el punto de inflexión de los endpoints del Lab 2.
 - Si cambia el puerto o rutas del backend, actualice el Security Group `chiper-http` y los targets del plan de pruebas en JMeter.
 
