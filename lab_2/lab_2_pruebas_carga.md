@@ -110,7 +110,7 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 
 A continuación, descargue Apache Jmeter en su máquina personal y realice las pruebas de carga
 
-Descargue el archivo `load-tests.jmx` el cual contiene las pruebas GET y POST.
+Descargue el archivo [`load_tests.jmx`](recursos/load_tests.jmx) el cual contiene las pruebas GET y POST.
 
 TODO - Explicarles como llenar los datos de JMeter
 #### Ejecución de pruebas de carga alta
