@@ -35,7 +35,7 @@
 
 ## Diagrama de despliegue
 
-![[recursos/Pasted image 20260304160111.png]]
+<img src="recursos/Pasted image 20260304160111.png"/>
 
 Note que todos los componentes están desplegados en un único nodo de ejecución, en este caso su máquina local, de igual forma note que la comunicación entre componentes sigue los mismos protocolos que si se ejecutara en nodos distintos.
 ## Tecnologías asociadas
@@ -72,7 +72,7 @@ Verifique que la aplicación está corriendo:
 
 Usted debería ver algo así:
 
-![[recursos/Pasted image 20260305024253.png]]
+<img src="recursos/Pasted image 20260305024253.png"/>
 ## Diseño de la prueba de carga
 
 Hay dos escenarios de carga importantes para este laboratorio (tomados de los ASRs):
@@ -174,9 +174,11 @@ Restricciones:
 
 | Threads | Ramp-up | p99 (ms) | p95 (ms) | Throughput | Error % |
 | ------- | ------- | -------- | -------- | ---------- | ------- |
-|         |         |          |          |            |         |
-|         |         |          |          |            |         |
-|         |         |          |          |            |         |
+| &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+
+
 Responder con evidencia:
 1. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
 2. Teniendo en cuenta los resultados registrados, ¿el diseño monolítico de arquitectura propuesto en este experimento beneficia el cumplimiento de los ASRs involucrados?
