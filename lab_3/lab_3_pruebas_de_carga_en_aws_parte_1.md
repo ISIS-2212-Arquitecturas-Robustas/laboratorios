@@ -213,5 +213,5 @@ npm run migration:run
 En su computador:
 - `http://<IP_PUBLICA_APP>:3000/health`
 
-# [Parte 2](./lab_3_pruebas_de_carga_en_aws_parte_2)
+# [Parte 2](./lab_3_pruebas_de_carga_en_aws_parte_2.md)
 
