@@ -1,4 +1,4 @@
-# Lab 3 — Pruebas de Carga en AWS para el Monolito de Chiper
+# Lab 3 — Pruebas de Carga en AWS para el Monolito de Chiper Parte 2
 
 
 > Este laboratorio continúa el trabajo del **Lab 2**. El objetivo es ejecutar **pruebas de carga con JMeter** sobre los **endpoints (GET y POST)** definidos en el Lab 2, pero ahora desplegados en **AWS (EC2)**.
@@ -9,7 +9,6 @@
 - Encontrar el **punto de inflexión** del sistema (máximo de usuarios/hilos antes de incumplir ASRs).
 - Analizar el comportamiento del monolito bajo carga: **latencia, throughput, errores** y posibles cuellos de botella.
 - Proponer **mejoras de arquitectura y/o tácticas** para mejorar desempeño y disponibilidad.
-
 
 ## Índice
 
@@ -35,7 +34,7 @@
 ### 1.2 ASRs involucrados (del Lab 2)
 
 - **REQ1 — Latencia:** Como tendero, quiero confirmar un pedido en menos de **2000 ms**.
-  - Umbral: **Average Response Time < 2000 ms**
+  - Umbral: **P99 < 2000 ms**
 
 - **REQ2 — Disponibilidad bajo carga:** Como Chiper, quiero que al menos el **90% de las peticiones** sean exitosas bajo alta demanda.
   - Umbral: **Error % ≤ 10%**
@@ -77,17 +76,7 @@ En este experimento **no se aplica** una táctica específica (el objetivo es me
 ### 2.3 Elementos de arquitectura
 
 #### 2.3.1 Diagrama de despliegue
-
-TODO
-- `[Imagen 1: Vista de despliegue (PC con JMeter -> EC2 chiper-app -> EC2 chiper-db)]`
-
-#### 2.3.2 Diagrama de componentes
-
-TODO
-- `[Imagen 2: Componentes (JMeter, API Chiper, módulos del dominio del Lab 2, Persistencia/TypeORM, PostgreSQL)]`
-
----
-
+![[recursos/Diagrama de componentes.png]]
 ## 3. Tecnologías
 
 | Categoría                | Tecnologías   |
@@ -98,8 +87,6 @@ TODO
 | ORM                      | TypeORM       |
 | Plataforma de despliegue | AWS EC2       |
 | Pruebas de carga         | Apache JMeter |
-
----
 
 ## 4. Despliegue (AWS)
 
@@ -114,9 +101,6 @@ TODO
    - **IP pública** de `chiper-app` (la usará JMeter)
    - **IP privada** de `chiper-db` (la usa el backend)
 
-TODO
-- `[Imagen 3: EC2 list con IP pública/privada visibles]`
-
 ### 4.2 Ejecutar la base de datos (chiper-db)
 
 - Confirme que PostgreSQL está arriba:
@@ -129,24 +113,21 @@ docker ps
 
 ```bash
 # Opción A: crear y levantar (primera vez)
-docker run --name chiper-db \
+sudo docker run --name chiper-db \
 -e POSTGRES_PASSWORD=postgres \
 -e POSTGRES_DB=chiper \
 -p 5432:5432 \
 -d postgres
 
 # Opción B: si ya existe, solo iniciar
-docker start chiper-db
+sudo docker start chiper-db
 ```
 
 ### 4.3 Ejecutar el monolito (chiper-app)
 
 1) Conéctese por SSH.
-
 2) Entre al repo.
-
 3) Verifique variables de entorno/archivo `.env`:
-
 - `DB_HOST` debe apuntar a la **IP privada** de `chiper-db`
 - `PORT=3000` (o el puerto que use el backend)
 
@@ -159,18 +140,10 @@ npm run start:dev
 
 > Si su repo está listo para producción, puede usar `npm run start`.
 
-TODO
-- `[Imagen 4: logs del backend levantado en 0.0.0.0:3000]`
-
 ### 4.4 Verificación rápida desde el navegador
 
 En su computador:
 - `http://<IP_PUBLICA_APP>:3000/health`
-
-TODO
-- `[Imagen 5: /health OK]`
-
----
 
 ## 5. Pruebas de carga
 
@@ -229,23 +202,18 @@ Saque conclusiones respecto a los siguientes parámetros registrados:
 
 ### 6.1 Umbrales por ASR
 
-- **REQ1 (Latencia):** `Average < 2000 ms`
+- **REQ1 (Latencia):** `p99 < 2000 ms`
 - **REQ2 (Disponibilidad):** `Error % ≤ 10%`
 
-### 6.2 Definir “punto de inflexión”
+### 6.2 Definir punto de inflexión
 
 Para cada endpoint:
 
 - Es el **mayor** número de threads donde **todavía** se cumplen ambos:
-  - Avg < 2000 ms
+  - p99 < 2000 ms
   - Error % ≤ 10%
 
 Luego reporte el primer punto (threads) donde dejan de cumplirse.
-
-TODO
-- `[Imagen 12: Summary Report GET en la iteración donde falla el ASR]`
-- `[Imagen 13: Summary Report POST en la iteración donde falla el ASR]`
-
 ## 7. Entregables
 
 ### 7.1 Tablas de resultados
@@ -264,7 +232,6 @@ Use este formato (con **p95 y p99**):
 | ... | ... |  |  |  |  |
 
 - Marque el registro del **punto de inflexión**.
-
 ### 7.2 Evidencias
 
 Adjunte capturas de pantalla de:
@@ -294,10 +261,4 @@ Incluya un análisis (1–2 páginas) que responda:
 ## Nota final (créditos AWS)
 
 Cuando termine:
-
 - **Detenga o elimine** las instancias según la regla del curso.
-- Si el curso exige eliminación: elimine `chiper-app` y `chiper-db`.
-
-**Placeholder imagen**
-- `[Imagen 14: Instancias detenidas/eliminadas]`
-

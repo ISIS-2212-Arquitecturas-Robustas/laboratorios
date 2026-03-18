@@ -82,7 +82,7 @@ Hay dos escenarios de carga importantes para este laboratorio (tomados de los AS
 El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts`
 
 > [!WARNING]
-> Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **La rúbrica tiene en cuenta el número de datos y distribución para cada prueba y la justificación de los mismos**
+> Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
 
 Las pruebas en JMeter se definen con los siguientes parámetros
 #### Threads:
@@ -91,7 +91,6 @@ Indica el número de threads que se lanzarán en 1 Loop (Iteración).
 Tiempo en segundos en los cuales se deben lanzar los threads. Para el primer caso de prueba será de 5 segundos, lo cual indica que 5 threads se crearan y enviaran peticiones en 5 segundos. Cada petición creada se enviará cada segundo:
 #### Loop Count (Iteraciones):
 Indica el número de iteraciones que se van a hacer del escenario de prueba. En cada iteración se van a ejecutar el no. de threads indicados en el primer parámetro (i.e., number of threads). 
-
 ### Matriz mínima de pruebas (mínimo recomendado)
 Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés fuerte, para las otras ejecute al menos 4 veces (más si el quiebre no es claro):
 
@@ -112,10 +111,10 @@ A continuación, descargue Apache Jmeter en su máquina personal y realice las p
 
 Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST.
 
-TODO - Explicarles como llenar los datos de JMeter
+El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene jMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos
 #### Ejecución de pruebas de carga alta
 
-Para escenarios de alta carca > 450 JMeter empieza a tener limitaciones de performance, por lo que como alternativa lo invitamos a que use copilot o el agente de IA de su preferencia para generar un script para la ejecución de pruebas, este script debe tener las siguientes características:
+Para escenarios de alta carca > 450 JMeter empieza a tener limitaciones de performance, por lo que como **alternativa lo invitamos a que use copilot o el agente de IA de su preferencia para generar un script para la ejecución de pruebas**, este script debe tener las siguientes características:
 - Las peticiones deben ser http a los endpoints a los cuales se busca hacer la prueba
 - El script debe permitir configurar Ramp-Up y Threads para cada prueba
 - Para POST, usar un body JSON realista de “pedido grande” con 10 ítems (productoId y cantidad)
@@ -127,8 +126,7 @@ Para escenarios de alta carca > 450 JMeter empieza a tener limitaciones de perfo
 	- Error % por tipo (status >= 400 + timeouts + connection errors)
 - Idealmente debería generar la tabla y gráficos para **SU** análisis
 
-Les dejamos un prompt de ejemplo
-
+Les dejamos un prompt de ejemplo, note que debe cambiar algunos valores para ajustarlo al laboratorio
 ```
 Actúa como un ingeniero de performance. Necesito un script en Python para ejecutar pruebas de carga ligeras contra un backend NestJS usando HTTP.
 
@@ -180,8 +178,9 @@ Restricciones:
 
 
 Responder con evidencia:
-1. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
-2. Teniendo en cuenta los resultados registrados, ¿el diseño monolítico de arquitectura propuesto en este experimento beneficia el cumplimiento de los ASRs involucrados?
-3. En caso afirmativo, explique cómo se beneficiaron los ASRs. De lo contrario, explique qué modificaciones podría hacer a la arquitectura (estilos o tácticas) para cumplir con los ASRs.
-4. ¿El patrón de degradación fue gradual o abrupto? ¿En donde se encuentra el cuello de botella de la aplicación?
-5. ¿Qué endpoint degradó primero y por qué ocurrió?
+1. Describa la distribución de los datos y la razón de los mismos para cada prueba basado en el contexto de Chiper
+2. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
+3. Teniendo en cuenta los resultados registrados, ¿el diseño monolítico de arquitectura propuesto en este experimento beneficia el cumplimiento de los ASRs involucrados?
+4. En caso afirmativo, explique cómo se beneficiaron los ASRs. De lo contrario, explique qué modificaciones podría hacer a la arquitectura (estilos o tácticas) para cumplir con los ASRs.
+5. ¿El patrón de degradación fue gradual o abrupto? ¿En donde se encuentra el cuello de botella de la aplicación?
+6. ¿Qué endpoint degradó primero y por qué ocurrió?
