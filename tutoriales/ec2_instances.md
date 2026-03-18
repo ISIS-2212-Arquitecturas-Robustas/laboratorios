@@ -147,7 +147,7 @@ Host: ubuntu@IP_PUBLICA
 5. En **SSH → Auth** seleccionar el archivo `.ppk`.
 
 # Instalar Docker en Ubuntu
-Para instalar docker en ubuntu puede usar el script [`install-docker.sh`](install-docker.sh)
+Para instalar docker en ubuntu puede usar el [tutorial](./instalar_docker_en_una_maquina_EC2.md)
 # Resultado final
 
 Se ha creado una instancia EC2 con:
