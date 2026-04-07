@@ -64,7 +64,7 @@ chmod 400 chiper-key.pem
 
 ### 3. Obtener el ID de los Security Groups
 
-Buscamos los grupos creados previamente. ([Tutorial Security Groups](security_groups.md))
+Buscamos los grupos creados previamente. ([Tutorial Security Groups](crear_security_groups.md))
 
 ``` bash
 aws ec2 describe-security-groups --filters Name=group-name,Values=chiper-ssh,chiper-http --query "SecurityGroups[*].GroupId"
@@ -82,7 +82,7 @@ Ejemplo de salida:
 Guarde estos IDs.
 ### 4. Obtener la AMI de Ubuntu 24.04
 
-Las AMIs son identificadores de imágenes de sistemas operativos. Estos cambian constantemente, por lo que se busca la más reciente.
+Las AMIs son identificadores de imágenes de sistemas operativos. Estos cambian constantemente, por lo que se busca la más reciente utilizando el siguiente comando:
 
 ``` bash
 aws ec2 describe-images --filters "Name=name,Values=ubuntu/images/*/ubuntu-*-24.04-*" "Name=state,Values=available" --query "Images | sort_by(@,&CreationDate)[-1].ImageId" --output text
@@ -93,6 +93,8 @@ Ejemplo de salida:
 ```
 ami-123abc456
 ```
+
+Note que este comando usa expresiones regulares para traer la versión que haga match con la última imagen de ubuntu 24.04.
 
 Guarde el **ImageId**.
 
@@ -108,7 +110,6 @@ Esto creará la instancia.
 ### 6. Obtener la IP pública
 
 Para consultar la IP pública:
-
 ```bash
 aws ec2 describe-instances --filters "Name=tag:Name,Values=chiper-app" --query "Reservations[*].Instances[*].PublicIpAddress" --output text
 ```

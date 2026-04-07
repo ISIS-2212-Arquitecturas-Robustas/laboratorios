@@ -50,8 +50,7 @@ Inicie el **Learning Lab** (esto habilita los créditos del curso). Usted debe v
 > Nota práctica: use nombres **sin tildes** y sin caracteres especiales.
 
 Cree los siguientes Security Groups (VPC por defecto del lab):
-
-- [Tutorial para crear Security Groups en AWS](security_groups.md)
+- [Tutorial para crear Security Groups en AWS](crear_security_groups.md)
 ### 3.1 Security Group 1 — SSH
 
 | Parámetro    | Valor                          |
@@ -83,7 +82,7 @@ Usted debe ver algo así
 ![](recursos/Pasted%20image%2020260310223827.png)
 ## 4. Crear instancia EC2 para Base de Datos (PostgreSQL)
 
-- [Tutorial para crear instancias de EC2 en AWS](ec2_instances.md)
+- [Tutorial para crear instancias de EC2 en AWS](crear_instancia_ec2.md)
 
 Cree una instancia EC2 con los parámetros:
 

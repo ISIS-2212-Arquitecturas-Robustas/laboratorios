@@ -79,7 +79,10 @@ Hay dos escenarios de carga importantes para este laboratorio (tomados de los AS
 - **Operación normal:** 500 req/min (≈ 8.3 req/s).
 - **Evento de promociones (pico):** 5000 req/min (≈ 83.3 req/s).
 
-El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts`
+El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts` puede configurar el número de entidades modificando `load-seed.yaml`
+
+Para correr la aplicación junto con el script de carga ejecute la aplicación de la siguiente forma `SEED_MODE=load npm run start`
+
 
 > [!WARNING]
 > Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
@@ -160,6 +163,8 @@ Restricciones:
 - Incluye instrucciones de ejecución y ejemplo:
   python load_test.py --users 100 --ramp-up 50 --duration 60
 ```
+
+Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot) le explicará como usarlo
 ## Entregables
 
 > [!WARNING]
