@@ -286,7 +286,7 @@ Incluya un analisis de 1 a 2 paginas que responda:
 6. Cual fue el cuello de botella principal (aplicacion, red, API Gateway, RDS u otro).
 7. Dada la evidencia recolectada, que estrategia de escalamiento en ECS recomiendan (horizontal, vertical o mixta) y por que.
 8. Que cambios de arquitectura proponen para reducir el acoplamiento con RDS y que trade-offs introducen. Investigue que tácticas (diferentes de una base de datos por servicio) puede usar y justifique basado en el contexto de Chiper
-9. Si tuvieran que priorizar una inversion de infraestructura para el siguiente pico de 5000 req/min, cual componente reforzarían primero y como justifican la decision con métricas.
+9. Si tuvieran que priorizar una inversion de infraestructura para el siguiente pico de 5000 req/min, cual componente reforzarían primero y como justifican la decision con las medidas de respuesta.
 
 
 ## Nota final (créditos AWS)

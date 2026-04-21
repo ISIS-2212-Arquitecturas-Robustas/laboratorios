@@ -17,7 +17,7 @@
 
 ## ASRs evaluados
 
-| ID    | Descripción                                                                                                                                                                                                                                                           | Métricas a satisfacer |
+| ID    | Descripción                                                                                                                                                                                                                                                           | Medidas de respuesta a satisfacer |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | ASR 1 | Como tendero, quiero consultar los productos que alguna vez he pedido, que actualmente estén en promoción y disponibles en el catálogo de mi zona, con un p99 de **1000 ms** en operación normal (500 req/min).                                                       | Latencia p99 < 1000ms |
 | ASR 2 | Como tendero, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
