@@ -1,11 +1,11 @@
 # Lab 3 — Pruebas de Carga en AWS para el Monolito de Chiper Parte 2
 
 
-> Este laboratorio continúa el trabajo del **Lab 2**. El objetivo es ejecutar **pruebas de carga con JMeter** sobre los **endpoints (GET y POST)** definidos en el Lab 2, pero ahora desplegados en **AWS (EC2)**.
+> Este laboratorio continúa el trabajo del **Lab 2**. El objetivo es ejecutar **pruebas de carga con JMeter** sobre los **endpoints (GET y POST)** definidos en el Lab 2, pero ahora desplegados en **AWS (EC2)**. En el laboratorio anterior se desplegaba una sola instancia de aplicación. En esta versión se incorpora un **Application Load Balancer (ALB)** para distribuir tráfico entre **3 instancias EC2** del backend.
 
 ## Objetivos
 
-- Ejecutar **pruebas de carga** sobre el backend monolítico de Chiper desplegado en AWS (EC2).
+- Ejecutar **pruebas de carga** sobre el backend monolítico de Chiper desplegado en AWS (EC2) detrás de un **Application Load Balancer (ALB)**.
 - Encontrar el **punto de inflexión** del sistema (máximo de usuarios/hilos antes de incumplir ASRs).
 - Analizar el comportamiento del monolito bajo carga: **latencia, throughput, errores** y posibles cuellos de botella.
 - Proponer **mejoras de arquitectura y/o tácticas** para mejorar desempeño y disponibilidad.
@@ -29,15 +29,14 @@
 | Título | Prueba de carga al monolito de Chiper en AWS |
 | Propósito | Determinar el **punto de inflexión** de un endpoint **GET** (consulta compleja) y un endpoint **POST** (escritura pesada) definidos en el Lab 2 |
 | Resultados esperados | Identificar el número máximo de usuarios concurrentes en el que los **ASRs** se dejan de respetar |
-| Infraestructura | 2 instancias **EC2** (App y DB) + computador personal para ejecutar JMeter |
+| Infraestructura | 4 instancias **EC2** (3 App + 1 DB) + 1 **ALB** + computador personal para ejecutar JMeter |
 
 ### 1.2 ASRs involucrados (del Lab 2)
 
-- **REQ1 — Latencia:** Como tendero, quiero confirmar un pedido en menos de **2000 ms**.
-  - Umbral: **P99 < 2000 ms**
-
-- **REQ2 — Disponibilidad bajo carga:** Como Chiper, quiero que al menos el **90% de las peticiones** sean exitosas bajo alta demanda.
-  - Umbral: **Error % ≤ 10%**
+| ID | Descripcion | Metricas a satisfacer |
+| --- | --- | --- |
+| REQ1 | Como tendero, quiero confirmar un pedido en menos de **2000 ms**. | **P99 < 2000 ms** |
+| REQ2 | Como Chiper, quiero que al menos el **90% de las peticiones** sean exitosas bajo alta demanda. | **Error % <= 10%** |
 
 > En este laboratorio medimos REQ1 y REQ2 con el **Summary Report** de JMeter.
 
@@ -55,28 +54,25 @@ Se prueban dos escenarios (del Lab 2):
 
 ## 2. Arquitectura
 
-### 2.1 Estilos de arquitectura asociados (y efectos)
+### 2.1 Diagrama de despliegue
 
-- **Monolito**
-  - Favorece: latencia y mantenibilidad.
-  - Desfavorece: escalabilidad y disponibilidad.
+![Diagrama de componentes y pruebas de carga](./recursos/diagrama_componentes.png)
 
-- **Cliente / Servidor**
-  - Favorece: control centralizado.
-  - Desfavorece: escalabilidad y disponibilidad.
 
-- **Capas (Nest: Controller → Service → Repository/ORM)**
-  - Favorece: mantenibilidad.
-  - Puede desfavorecer: latencia (más saltos y abstracción) y complejidad.
+### 2.2 Estilos de arquitectura asociados (y efectos)
 
-### 2.2 Tácticas
+| Estilos de arquitectura asociados | Analisis (atributos de calidad que favorece y desfavorece) |
+| --- | --- |
+| Monolito | Favorece latencia y mantenibilidad.<br>Desfavorece escalabilidad y disponibilidad. |
+| Cliente / Servidor | Favorece control centralizado.<br>Desfavorece escalabilidad y disponibilidad. |
+| Capas (Nest: Controller -> Service -> Repository/ORM) | Favorece mantenibilidad.<br>Puede desfavorecer latencia (mas saltos y abstraccion) y complejidad. |
 
-En este experimento **no se aplica** una táctica específica (el objetivo es medir el comportamiento base del monolito).
+### 2.3 Tácticas
 
-### 2.3 Elementos de arquitectura
+| Tacticas | Analisis |
+| --- | --- |
+| No aplica tactica especifica | En este experimento se mide el comportamiento base del monolito sin incorporar tacticas adicionales para comparar contra una linea base. |
 
-#### 2.3.1 Diagrama de despliegue
-![[recursos/Diagrama de componentes.png]]
 ## 3. Tecnologías
 
 | Categoría                | Tecnologías   |
@@ -96,9 +92,14 @@ En este experimento **no se aplica** una táctica específica (el objetivo es me
 
 1. Inicie las instancias:
    - `chiper-db`
-   - `chiper-app`
-2. Identifique:
-   - **IP pública** de `chiper-app` (la usará JMeter)
+   - `chiper-app-1`
+   - `chiper-app-2`
+  - `chiper-app-3`
+2. Si su pre-lab quedó con una sola app (`chiper-app`), cree `chiper-app-2` y `chiper-app-3` para completar el balanceo con 3 targets.
+3. Configure o verifique su balanceador:
+   - [Tutorial para configurar Load Balancer](../tutoriales/configurar_load_balancer.md)
+4. Identifique:
+   - **DNS del ALB** (lo usará JMeter)
    - **IP privada** de `chiper-db` (la usa el backend)
 
 ### 4.2 Ejecutar la base de datos (chiper-db)
@@ -113,25 +114,21 @@ docker ps
 
 ```bash
 # Opción A: crear y levantar (primera vez)
-sudo docker run --name chiper-db \
--e POSTGRES_PASSWORD=postgres \
--e POSTGRES_DB=chiper \
--p 5432:5432 \
--d postgres
+sudo docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
 
 # Opción B: si ya existe, solo iniciar
 sudo docker start chiper-db
 ```
 
-### 4.3 Ejecutar el monolito (chiper-app)
+### 4.3 Ejecutar el monolito (chiper-app-1, chiper-app-2 y chiper-app-3)
 
-1) Conéctese por SSH.
+1) Conéctese por SSH a cada instancia de app (3 en total).
 2) Entre al repo.
-3) Verifique variables de entorno/archivo `.env`:
+3) Verifique variables de entorno/archivo `.env` en las tres instancias:
 - `DB_HOST` debe apuntar a la **IP privada** de `chiper-db`
 - `PORT=3000` (o el puerto que use el backend)
 
-4) Levante la app:
+4) Levante la app en las tres instancias:
 
 ```bash
 npm install
@@ -143,7 +140,7 @@ npm run start:dev
 ### 4.4 Verificación rápida desde el navegador
 
 En su computador:
-- `http://<IP_PUBLICA_APP>:3000/health`
+- `http://<DNS_ALB>/health`
 
 ## 5. Pruebas de carga
 
@@ -177,13 +174,10 @@ Ejecute al menos **8 ejecuciones** para *Operación normal* y *Estrés fuerte*. 
 
 1. Descargue del repositorio el archivo `load-tests.jmx` (incluye las pruebas **GET** y **POST**).
 2. Actualice en el plan:
-   - `Server Name or IP` = `IP_PUBLICA_APP`
-   - `Port` = `3000` (o el que corresponda)
-1. Ejecute la primera parte de la matriz de pruebas.
+   - `Server Name or IP` = `DNS_ALB`
+   - `Port` = `80`
+3. Ejecute la primera parte de la matriz de pruebas.
 
-TODO
-- `[Imagen X: Configuración de load-tests.jmx apuntando a IP pública de chiper-app]`
-- `[Imagen X: Summary Report de una iteración]`
 
 ### 5.4 Opción B — Cargas altas con script en Python
 
@@ -257,6 +251,7 @@ Incluya un análisis (1–2 páginas) que responda:
 3. ¿Qué cambios de arquitectura (estilos o tácticas) propondría para cumplir los ASRs?
 4. ¿El patrón de degradación fue gradual o abrupto? ¿Cuál fue el cuello de botella más probable?
 5. ¿Qué endpoint degradó primero y por qué ocurrió?
+6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicadas a Chiper**
 
 ## Nota final (créditos AWS)
 

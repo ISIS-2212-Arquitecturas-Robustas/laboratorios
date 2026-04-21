@@ -123,6 +123,7 @@ docker build -t inventario_service:v1 .
 > nvm install
 > ```
 > 
+> Para crear la build, recuerde que debe instalar las dependencias con `npm i`
 
 ## 8. Paso 4: etiquetar la imagen con la URI de ECR
 
@@ -136,7 +137,7 @@ Ejemplo:
 
 ```bash
 docker tag inventario_service:latest 
-123456789012.dkr.ecr.us-east-1.amazonaws.com/inventario_service:v1
+123456789012.dkr.ecr.us-east-1.amazonaws.com/inventario_service:latest
 ```
 
 Aquí está creando una nueva referencia para la misma imagen local, pero ahora con el nombre exacto que ECR espera para poder recibirla.
@@ -146,7 +147,7 @@ Aquí está creando una nueva referencia para la misma imagen local, pero ahora 
 Una vez autenticado Docker y correctamente etiquetada la imagen, haga el push:
 
 ```bash
-docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/inventario_service:v1
+docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/inventario_service:latest
 ```
 
 Este comando publica la imagen en el repositorio privado de Amazon ECR. Cuando termine, la imagen quedará disponible para ser usada por ECS u otros servicios compatibles.

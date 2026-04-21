@@ -67,43 +67,7 @@ Security Group: sg-xxxxxxxx
 
 Recuerde reemplazar esos valores por los de su cuenta.
 
-## 6. Paso 1: crear el execution role
-
-Para que ECS pueda descargar la imagen desde ECR, debe existir un **task execution role**. AWS indica que este rol permite al agente de ECS y a Fargate hacer llamadas a AWS en su nombre, por ejemplo para hacer pull de imágenes privadas desde ECR. AWS también documenta que, si el rol no existe, puede crearse por CLI con una trust policy para `ecs-tasks.amazonaws.com` y adjuntando la política administrada `AmazonECSTaskExecutionRolePolicy`.
-
-Primero, cree un archivo llamado `ecs-tasks-trust-policy.json` con este contenido:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "",
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "ecs-tasks.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-```
-
-Ahora cree el rol:
-
-```bash
-aws iam create-role --role-name ecsTaskExecutionRole --assume-role-policy-document file://ecs-tasks-trust-policy.json
-```
-
-Luego adjunte la política administrada:
-
-```bash
-aws iam attach-role-policy --role-name ecsTaskExecutionRole --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-```
-
-Con estos dos comandos usted crea el rol que ECS usará para autenticarse contra ECR y descargar la imagen del contenedor. 
-
-## 7. Paso 2: crear el clúster
+## 7. Paso 1: crear el clúster
 
 Ahora cree el clúster de ECS:
 
@@ -113,7 +77,7 @@ aws ecs create-cluster --cluster-name chiper-cluster --region us-east-1
 
 Este comando crea el clúster lógico donde se ejecutará el servicio.
 
-## 8. Paso 3: crear el archivo de task definition
+## 8. Paso 2: crear el archivo de task definition
 
 Cree un archivo llamado `task-definition.json` con el siguiente contenido:
 
@@ -124,12 +88,20 @@ Cree un archivo llamado `task-definition.json` con el siguiente contenido:
   "networkMode": "awsvpc",
   "cpu": "512",
   "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::449642781982:role/LabRole",
   "containerDefinitions": [
     {
       "name": "inventario-container",
       "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/inventario_service:v1",
       "essential": true,
+      "environment": [
+        { "name": "PORT", "value": "3000" },
+        { "name": "DB_HOST", "value": "chiper-rds.xxxxx.us-east-1.rds.amazonaws.com" },
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_NAME", "value": "chiper" },
+        { "name": "DB_USER", "value": "postgres" },
+        { "name": "DB_PASSWORD", "value": "postgres" }
+      ],
       "portMappings": [
         {
           "containerPort": 3000,
@@ -155,7 +127,14 @@ Esta definición indica que:
 
 AWS indica que, para Fargate con `awsvpc`, la task definition debe incluir compatibilidad con Fargate y el modo de red `awsvpc`
 
-## 9. Paso 4: registrar la task definition
+En ECS, las variables de entorno del contenedor se definen en `containerDefinitions`:
+
+- `environment`: variables en texto plano (no sensibles).
+- `secrets`: variables sensibles referenciadas desde SSM Parameter Store o Secrets Manager.
+
+> Por simplicidad vamos a agregar la contraseña de la DB como una variable de entorno, sin embargo **en un entorno real debería ser un secret**
+
+## 9. Paso 3: registrar la task definition
 
 Una vez creado el archivo, registre la definición de tarea:
 
@@ -165,19 +144,12 @@ aws ecs register-task-definition --cli-input-json file://task-definition.json --
 
 Este comando registra la definición en ECS para que luego pueda ser usada por un servicio. AWS documenta precisamente este flujo para Fargate usando AWS CLI.
 
-## 10. Paso 5: crear el servicio
+## 10. Paso 4: crear el servicio
 
 Ahora cree el servicio dentro del clúster:
 
 ```bash
-aws ecs create-service \
-  --cluster chiper-cluster \
-  --service-name inventario-service \
-  --task-definition inventario-task \
-  --desired-count 1 \
-  --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxx],securityGroups=[sg-xxxxxxxx],assignPublicIp=ENABLED}" \
-  --region us-east-1
+aws ecs create-service  --cluster chiper-cluster  --service-name inventario-service  --task-definition inventario-task  --desired-count 1  --launch-type FARGATE  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxx],securityGroups=[sg-xxxxxxxx],assignPublicIp=ENABLED}"  --region us-east-1
 ```
 
 ### Explicación
@@ -193,7 +165,7 @@ Este comando crea un servicio que:
 
 AWS documenta que las tareas Fargate usan red `awsvpc`, por lo que requieren configuración de red al crear el servicio.
 
-## 11. Paso 6: listar los servicios del clúster
+## 11. Paso 5: listar los servicios del clúster
 
 Para verificar que el servicio fue creado, ejecute:
 
@@ -203,7 +175,7 @@ aws ecs list-services --cluster chiper-cluster --region us-east-1
 
 Este comando muestra los servicios registrados en el clúster. Si todo salió bien, verá el ARN del servicio recién creado.
 
-## 12. Paso 7: describir el servicio
+## 12. Paso 6: describir el servicio
 
 Para ver el estado detallado del servicio, ejecute:
 
@@ -213,7 +185,7 @@ aws ecs describe-services --cluster chiper-cluster --services inventario-service
 
 Este comando permite revisar el estado del servicio, la cantidad deseada de tareas y la cantidad que realmente está corriendo. Le sirve para confirmar que ECS ya intentó lanzar el contenedor.
 
-## 13. Paso 8: listar las tareas del servicio
+## 13. Paso 7: listar las tareas del servicio
 
 Para ver las tareas creadas por el servicio, ejecute:
 
@@ -224,7 +196,7 @@ aws ecs list-tasks --cluster chiper-cluster --service-name inventario-service --
 
 Este comando muestra las tareas asociadas al servicio. Si la tarea arrancó correctamente, luego podrá inspeccionarla en detalle.
 
-## 14. Paso 9: describir la tarea en ejecución
+## 14. Paso 8: describir la tarea en ejecución
 
 Copie el ARN de la tarea devuelto en el paso anterior y úselo aquí:
 

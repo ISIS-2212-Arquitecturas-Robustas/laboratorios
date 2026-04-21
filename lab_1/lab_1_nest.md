@@ -290,11 +290,7 @@ Para la instalación se recomienda instalar [Docker Desktop](https://docs.docker
 Se recomienda levantar una instancia PostgreSQL con Docker:
 
 ``` bash
-docker run --name chiper-db \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=chiper \
-  -p 5432:5432 \
-  -d postgres
+docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
 ```
 
 Ejecución del proyecto

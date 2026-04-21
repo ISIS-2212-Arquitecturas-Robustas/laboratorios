@@ -25,6 +25,12 @@
 
 > **Criterio de punto de inflexión:** *basta con que se incumpla **al menos uno** de los dos ASRs.*
 
+## Diagrama de despliegue
+
+<img src="recursos/Pasted image 20260304160111.png"/>
+
+Note que todos los componentes están desplegados en un único nodo de ejecución, en este caso su máquina local, de igual forma note que la comunicación entre componentes sigue los mismos protocolos que si se ejecutara en nodos distintos.
+
 ## Estilos de arquitectura
 
 | Estilos de Arquitectura asociados | Análisis (Atributos de calidad que favorece y desfavorece)                                                                |
@@ -33,11 +39,6 @@
 | Cliente-servidor                  | - Favorece seguridad (el control de acceso a los datos es centralizado).<br>- Desfavorece escalabilidad y disponibilidad. |
 | Capas                             | - Favorece la mantenibilidad y la flexibilidad del sistema.<br>- Desfavorece latencia y aumenta la complejidad.           |
 
-## Diagrama de despliegue
-
-<img src="recursos/Pasted image 20260304160111.png"/>
-
-Note que todos los componentes están desplegados en un único nodo de ejecución, en este caso su máquina local, de igual forma note que la comunicación entre componentes sigue los mismos protocolos que si se ejecutara en nodos distintos.
 ## Tecnologías asociadas
 
 | Tecnologías asociadas         | Selección y Justificación                                                                                                                                                                          |
@@ -54,14 +55,11 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 ### Levantar PostgreSQL con Docker (recomendado)
 
 ```bash
-docker run --name chiper-db \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=chiper \
-  -p 5432:5432 \
-  -d postgres
+docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
 ```
 ### Levantar el backend monolítico
-En el repo del backend:
+En el repo del backend (chiper-api) diríjase a la rama `load-tests y ejecute:
+
 ```bash
 npm install
 npm run start:dev

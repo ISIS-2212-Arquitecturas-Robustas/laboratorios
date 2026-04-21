@@ -110,11 +110,7 @@ sudo service docker status
 3. Levante PostgreSQL con Docker (si no existe el contenedor, créelo; si existe, inícielo):
 ``` bash
 # Opción A: crear y levantar (primera vez)
-sudo docker run --name chiper-db \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=chiper \
-  -p 5432:5432 \
-  -d postgres
+sudo docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
 
 # Opción B: si ya existe, solo iniciar
 sudo docker start chiper-db
