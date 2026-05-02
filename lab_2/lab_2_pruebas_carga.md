@@ -1,4 +1,15 @@
 # Lab 2 — Pruebas de Carga al Monolito de Chiper
+
+## Etapas del laboratorio
+
+| Etapa                           | Resumen                                                                                | Uso de IA generativa                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1. Contexto experimental y ASRs | Definicion del experimento, criterios de exito y marco de evaluacion del monolito.     | Uso acotado para sintetizar ASRs; el analisis de impacto debe ser propio.                     |
+| 2. Preparacion del entorno      | Levantamiento de base de datos, backend y verificacion inicial del entorno de pruebas. | Recomendado para resolver bloqueos tecnicos de instalacion y configuracion.                   |
+| 3. Diseno de pruebas            | Definicion de distribucion de datos, matriz de carga e hipotesis de degradacion.       | Uso acotado: puede ayudar a proponer disenos, pero se debe justificar con contexto de Chiper. |
+| 4. Ejecucion de pruebas         | Ejecucion con JMeter y opcion de script en Python para cargas altas.                   | Recomendado en cargas altas para generar o ajustar scripts de prueba y analisis.              |
+| 5. Entregables y conclusiones   | Reporte de resultados, punto de inflexion y propuestas de mejora arquitectonica.       | No recomendado para redactar conclusiones sin evidencia del experimento.                      |
+
 ## Objetivos
 
 - Ejecutar **pruebas de carga locales** sobre el backend monolítico de Chiper.
@@ -50,15 +61,26 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 | **Herramientas de análisis**  | - **Apache JMeter :** Herramienta de pruebas de carga utilizada para simular concurrencia y medir latencia, throughput y porcentaje de error.                                                      |
 | **Contenedores (opcional)**   | - **Docker:** Permite levantar servicios en entornos aislados para facilitar reproducibilidad del experimento.                                                                                     |
 | **Librerías**                 | - **TypeORM:** ORM utilizado por NestJS para mapear entidades a tablas y manejar consultas, relaciones y transacciones.                                                                            |
-## Preparación del entorno
 
+> [!IMPORTANT]
+> **Pregunta 1:**
+> En el contexto de Chiper, el endpoint GET evaluado combina lectura histórica, promociones y disponibilidad por zona, mientras el POST confirma pedidos en eventos de alta demanda.
+> Si solo pudiera optimizar **uno** antes de un pico comercial, ¿cuál priorizaría y por qué?
+>
+> Argumente su decisión en términos de:
+> - impacto en negocio (pérdida de ventas vs. degradación de experiencia),
+> - riesgo de incumplimiento de ASRs,
+> - tipo de carga (I/O, CPU, contención en base de datos),
+> - y costo/tiempo de implementación de mejoras.
+
+## Preparación del entorno
+En el repo del backend (chiper-api) diríjase a la rama `load-tests
 ### Levantar PostgreSQL con Docker (recomendado)
 
 ```bash
-docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
+docker compose up postgres -d
 ```
 ### Levantar el backend monolítico
-En el repo del backend (chiper-api) diríjase a la rama `load-tests y ejecute:
 
 ```bash
 npm install
@@ -79,11 +101,15 @@ Hay dos escenarios de carga importantes para este laboratorio (tomados de los AS
 
 El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts` puede configurar el número de entidades modificando `load-seed.yaml`
 
-Para correr la aplicación junto con el script de carga ejecute la aplicación de la siguiente forma `SEED_MODE=load npm run start`
-
-
 > [!WARNING]
 > Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
+
+> [!IMPORTANT]
+> **Pregunta 2:**
+> Diseñe una distribución de datos que haga realista el escenario de Chiper en hora pico (tiendas con comportamientos heterogéneos, zonas con distinta densidad de pedidos y promociones activas).
+> ¿Qué sesgos introduciría una distribución uniforme y cómo podría llevar a conclusiones erróneas sobre el punto de inflexión?
+> Proponga al menos dos estrategias de distribución y explique qué hipótesis de arquitectura valida cada una.
+> Presente su propuesta con una comparación visual clara entre estrategias: incluya al menos dos gráficas equivalentes (una por estrategia) usando los mismos ejes y escala (por ejemplo, demanda por zona o pedidos por tienda), y señale explícitamente qué patrón en la gráfica explica por qué una estrategia representa mejor el contexto real de Chiper.
 
 Las pruebas en JMeter se definen con los siguientes parámetros
 #### Threads:
@@ -105,6 +131,18 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 | **Muy alta carga**   | 100s    | 3000    | N/A   | 30                              |
 | **Estrés**           | 150s    | 7500    | N/A   | 50                              |
 | **Estrés fuerte**    | 200s    | 18000   | N/A   | 90                              |
+
+> [!IMPORTANT]
+> **Pregunta 3:**
+> La matriz propuesta aumenta carga de forma escalonada, pero no necesariamente separa bien causas de degradación.
+> ¿Qué cambiaría en el diseño experimental para distinguir si el quiebre proviene principalmente de:
+> - saturación del pool de conexiones,
+> - consultas SQL ineficientes,
+> - límites del runtime de Node,
+> - o del generador de carga?
+>
+> Defina un diseño alternativo con variables controladas y resultados esperados para cada hipótesis.
+> Incluya una gráfica esperada por hipótesis (curva o comparación) para mostrar cómo identificaría visualmente cada tipo de cuello de botella.
 
 ## Pruebas de carga
 
@@ -163,6 +201,12 @@ Restricciones:
 ```
 
 Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot) le explicará como usarlo
+
+> [!IMPORTANT]
+> **Pregunta 4:**
+> Investigue qué técnicas existen para lograr que agentes de IA generen código siguiendo de forma consistente patrones y reglas de desarrollo definidas por todo el equipo.
+> Con base en esa investigación, proponga una estrategia aplicable a Chiper que incluya instrucciones y plantillas aplicables para el desarrollo dentro del equipo
+
 ## Entregables
 
 > [!WARNING]

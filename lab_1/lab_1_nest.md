@@ -1,5 +1,15 @@
 # Lab 1 - Fundamentos de Nest
 
+## Etapas del laboratorio
+
+| Etapa                              | Resumen                                                                           | Uso de IA generativa                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1. Introduccion y conceptos base   | Contexto de NestJS, arquitectura modular y componentes principales.               | Recomendado para aclarar conceptos y contrastar ejemplos; validar con documentacion oficial.           |
+| 2. Diseno arquitectonico de Chiper | Analisis de modularizacion y decisiones de arquitectura por capas para Chiper.    | Uso acotado: apoyar investigacion, pero la argumentacion debe ser propia del equipo.                   |
+| 3. Inyeccion de dependencias       | Comprension practica de providers, contenedor y reemplazo de implementaciones.    | Recomendado para generar ejemplos adicionales y pruebas de comprension.                                |
+| 4. Implementacion CRUD             | Construccion paso a paso de entidad, repositorio, servicio y controlador en Nest. | Recomendado para soporte de codigo (snippets, validaciones, pruebas), con revision manual obligatoria. |
+| 5. Entregables y evidencia         | Consolidacion de resultados y decisiones tomadas durante el laboratorio.          | No recomendado para redactar conclusiones finales sin analisis propio.                                 |
+
 ## Objetivos
 
 - Comprender la arquitectura modular y por capas de NestJS, identificando las responsabilidades de cada componente (Middleware, Controller, Service, Repository).

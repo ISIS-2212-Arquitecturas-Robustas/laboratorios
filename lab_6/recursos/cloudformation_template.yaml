@@ -1,0 +1,820 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Chiper Lab 6 — Aseguramiento de microservicios con JWT (Cognito).
+  Despliega VPC, RDS, ECS/Fargate (3 servicios), API Gateway HTTP y Cognito.
+
+# ---------------------------------------------------------------------------
+# PARÁMETROS
+# Valores que usted debe proveer al ejecutar `aws cloudformation deploy`.
+# ---------------------------------------------------------------------------
+Parameters:
+
+  LogisticaImageUri:
+    Type: String
+    Description: URI completo de la imagen ECR para el servicio Logistica (ej. 123456789.dkr.ecr.us-east-1.amazonaws.com/chiper-logistica:2.0.0)
+
+  InventarioImageUri:
+    Type: String
+    Description: URI completo de la imagen ECR para el servicio Inventario
+
+  VentasImageUri:
+    Type: String
+    Description: URI completo de la imagen ECR para el servicio Ventas
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Contraseña para el usuario postgres de RDS (mínimo 8 caracteres)
+
+  DBName:
+    Type: String
+    Default: chiper
+    Description: Nombre de la base de datos PostgreSQL
+
+  DBUser:
+    Type: String
+    Default: postgres
+    Description: Usuario administrador de PostgreSQL
+
+  FaultDelayMs:
+    Type: String
+    Default: '0'
+    Description: >
+      Delay en ms que Inventario agrega artificialmente a sus respuestas (0 = sin fallo).
+      Cambie a 5000 para reproducir la degradación del lab.
+
+  RecoveryTimeMs:
+    Type: String
+    Default: '60000'
+    Description: >
+      Tiempo en ms desde el arranque del proceso hasta que Inventario se recupera automáticamente.
+      Con FaultDelayMs=5000 y RecoveryTimeMs=60000, el servicio está degradado durante 60s y luego
+      vuelve a la normalidad, simulando un reinicio automático por ECS health checks.
+
+  AccessTokenTtlMinutes:
+    Type: Number
+    Default: 5
+    MinValue: 2
+    MaxValue: 5
+    Description: TTL (en minutos) del access token emitido por Cognito para el laboratorio (recomendado 2–5).
+
+  RefreshTokenTtlDays:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 30
+    Description: TTL (en días) del refresh token para el laboratorio.
+
+# ---------------------------------------------------------------------------
+# RECURSOS
+# ---------------------------------------------------------------------------
+Resources:
+
+  # =========================================================================
+  # RED: VPC, Subnets, Internet Gateway, Route Tables
+  # =========================================================================
+
+  # VPC principal del laboratorio
+  LabVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-vpc
+
+  # Subnet pública A — usada por los ALBs (deben estar en al menos 2 AZs)
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-public-a
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-public-b
+
+  # Subnet privada A — usada por las tareas ECS y RDS (sin IP pública)
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-private-a
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-private-b
+
+  # Internet Gateway — permite que las subnets públicas salgan a internet
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref LabVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref LabVPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # =========================================================================
+  # SECURITY GROUPS
+  # =========================================================================
+
+  # Permite tráfico HTTP desde internet hacia los ALBs
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permite trafico HTTP entrante hacia los ALBs
+      VpcId: !Ref LabVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-alb-sg
+
+  # Permite tráfico HTTP desde los ALBs hacia las tareas ECS
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permite trafico desde los ALBs hacia los contenedores ECS
+      VpcId: !Ref LabVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3003
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        # Comunicación interna entre servicios (Ventas → Inventario)
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3003
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-ecs-sg
+
+  # Solo permite acceso a PostgreSQL desde las tareas ECS
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permite acceso a PostgreSQL solo desde ECS
+      VpcId: !Ref LabVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: chiper-lab6-rds-sg
+
+  # =========================================================================
+  # BASE DE DATOS: RDS PostgreSQL
+  # =========================================================================
+
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets privadas para RDS de Chiper Lab 5
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  # Instancia RDS PostgreSQL — db.t3.micro es suficiente para el laboratorio
+  ChiperDB:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete  # Eliminar al hacer delete-stack (apropiado para lab)
+    Properties:
+      DBInstanceIdentifier: chiper-lab6-db
+      DBName: !Ref DBName
+      Engine: postgres
+      EngineVersion: '15'
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: '20'
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 0  # Sin backups automáticos en laboratorio
+
+  # =========================================================================
+  # ECS: Cluster, Roles IAM, Task Definitions y Servicios
+  # =========================================================================
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: chiper-lab6-cluster
+
+  # Rol que Fargate usa para arrancar los contenedores (pull imagen, logs, etc.)
+  ECSExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: chiper-lab6-ecs-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # --- LOGÍSTICA ---
+
+  LogisticaTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: td-chiper-logistica
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: logistica
+          Image: !Ref LogisticaImageUri
+          PortMappings:
+            - ContainerPort: 3001
+          Environment:
+            - Name: PORT
+              Value: '3001'
+            - Name: DB_HOST
+              Value: !GetAtt ChiperDB.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USER
+              Value: !Ref DBUser
+            - Name: DB_PASSWORD
+              Value: !Ref DBPassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-logistica
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+              awslogs-create-group: 'true'
+
+  LogisticaALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: chiper-lab6-logistica-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  LogisticaTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: chiper-lab6-logistica-tg
+      Port: 3001
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref LabVPC
+      HealthCheckPath: /logistica/health
+      HealthCheckIntervalSeconds: 30
+
+  LogisticaListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LogisticaALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref LogisticaTargetGroup
+
+  LogisticaService:
+    Type: AWS::ECS::Service
+    DependsOn: LogisticaListener
+    Properties:
+      ServiceName: svc-chiper-logistica
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref LogisticaTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: logistica
+          ContainerPort: 3001
+          TargetGroupArn: !Ref LogisticaTargetGroup
+
+  # --- INVENTARIO ---
+
+  InventarioTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: td-chiper-inventario
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: inventario
+          Image: !Ref InventarioImageUri
+          PortMappings:
+            - ContainerPort: 3002
+          Environment:
+            - Name: PORT
+              Value: '3002'
+            - Name: DB_HOST
+              Value: !GetAtt ChiperDB.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USER
+              Value: !Ref DBUser
+            - Name: DB_PASSWORD
+              Value: !Ref DBPassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+            # FAULT_DELAY_MS: delay artificial por request durante el período de fallo
+            - Name: FAULT_DELAY_MS
+              Value: !Ref FaultDelayMs
+            # RECOVERY_TIME_MS: tiempo desde el arranque hasta la auto-recuperación
+            - Name: RECOVERY_TIME_MS
+              Value: !Ref RecoveryTimeMs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-inventario
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+              awslogs-create-group: 'true'
+
+  InventarioALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: chiper-lab6-inventario-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  InventarioTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: chiper-lab6-inventario-tg
+      Port: 3002
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref LabVPC
+      HealthCheckPath: /inventario/health
+      HealthCheckIntervalSeconds: 30
+
+  InventarioListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref InventarioALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref InventarioTargetGroup
+
+  InventarioService:
+    Type: AWS::ECS::Service
+    DependsOn: InventarioListener
+    Properties:
+      ServiceName: svc-chiper-inventario
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref InventarioTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: inventario
+          ContainerPort: 3002
+          TargetGroupArn: !Ref InventarioTargetGroup
+
+  # --- VENTAS ---
+
+  VentasTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: td-chiper-ventas
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: ventas
+          Image: !Ref VentasImageUri
+          PortMappings:
+            - ContainerPort: 3003
+          Environment:
+            - Name: PORT
+              Value: '3003'
+            - Name: DB_HOST
+              Value: !GetAtt ChiperDB.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USER
+              Value: !Ref DBUser
+            - Name: DB_PASSWORD
+              Value: !Ref DBPassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+            # URL interna al ALB de Inventario — Ventas llama a Inventario a través de este ALB
+            - Name: INVENTARIO_BASE_URL
+              Value: !Sub 'http://${InventarioALB.DNSName}'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-ventas
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+              awslogs-create-group: 'true'
+
+  VentasALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: chiper-lab6-ventas-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  VentasTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: chiper-lab6-ventas-tg
+      Port: 3003
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref LabVPC
+      HealthCheckPath: /ventas/health
+      HealthCheckIntervalSeconds: 30
+
+  VentasListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref VentasALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref VentasTargetGroup
+
+  VentasService:
+    Type: AWS::ECS::Service
+    DependsOn: VentasListener
+    Properties:
+      ServiceName: svc-chiper-ventas
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref VentasTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: ventas
+          ContainerPort: 3003
+          TargetGroupArn: !Ref VentasTargetGroup
+
+  # =========================================================================
+  # API GATEWAY HTTP: enruta /logistica/*, /inventario/*, /ventas/*
+  # =========================================================================
+
+  ChiperHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: chiper-ms-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+
+  # =========================================================================
+  # COGNITO: User Pool + App Client (emisor de JWT)
+  # =========================================================================
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: chiper-lab6-user-pool
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+
+  CognitoGroupAdmin:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      GroupName: admin
+      Description: Rol administrador para RBAC (claim cognito:groups)
+
+  CognitoGroupOperador:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      GroupName: operador
+      Description: Rol operador para RBAC (claim cognito:groups)
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: chiper-lab6-app-client
+      GenerateSecret: false
+      EnableTokenRevocation: true
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+      AccessTokenValidity: !Ref AccessTokenTtlMinutes
+      IdTokenValidity: !Ref AccessTokenTtlMinutes
+      RefreshTokenValidity: !Ref RefreshTokenTtlDays
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  # =========================================================================
+  # API Gateway HTTP: JWT Authorizer
+  # =========================================================================
+
+  JwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      Name: chiper-jwt-authorizer
+      AuthorizerType: JWT
+      IdentitySource:
+        - "$request.header.Authorization"
+      JwtConfiguration:
+        Audience:
+          - !Ref CognitoUserPoolClient
+        Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"
+
+  # Integraciones: reenvía cada ruta al ALB del servicio correspondiente
+
+  LogisticaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistica/{proxy}'
+      PayloadFormatVersion: '1.0'
+
+  InventarioIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventario/{proxy}'
+      PayloadFormatVersion: '1.0'
+
+  VentasIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/{proxy}'
+      PayloadFormatVersion: '1.0'
+
+  VentasRootIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: POST
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas'
+      PayloadFormatVersion: '1.0'
+
+  VentasRootRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'POST /ventas'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub 'integrations/${VentasRootIntegration}'
+
+  LogisticaRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'ANY /logistica/{proxy+}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub 'integrations/${LogisticaIntegration}'
+
+  InventarioRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'ANY /inventario/{proxy+}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub 'integrations/${InventarioIntegration}'
+
+  VentasRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'ANY /ventas/{proxy+}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub 'integrations/${VentasIntegration}'
+
+  # Rutas públicas de health (más específicas) — permiten monitoreo sin JWT
+
+  LogisticaHealthIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistica/health'
+      PayloadFormatVersion: '1.0'
+
+  InventarioHealthIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventario/health'
+      PayloadFormatVersion: '1.0'
+
+  VentasHealthIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/health'
+      PayloadFormatVersion: '1.0'
+
+  LogisticaHealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'GET /logistica/health'
+      Target: !Sub 'integrations/${LogisticaHealthIntegration}'
+
+  InventarioHealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'GET /inventario/health'
+      Target: !Sub 'integrations/${InventarioHealthIntegration}'
+
+  VentasHealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'GET /ventas/health'
+      Target: !Sub 'integrations/${VentasHealthIntegration}'
+
+  # Stage con throttling habilitado (Táctica 3 del lab)
+  # Rate y Burst se configuran manualmente desde la consola según las instrucciones del lab
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      StageName: lab
+      AutoDeploy: true
+      DefaultRouteSettings:
+        # Throttling desactivado al inicio — se activa manualmente en la Parte 2, Táctica 3
+        ThrottlingBurstLimit: 5000
+        ThrottlingRateLimit: 1000
+
+# ---------------------------------------------------------------------------
+# OUTPUTS
+# Valores exportados tras el despliegue. Úselos para verificar la instalación.
+# ---------------------------------------------------------------------------
+Outputs:
+
+  ApiGatewayUrl:
+    Description: URL base del API Gateway para el laboratorio
+    Value: !Sub 'https://${ChiperHttpApi}.execute-api.${AWS::Region}.amazonaws.com/lab'
+
+  CognitoUserPoolId:
+    Description: ID del User Pool de Cognito para el laboratorio
+    Value: !Ref CognitoUserPool
+
+  CognitoUserPoolClientId:
+    Description: ClientId del App Client (Audience) usado para JWT
+    Value: !Ref CognitoUserPoolClient
+
+  CognitoIssuerUrl:
+    Description: Issuer URL para validar JWT (usar en servicios)
+    Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}'
+
+  RDSEndpoint:
+    Description: Endpoint de la base de datos RDS
+    Value: !GetAtt ChiperDB.Endpoint.Address
+
+  LogisticaALBDns:
+    Description: DNS del ALB de Logistica
+    Value: !GetAtt LogisticaALB.DNSName
+
+  InventarioALBDns:
+    Description: DNS del ALB de Inventario
+    Value: !GetAtt InventarioALB.DNSName
+
+  VentasALBDns:
+    Description: DNS del ALB de Ventas
+    Value: !GetAtt VentasALB.DNSName

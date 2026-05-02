@@ -1,5 +1,15 @@
 # Lab 4 — Pruebas de Carga en AWS para la Arquitectura de Microservicios
 
+## Etapas del laboratorio
+
+| Etapa                                  | Resumen                                                                                     | Uso de IA generativa                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1. Experimento y ASRs de escalabilidad | Definicion de objetivos de carga simultanea y criterios de exito para microservicios.       | Uso acotado para ordenar hipotesis; la priorizacion de ASRs debe ser propia.                    |
+| 2. Analisis arquitectonico             | Evaluacion de estilos (microservicios, API Gateway) y tacticas de escalamiento.             | Recomendado para contrastar trade-offs y disenar criterios de diagnostico.                      |
+| 3. Despliegue en AWS                   | Publicacion de imagenes, configuracion de RDS, ECS y API Gateway.                           | Recomendado para asistencia operativa (comandos/configuracion), con verificacion manual en AWS. |
+| 4. Pruebas de carga simultaneas        | Ejecucion de GET y POST en paralelo para observar aislamiento y escalabilidad por servicio. | Recomendado para automatizar experimentos y documentar metricas por endpoint.                   |
+| 5. Interpretacion y entregables        | Analisis de eficiencia de escalamiento y consolidacion de resultados.                       | No recomendado para generar conclusiones sin evidencia cuantitativa.                            |
+
 ## Objetivos
 
 - Desplegar la aplicación de Chiper en una arquitectura de microservicios usando AWS.
@@ -37,6 +47,11 @@
 | REQ2 | Como negocio, quiero mantener una alta proporcion de respuestas exitosas incluso en eventos de alta demanda. | Error % <= 10% |
 | REQ3 | Como tendero, quiero que la aplicacion funcione correctamente incluso durante picos de carga de 5000 req/min. | Durante 5000 req/min en ejecucion simultanea GET + POST, sostener throughput total >= 83.3 req/s y Error % <= 10%. |
 
+> [!IMPORTANT]
+> **Pregunta 1:**
+> REQ1, REQ2 y REQ3 pueden degradarse de forma diferente por servicio.
+> Defina un criterio matemático simple (por ejemplo, ganancia marginal de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Chiper.
+
 ### 1.3 Qué se va a probar
 
 Se prueban dos escenarios funcionales, pero ahora en paralelo:
@@ -72,6 +87,10 @@ Se prueban dos escenarios funcionales, pero ahora en paralelo:
 | Balanceo de trafico por servicio | Favorece distribucion uniforme de carga y menor saturacion de instancias individuales.<br>Desfavorece posible latencia adicional y dependencia de una configuracion correcta del balanceo. |
 | Uso de base de datos administrada (RDS) para separar responsabilidades de infraestructura | Favorece alta disponibilidad operativa, simplificacion de administracion y backups gestionados.<br>Desfavorece posible cuello de botella centralizado y mayor costo bajo cargas altas. |
 
+> [!IMPORTANT]
+> **Pregunta 2:**
+> Si el sistema no cumple REQ3 durante carga simultánea, ¿cómo determinaría si el problema está en desacoplamiento insuficiente entre microservicios o en capacidad de infraestructura (ECS/RDS/API Gateway)?
+> Presente su respuesta con un diagrama de diagnóstico (hipótesis -> métricas -> evidencia -> decisión) y al menos una gráfica comparativa de soporte.
 ## 3. Tecnologías
 
 | Categoría | Tecnologías |
@@ -87,7 +106,7 @@ Se prueban dos escenarios funcionales, pero ahora en paralelo:
 
 ## 4. Despliegue (AWS)
 
-Antes de iniciar el despliegue, revise la guia de migracion, es importante que entienda los cambios principales ya que los cambios aunque no son el foco del laboratorio, impactan directamente en como debe desplegar y configurar los servicios:
+Antes de iniciar el despliegue, revise la guía de migración, es importante que entienda los cambios principales ya que los cambios aunque no son el foco del laboratorio, impactan directamente en como debe desplegar y configurar los servicios:
 
 - [Guia de migracion de monolito a microservicios](./guia_migracion_monolito_microservicios.md)
 
@@ -128,11 +147,15 @@ Recursos de ECS (Fargate) y parametros necesarios para el proyecto del curso:
 | ---------- | ---------------------- | ----------------------- | ----------------- | --------------------- | -------------------------------------------------------------------------------------------- |
 | Logistica  | `td-chiper-logistica`  | `svc-chiper-logistica`  | 3001              | 1                     | `PORT=3001`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`                       |
 | Inventario | `td-chiper-inventario` | `svc-chiper-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
-| Ventas     | `td-chiper-ventas`     | `svc-chiper-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`                       |
-![[Pasted image 20260408015028.png]]
 
-![[Pasted image 20260408020954.png]]
 Verifique que todas las tareas queden en estado RUNNING antes de pasar a API Gateway.
+
+> [!IMPORTANT]
+> **Pregunta 3:**
+> Suponga que solo puede aumentar `desired count` en un servicio antes de una ventana comercial crítica.
+> ¿Cuál escalaría primero en Chiper y bajo qué evidencia cuantitativa tomaría esa decisión?
+> Incluya qué métrica usaría para evitar escalar a ciegas.
+> Muestre esa decisión en una gráfica por servicio (por ejemplo saturación o costo-beneficio marginal) para justificar por qué ese servicio se prioriza.
 
 Tutorial de apoyo:
 - [Crear un servicio en Amazon ECS](../tutoriales/crear_instancia_ecs.md)
@@ -194,6 +217,13 @@ Ejecute al menos 8 repeticiones para operacion normal y estres fuerte. Para el r
 
 > Recomendacion: configure dos Thread Groups (GET y POST) y ejecutelos al tiempo en el mismo plan de prueba.
 
+> [!IMPORTANT]
+> **Pregunta 4:**
+> Diseñe una estrategia de distribución de carga GET/POST (por ejemplo 70/30, 60/40, 50/50) que represente un lunes de alta demanda en Chiper.
+> ¿Qué distribución escogería para evaluar riesgo real y cuál para estresar el peor caso técnico?
+> Justifique por qué no necesariamente deben coincidir.
+> Incluya una gráfica comparativa de escenarios (barras o líneas) que muestre el efecto esperado de cada distribución sobre p99, throughput y error %.
+
 ### 5.3 Ejecutar con JMeter
 
 1. Duplique o adapte su plan de pruebas del Lab 2/Lab 3.
@@ -235,6 +265,11 @@ Para este laboratorio, reporte:
 - Punto de inflexion de GET bajo carga simultanea.
 - Punto de inflexion de POST bajo carga simultanea.
 - Punto de inflexion global del sistema (cuando el comportamiento deja de escalar de forma eficiente).
+
+> [!IMPORTANT]
+> **Pregunta 5:**
+> ¿Qué significa exactamente "dejar de escalar eficientemente" en términos medibles para este laboratorio?
+> Defina un criterio y represéntelo en una gráfica con sus resultados y explique en qué punto la curva evidencia que el sistema deja de escalar eficientemente en Chiper.
 
 ## 7. Entregables
 
