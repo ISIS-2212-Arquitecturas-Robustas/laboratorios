@@ -86,13 +86,13 @@ Adicionalmente, EDA introduce una propiedad nueva que la arquitectura síncrona 
 
 El Lab 7 llamaba a Logística e Inventario de forma secuencial, por lo que la latencia era la suma de ambas:
 
-$$T_{\text{lab7}} \geq T_{\text{logistica}} + T_{\text{inventario}} + T_{\text{ventas\_local}} + 2\,\delta_{\text{red}}$$
+$$T_{\text{lab7}} \geq T_{\text{logistica}} + T_{\text{inventario}} + T_{\text{ventas-local}} + 2\,\delta_{\text{red}}$$
 
 **Fan-out paralelo — Lab 8 `GET /ventas/resumen-tienda-sync/:tiendaId`:**
 
 `resumen-tienda-sync` hace las mismas llamadas pero en **paralelo** (`Promise.all`), el mejor caso posible para una arquitectura síncrona:
 
-$$T_{\text{resumen\_sync}} \geq \max(T_{\text{logistica}},\; T_{\text{inventario}}) + T_{\text{ventas\_local}} + \delta_{\text{red}}$$
+$$T_{\text{resumen-sync}} \geq \max(T_{\text{logistica}},\; T_{\text{inventario}}) + T_{\text{ventas-local}} + \delta_{\text{red}}$$
 
 El paralelismo reduce la latencia nominal, pero **no elimina el problema estructural**: la respuesta sigue acotada por el servicio más lento. Bajo carga, cuando $\rho_i \to 1$ en cualquier dependiente, $T_i$ crece de forma no lineal (cola M/M/1) y el endpoint absorbe ese crecimiento aunque el otro servicio esté sano. Un servicio saturado contamina la latencia del endpoint completo, sin importar si las llamadas son secuenciales o paralelas.
 
@@ -108,86 +108,62 @@ Ambos patrones comparten la misma debilidad estructural: el **fan-out en tiempo 
 
 ### 2.2 Flujo de eventos
 
-#### Write path — registro de una venta (Outbox + EDA)
+#### Write path — registro de una venta
 
 ```mermaid
 sequenceDiagram
     actor Tendero
-    participant V as Ventas
-    participant PG as PostgreSQL
-    participant OP as OutboxPublisher<br/>(polling 1 s)
-    participant EB as EventBridge<br/>chiper-bus
-    participant SQS as SQS<br/>chiper-venta-creada
-    participant C as VentaCreadaConsumer<br/>(Inventario, polling 2 s)
-    participant DY as DynamoDB<br/>resumen-tienda
+    participant Ventas
+    participant PostgreSQL
+    participant OutboxPublisher
+    participant EventBridge
+    participant SQS
+    participant Consumer as Consumer (Inventario)
+    participant DynamoDB
 
-    Tendero->>V: POST /ventas/ventas
-    activate V
-    V->>PG: BEGIN TRANSACTION
-    V->>PG: INSERT ventas + items_venta
-    V->>PG: INSERT outbox (VentaCreada)
-    V->>PG: COMMIT
-    V-->>Tendero: 201 Created
-    deactivate V
+    Tendero->>Ventas: POST /ventas/ventas
+    Ventas->>PostgreSQL: INSERT ventas + outbox (misma tx)
+    Ventas-->>Tendero: 201 Created
 
-    loop cada 1 s
-        OP->>PG: SELECT outbox WHERE publishedAt IS NULL
-        OP->>EB: PutEvents (VentaCreada)
-        OP->>PG: UPDATE outbox SET publishedAt = now()
-    end
+    OutboxPublisher->>PostgreSQL: poll outbox
+    OutboxPublisher->>EventBridge: PutEvents (VentaCreada)
+    OutboxPublisher->>PostgreSQL: marcar publishedAt
 
-    EB->>SQS: Rule: source=chiper.ventas → target SQS
+    EventBridge->>SQS: enrutar VentaCreada
 
-    loop cada 2 s
-        C->>SQS: ReceiveMessage
-        C->>PG: SELECT processed_events WHERE eventId = outboxId
-        alt evento ya procesado
-            C->>SQS: DeleteMessage (skip)
-        else evento nuevo
-            C->>DY: UpdateItem — ADD ventasMes, totalVentasMes<br/>list_append ultimasVentas
-            C->>PG: INSERT processed_events
-            C->>SQS: DeleteMessage
-        end
-    end
+    Consumer->>SQS: poll mensajes
+    Consumer->>PostgreSQL: ¿outboxId ya procesado?
+    Consumer->>DynamoDB: UpdateItem resumen-tienda
+    Consumer->>PostgreSQL: INSERT processed_events
+    Consumer->>SQS: DeleteMessage
 ```
 
-#### Read path EDA — consulta del resumen
+#### Read path — EDA vs. síncrono
 
 ```mermaid
 sequenceDiagram
     actor Tendero
-    participant V as Ventas
-    participant DY as DynamoDB<br/>resumen-tienda
+    participant Ventas
+    participant DynamoDB
+    participant Logística
+    participant Inventario
 
-    Tendero->>V: GET /ventas/resumen-tienda/:tiendaId
-    V->>DY: GetItem (tiendaId, sk='RESUMEN')
-    DY-->>V: { ventasMes, totalVentasMes, ultimasVentas, ... }
-    V-->>Tendero: 200 OK  (~5 ms, sin fan-out)
-```
+    Note over Tendero,DynamoDB: EDA — read model pre-computado
+    Tendero->>Ventas: GET /ventas/resumen-tienda/:tiendaId
+    Ventas->>DynamoDB: GetItem
+    DynamoDB-->>Ventas: documento
+    Ventas-->>Tendero: 200 OK (~5 ms)
 
-#### Read path síncrono — control del experimento
-
-```mermaid
-sequenceDiagram
-    actor Tendero
-    participant V as Ventas
-    participant L as Logística
-    participant I as Inventario
-    participant PG as PostgreSQL<br/>(ventas local)
-
-    Tendero->>V: GET /ventas/resumen-tienda-sync/:tiendaId
-    activate V
-    par Promise.all — fan-out paralelo
-        V->>L: GET /logistics/pedidos?tiendaId=X
-        L-->>V: pedidos[]
+    Note over Tendero,Inventario: Síncrono — fan-out en tiempo de consulta
+    Tendero->>Ventas: GET /ventas/resumen-tienda-sync/:tiendaId
+    par
+        Ventas->>Logística: GET pedidos?tiendaId=X
+        Logística-->>Ventas: pedidos[]
     and
-        V->>I: GET /inventory/items
-        I-->>V: items[]
+        Ventas->>Inventario: GET items
+        Inventario-->>Ventas: items[]
     end
-    V->>PG: SELECT ventas WHERE tiendaId=X AND fechaHora >= primerDiaMes
-    PG-->>V: ventas[]
-    V-->>Tendero: 200 OK  (latencia = max(T_logística, T_inventario) + T_local)
-    deactivate V
+    Ventas-->>Tendero: 200 OK (latencia = max(Logística, Inventario) + local)
 ```
 
 #### Event Sourcing — ciclo de vida de un Pedido
@@ -195,31 +171,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Operador
-    participant L as Logística
-    participant PG as PostgreSQL
+    participant Logística
+    participant PostgreSQL
 
-    Operador->>L: POST /logistics/pedidos
-    activate L
-    L->>PG: BEGIN TRANSACTION
-    L->>PG: INSERT pedidos (estado='creado')
-    L->>PG: INSERT eventos_pedido (tipo='PedidoCreado', version=1)
-    L->>PG: COMMIT
-    L-->>Operador: 201 Created
-    deactivate L
+    Operador->>Logística: POST /logistics/pedidos
+    Logística->>PostgreSQL: INSERT pedidos + eventos_pedido v1 (misma tx)
+    Logística-->>Operador: 201 Created
 
-    Operador->>L: PATCH /logistics/pedidos/:id (nuevo estado)
-    activate L
-    L->>PG: BEGIN TRANSACTION
-    L->>PG: UPDATE pedidos (estado=nuevo)
-    L->>PG: INSERT eventos_pedido (tipo='PedidoCambioEstado', version=N)
-    L->>PG: COMMIT
-    L-->>Operador: 200 OK
-    deactivate L
+    Operador->>Logística: PATCH /logistics/pedidos/:id
+    Logística->>PostgreSQL: UPDATE pedidos + INSERT eventos_pedido vN (misma tx)
+    Logística-->>Operador: 200 OK
 
-    Operador->>L: GET /logistics/pedidos/:id/historial
-    L->>PG: SELECT eventos_pedido WHERE pedidoId=:id ORDER BY version ASC
-    PG-->>L: eventos[]
-    L-->>Operador: [ {v:1, PedidoCreado}, {v:2, PedidoCambioEstado}, ... ]
+    Operador->>Logística: GET /logistics/pedidos/:id/historial
+    Logística->>PostgreSQL: SELECT eventos_pedido ORDER BY version ASC
+    Logística-->>Operador: [{v:1, PedidoCreado}, {v:2, PedidoCambioEstado}, ...]
 ```
 
 ### 2.3 Estilos de arquitectura
