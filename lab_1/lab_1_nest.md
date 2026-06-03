@@ -4,8 +4,8 @@
 
 | Etapa                              | Resumen                                                                           | Uso de IA generativa                                                                                   |
 | ---------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1. Introduccion y conceptos base   | Contexto de NestJS, arquitectura modular y componentes principales.               | Recomendado para aclarar conceptos y contrastar ejemplos; validar con documentacion oficial.           |
-| 2. Diseno arquitectonico de Chiper | Analisis de modularizacion y decisiones de arquitectura por capas para Chiper.    | Uso acotado: apoyar investigacion, pero la argumentacion debe ser propia del equipo.                   |
+| 1. Introduccion y conceptos base   | Contexto de NestJS, arquitectura modular y componentes principales.               | Recomendado para aclarar conceptos y contrastar ejemplos; **validar con documentacion oficial.**       |
+| 2. Diseño arquitectonico de Chiper | Analisis de modularizacion y decisiones de arquitectura por capas para Chiper.    | Uso acotado: apoyar investigacion, pero la argumentacion debe ser propia del equipo.                   |
 | 3. Inyeccion de dependencias       | Comprension practica de providers, contenedor y reemplazo de implementaciones.    | Recomendado para generar ejemplos adicionales y pruebas de comprension.                                |
 | 4. Implementacion CRUD             | Construccion paso a paso de entidad, repositorio, servicio y controlador en Nest. | Recomendado para soporte de codigo (snippets, validaciones, pruebas), con revision manual obligatoria. |
 | 5. Entregables y evidencia         | Consolidacion de resultados y decisiones tomadas durante el laboratorio.          | No recomendado para redactar conclusiones finales sin analisis propio.                                 |
@@ -65,6 +65,10 @@ A diferencia de frameworks más minimalistas, Nest propone desde el inicio **una
 Nest sigue una arquitectura modular y por capas, promoviendo separación de responsabilidades y alta cohesión dentro de cada módulo.  
 ## 2. Componentes principales de Nest
 Nest como framework solo distingue 3 capas de responsabilidad, middlewares, controllers y providers. Sin embargo para lograr un acoplamiento aún más bajo entre la capa de lógica de negocio y la capa de infraestructura se plantea la siguiente arquitectura de 4 niveles
+1. Middleware (lógica de soporte compartida)
+2. Controller (capa de presentación)
+3. Service (capa de aplicación / negocio)
+4. Providers de infraestructura (repositorios, monitoreo, almacenamiento, colas)
 ### 2.1 Middleware
 El middleware es la capa que ejecuta antes de que la petición llegue al controlador.
 Se utiliza para declarar la lógica que es transversal a toda o gran parte de la aplicación como:
@@ -92,19 +96,15 @@ Permiten definir límites claros dentro del sistema. Cuando estos límites está
 > Separar una aplicación en módulos es una tarea importante de arquitectura, una mala separación puede hacer que un pequeño cambio afecte funcionalidades que no debería. Por el contrario una buena separación hace que diferentes equipos de desarrollo puedan trabajar en una misma base de código con baja necesidad de comunicación
 >
 > Investigue estos dos patrones de descomposición de aplicaciones, el patrón está orientado a el estilo de arquitectura de microservicios que veremos más adelante en el curso. Sin embargo los conceptos mencionados funcionan para Nest dada su capacidad de encapsular aplicaciones en módulos
-> - [Descomposición por capacidades de negocio](https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-business-capability.html)
+> - [Descomposición por capacidades de negocio](https://docs.aws.amazon.com/es_es/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-business-capability.html)
 > - [Descomposición por subdominios](https://docs.aws.amazon.com/es_es/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-subdomain.html)
 >
 > ¿Si usted tuviera que realizar la descomposición de Chiper, teniendo en cuenta su contexto y madurez, qué patrón escogería?
 ## 3. Arquitectura que seguiremos en el curso
 
-Como se mencionó anteriormente, la arquitectura que utilizaremos es una arquitectura por capas, estas capas vivirán dentro de cada módulo.
+Como se mencionó anteriormente, utilizaremos una arquitectura por capas, estas capas vivirán dentro de cada módulo.
 
 Estructura general:
-1. Middleware (transversal)
-2. Controller (capa de presentación)
-3. Service (capa de aplicación / negocio)
-4. Providers de infraestructura (repositorios, monitoreo, almacenamiento, colas)
 
 ![](recursos/nest_arch.png)
 Algunos ejemplos de providers de infraestructura:
@@ -121,7 +121,7 @@ Una ventaja importante de Nest es que permite agregar, quitar o reemplazar provi
 
 > [!IMPORTANT]
 > **Pregunta 2:**
-> Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos SQL por una no SQL. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
+> Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos SQL por una no SQL en el contexto de Chiper. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
 
 ## 4. Inyección de dependencias
 
@@ -188,7 +188,7 @@ Con solo listar los providers en el módulo, Nest construye el grafo de dependen
 
 ### ¿Por qué esto importa?
 
-La gran es que permite **reemplazar implementaciones sin tocar el código que las usa**. Por ejemplo, para pruebas se puede sustituir `EmailService` por un mock que no envíe emails reales:
+La gran ventaja es que permite **reemplazar implementaciones sin tocar el código que las usa**. Por ejemplo, para pruebas se puede sustituir `EmailService` por un mock que no envíe emails reales:
 
 ```typescript
 const moduleRef = await Test.createTestingModule({
@@ -258,6 +258,7 @@ nest --version
 ``` bash
 nest new chiper-backend
 ```
+> _Se recomienda elegir npm como gestor de paquetes para evitar problemas de compatibilidad._
 
 Estructura inicial generada:
 
@@ -289,7 +290,9 @@ npm install uuid
 
 #### Configuración de base de datos
 
-**¿Qué es Docker?**
+Para el desarrollo en local, se recomienda usar Docker para levantar una instancia de PostgreSQL de forma rápida y sin afectar la máquina local.
+
+ **¿Qué es Docker?**
 
 Docker es una herramienta que permite ejecutar aplicaciones dentro de **contenedores**: entornos aislados y ligeros que incluyen todo lo necesario para que una aplicación funcione (sistema operativo base, librerías, configuración). A diferencia de una máquina virtual, un contenedor no virtualiza hardware completo, sino que comparte el kernel del sistema operativo anfitrión, haciéndolo mucho más rápido y liviano.
 
@@ -303,6 +306,9 @@ Se recomienda levantar una instancia PostgreSQL con Docker:
 docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
 ```
 
+> [!WARNING]
+> Docker es la forma más sencilla y estandar de levantar la base de datos para este laboratorio, por lo que el equipo del curso no dará soporte a problemas relacionados con la instalación o configuración de PostgreSQL fuera de Docker.
+
 Ejecución del proyecto
 ``` bash
 npm run start:dev
@@ -312,6 +318,8 @@ Probar en:
 ``` bash
 http://localhost:3000
 ```
+
+Usted tiene en este momento las herramientas necesarias para levantar un proyecto desde cero, configurar la base de datos y ejecutar la aplicación. Para los siguientes pasos vamos a trabajar con un proyecto ya creado con esta configuración, el cual se encuentra en el [repositorio de chiper-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api), en la rama `main`.
 
 ### Paso 0 — Módulo de datasources
 
@@ -553,14 +561,9 @@ export class CatalogoService {
 > - Un `ServicioCalculoPromociones`
 >
 > Además, la aplicación opera en múltiples países (COP, MXN, BRL) y debe soportar alta concurrencia en quincenas.
-> Con base en la documentación oficial de Nest:
-> Si desea intercambiar la implementación de RepositorioPedido por una versión distinta (por ejemplo, una que use otro motor de base de datos o una implementación mock para pruebas), ¿cómo debería definir y registrar el provider para evitar acoplamiento directo a la clase concreta?
 > Imagine que `ServicioCalculoPromociones` mantiene información temporal del request (por ejemplo, reglas dinámicas por país y tipo de tienda).
-> - ¿Qué implicaciones tendría dejarlo como singleton?
-> - ¿En qué caso sería más apropiado usar request scope?
-> - ¿Qué impacto real tendría esto en memoria y rendimiento bajo alta carga?
-> - Si `ServicioDisponibilidadZona` realiza llamadas frecuentes a infraestructura externa (por ejemplo, inventario en tiempo real), ¿en qué escenario un transient provider cambiaría el comportamiento observable del sistema?
-> Argumente sus respuestas con base en cómo Nest gestiona el ciclo de vida de los providers y la resolución de dependencias en tiempo de ejecución.
+> - ¿Qué scope (singleton, request, transient) recomendaría para cada uno de estos providers? Justifique su respuesta.
+> - ¿Qué impacto real tendría esto en memoria y rendimiento bajo alta carga? Suponga que en alta carga se reciben 1000 pedidos por segundo, cual sería la complejidad espacial (Notación Big O) de cada uno de estos scopes en este escenario?
 
 ### Paso 4 — Controller (rutas HTTP)
 

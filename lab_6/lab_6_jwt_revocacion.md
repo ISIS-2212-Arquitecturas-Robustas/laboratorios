@@ -203,7 +203,55 @@ Los endpoints de health deben ser **públicos** para monitoreo:
 
 ## 5. Implementación mínima en microservicios
 
-TODO
+> El código vive en la rama `lab6/cognito-auth` del repositorio `chiper-api`
+> (worktree disponible en `../chiper-api-lab6`).
+
+### 5.1 Arquitectura de la implementación
+
+Se agregó una librería compartida `libs/shared/auth/` con los siguientes componentes:
+
+| Componente | Archivo | Responsabilidad |
+| --- | --- | --- |
+| `CognitoAuthModule` | `auth.module.ts` | Módulo global; registra todos los providers |
+| `CognitoJwtService` | `cognito-jwt.service.ts` | Verifica JWT contra el JWKS de Cognito (firma, `iss`, `token_use`, `exp`) |
+| `JwtAuthGuard` | `guards/jwt-auth.guard.ts` | Extrae y valida el token; devuelve **401** si falta o es inválido |
+| `RolesGuard` | `guards/roles.guard.ts` | Verifica `cognito:groups`; devuelve **403** si el rol no coincide |
+| `@Public()` | `decorators/public.decorator.ts` | Marca rutas sin autenticación (health checks) |
+| `@Roles(...)` | `decorators/roles.decorator.ts` | Restringe un endpoint a grupos de Cognito específicos |
+| `AuthLoggerMiddleware` | `middleware/auth-logger.middleware.ts` | Loguea el 100 % de respuestas 401/403 (ASR-2) |
+
+Los guards se aplican **globalmente** en el `main.ts` de cada microservicio vía `useGlobalGuards`.
+Las rutas de health tienen `@Public()` a nivel de clase, por lo que no requieren token.
+
+### 5.2 Variables de entorno requeridas
+
+Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
+
+| Variable | Descripción | Fuente |
+| --- | --- | --- |
+| `COGNITO_USER_POOL_ID` | ID del User Pool | Output `CognitoUserPoolId` del stack CF |
+| `COGNITO_REGION` | Región AWS | Output `CognitoIssuerUrl` (prefijo región) |
+| `COGNITO_CLIENT_ID` | App Client ID | Output `CognitoUserPoolClientId` del stack CF |
+
+### 5.3 Tabla de políticas de acceso
+
+| Endpoint | Método | Protección | Rol requerido | 200 | 401 | 403 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `/logistica/health` | GET | Público | — | ✓ | — | — |
+| `/inventario/health` | GET | Público | — | ✓ | — | — |
+| `/ventas/health` | GET | Público | — | ✓ | — | — |
+| `/ventas/ventas` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
+| `/ventas/ventas` | GET | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
+| `/ventas/ventas/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
+| `/logistics/pedidos` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
+| `/logistics/pedidos/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
+
+### 5.4 Instrucciones de despliegue
+
+1. Desplegar el stack CloudFormation (sección 4) para obtener los Outputs.
+2. Crear imagen Docker de cada microservicio con las variables de entorno configuradas.
+3. Los guards validan el JWT localmente (sin llamada adicional a Cognito en cada request) usando el JWKS cacheado.
+4. El API Gateway también valida el token en el borde (doble capa de seguridad).
 
 
 > [!IMPORTANT]

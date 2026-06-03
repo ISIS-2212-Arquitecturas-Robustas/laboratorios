@@ -1,0 +1,686 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Chiper Lab 8 — EDA: EventBridge + SQS + DynamoDB sobre la infraestructura del Lab 4/7.
+  Despliega ECS (Fargate) para los tres microservicios, RDS PostgreSQL, API Gateway,
+  EventBridge custom bus, SQS queue, DLQ y tabla DynamoDB para el read model CQRS.
+
+Parameters:
+  LogisticaImageUri:
+    Type: String
+    Description: URI completa de la imagen ECR de Logistica (incluido tag 4.0.0)
+  InventarioImageUri:
+    Type: String
+    Description: URI completa de la imagen ECR de Inventario (incluido tag 4.0.0)
+  VentasImageUri:
+    Type: String
+    Description: URI completa de la imagen ECR de Ventas (incluido tag 4.0.0)
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Contrasena para la instancia RDS PostgreSQL
+  DBUsername:
+    Type: String
+    Default: postgres
+  DBName:
+    Type: String
+    Default: chiper
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC donde se desplegara la infraestructura
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subred publica 1 (para ECS y RDS)
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subred publica 2 (para alta disponibilidad de RDS)
+
+Resources:
+
+  # ─── Seguridad ──────────────────────────────────────────────────────────────
+
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG para tareas ECS de Chiper Lab 8
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3003
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: chiper-lab8-ecs-sg
+
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG para RDS PostgreSQL de Chiper Lab 8
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EcsSecurityGroup
+      Tags:
+        - Key: Name
+          Value: chiper-lab8-rds-sg
+
+  # ─── RDS PostgreSQL ──────────────────────────────────────────────────────────
+
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for Chiper Lab 8 RDS
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      DBInstanceIdentifier: chiper-lab8-postgres
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: '15'
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBName: !Ref DBName
+      AllocatedStorage: '20'
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroup
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      DeletionProtection: false
+
+  # ─── EventBridge ─────────────────────────────────────────────────────────────
+
+  ChiperEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: chiper-bus
+
+  # ─── SQS ─────────────────────────────────────────────────────────────────────
+
+  VentaCreadaDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: chiper-venta-creada-dlq
+      MessageRetentionPeriod: 1209600  # 14 días
+
+  VentaCreadaQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: chiper-venta-creada
+      VisibilityTimeout: 30
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VentaCreadaDLQ.Arn
+        maxReceiveCount: 3
+
+  VentaCreadaQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref VentaCreadaQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt VentaCreadaQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/chiper-bus/chiper-venta-creada-rule
+
+  # ─── EventBridge Rule: VentaCreada → SQS ────────────────────────────────────
+
+  VentaCreadaRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: chiper-venta-creada-rule
+      EventBusName: !Ref ChiperEventBus
+      EventPattern:
+        source:
+          - chiper.ventas
+        detail-type:
+          - VentaCreada
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt VentaCreadaQueue.Arn
+          Id: VentaCreadaQueueTarget
+
+  # ─── DynamoDB: Read Model CQRS ───────────────────────────────────────────────
+
+  ResumenTiendaTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: chiper-resumen-tienda
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tiendaId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tiendaId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  # ─── IAM Roles ───────────────────────────────────────────────────────────────
+
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: chiper-lab8-ecs-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  EcsTaskRoleLogistica:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: chiper-lab8-logistica-task-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: eventbridge-publish
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !GetAtt ChiperEventBus.Arn
+
+  EcsTaskRoleVentas:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: chiper-lab8-ventas-task-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: eventbridge-and-dynamo
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !GetAtt ChiperEventBus.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource: !GetAtt ResumenTiendaTable.Arn
+
+  EcsTaskRoleInventario:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: chiper-lab8-inventario-task-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: sqs-and-dynamo
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt VentaCreadaQueue.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt ResumenTiendaTable.Arn
+
+  # ─── ECS Cluster ─────────────────────────────────────────────────────────────
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: chiper-lab8-cluster
+
+  # ─── CloudWatch Log Groups ───────────────────────────────────────────────────
+
+  LogGroupLogistica:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/chiper-lab8-logistica
+      RetentionInDays: 3
+
+  LogGroupInventario:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/chiper-lab8-inventario
+      RetentionInDays: 3
+
+  LogGroupVentas:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/chiper-lab8-ventas
+      RetentionInDays: 3
+
+  # ─── ECS Task Definitions ────────────────────────────────────────────────────
+
+  TaskDefLogistica:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: chiper-lab8-logistica
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRoleLogistica.Arn
+      ContainerDefinitions:
+        - Name: logistica
+          Image: !Ref LogisticaImageUri
+          PortMappings:
+            - ContainerPort: 3001
+          Environment:
+            - Name: PORT
+              Value: '3001'
+            - Name: DB_HOST
+              Value: !GetAtt RdsInstance.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USERNAME
+              Value: !Ref DBUsername
+            - Name: DB_PASSWORD
+              Value: !Ref DBPassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: EVENTBRIDGE_BUS_NAME
+              Value: chiper-bus
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-lab8-logistica
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  TaskDefInventario:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: chiper-lab8-inventario
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRoleInventario.Arn
+      ContainerDefinitions:
+        - Name: inventario
+          Image: !Ref InventarioImageUri
+          PortMappings:
+            - ContainerPort: 3002
+          Environment:
+            - Name: PORT
+              Value: '3002'
+            - Name: DB_HOST
+              Value: !GetAtt RdsInstance.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USERNAME
+              Value: !Ref DBUsername
+            - Name: DB_PASSWORD
+              Value: !Ref DBPassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+            - Name: LOGISTICA_BASE_URL
+              Value: !Sub http://${LogisticaALB.DNSName}
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: SQS_VENTA_CREADA_URL
+              Value: !Ref VentaCreadaQueue
+            - Name: DYNAMO_TABLE_RESUMEN
+              Value: chiper-resumen-tienda
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-lab8-inventario
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  TaskDefVentas:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: chiper-lab8-ventas
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRoleVentas.Arn
+      ContainerDefinitions:
+        - Name: ventas
+          Image: !Ref VentasImageUri
+          PortMappings:
+            - ContainerPort: 3003
+          Environment:
+            - Name: PORT
+              Value: '3003'
+            - Name: DB_HOST
+              Value: !GetAtt RdsInstance.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USERNAME
+              Value: !Ref DBUsername
+            - Name: DB_PASSWORD
+              Value: !Ref DBPassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+            - Name: LOGISTICA_BASE_URL
+              Value: !Sub http://${LogisticaALB.DNSName}
+            - Name: LOGISTICA_TIMEOUT_MS
+              Value: '8000'
+            - Name: INVENTARIO_BASE_URL
+              Value: !Sub http://${InventarioALB.DNSName}
+            - Name: INVENTARIO_TIMEOUT_MS
+              Value: '8000'
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: EVENTBRIDGE_BUS_NAME
+              Value: chiper-bus
+            - Name: DYNAMO_TABLE_RESUMEN
+              Value: chiper-resumen-tienda
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-lab8-ventas
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # ─── ALBs internos para comunicación entre servicios ────────────────────────
+
+  LogisticaALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: chiper-lab8-logistica-alb
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref EcsSecurityGroup
+
+  LogisticaTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: chiper-lab8-logistica-tg
+      Port: 3001
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /logistica/health
+      HealthCheckIntervalSeconds: 30
+
+  LogisticaListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LogisticaALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref LogisticaTargetGroup
+
+  InventarioALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: chiper-lab8-inventario-alb
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref EcsSecurityGroup
+
+  InventarioTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: chiper-lab8-inventario-tg
+      Port: 3002
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /inventario/health
+      HealthCheckIntervalSeconds: 30
+
+  InventarioListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref InventarioALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref InventarioTargetGroup
+
+  VentasALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: chiper-lab8-ventas-alb
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref EcsSecurityGroup
+
+  VentasTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: chiper-lab8-ventas-tg
+      Port: 3003
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /ventas/health
+      HealthCheckIntervalSeconds: 30
+
+  VentasListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref VentasALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref VentasTargetGroup
+
+  # ─── ECS Services ────────────────────────────────────────────────────────────
+
+  EcsServiceLogistica:
+    Type: AWS::ECS::Service
+    DependsOn: LogisticaListener
+    Properties:
+      ServiceName: chiper-lab8-logistica
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref TaskDefLogistica
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PublicSubnet1
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+      LoadBalancers:
+        - ContainerName: logistica
+          ContainerPort: 3001
+          TargetGroupArn: !Ref LogisticaTargetGroup
+
+  EcsServiceInventario:
+    Type: AWS::ECS::Service
+    DependsOn: InventarioListener
+    Properties:
+      ServiceName: chiper-lab8-inventario
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref TaskDefInventario
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PublicSubnet1
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+      LoadBalancers:
+        - ContainerName: inventario
+          ContainerPort: 3002
+          TargetGroupArn: !Ref InventarioTargetGroup
+
+  EcsServiceVentas:
+    Type: AWS::ECS::Service
+    DependsOn: VentasListener
+    Properties:
+      ServiceName: chiper-lab8-ventas
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref TaskDefVentas
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PublicSubnet1
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+      LoadBalancers:
+        - ContainerName: ventas
+          ContainerPort: 3003
+          TargetGroupArn: !Ref VentasTargetGroup
+
+  # ─── API Gateway ─────────────────────────────────────────────────────────────
+
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: chiper-lab8-api
+      ProtocolType: HTTP
+
+  ApiGatewayStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ApiGateway
+      StageName: lab
+      AutoDeploy: true
+
+  VpcLinkApi:
+    Type: AWS::ApiGatewayV2::VpcLink
+    Properties:
+      Name: chiper-lab8-vpc-link
+      SubnetIds:
+        - !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref EcsSecurityGroup
+
+  IntegrationLogistica:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Ref LogisticaListener
+      ConnectionType: VPC_LINK
+      ConnectionId: !Ref VpcLinkApi
+      PayloadFormatVersion: '1.0'
+
+  IntegrationInventario:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Ref InventarioListener
+      ConnectionType: VPC_LINK
+      ConnectionId: !Ref VpcLinkApi
+      PayloadFormatVersion: '1.0'
+
+  IntegrationVentas:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Ref VentasListener
+      ConnectionType: VPC_LINK
+      ConnectionId: !Ref VpcLinkApi
+      PayloadFormatVersion: '1.0'
+
+  RouteLogistica:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: ANY /logistica/{proxy+}
+      Target: !Sub integrations/${IntegrationLogistica}
+
+  RouteInventario:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: ANY /inventario/{proxy+}
+      Target: !Sub integrations/${IntegrationInventario}
+
+  RouteVentas:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: ANY /ventas/{proxy+}
+      Target: !Sub integrations/${IntegrationVentas}
+
+# ─── Outputs ──────────────────────────────────────────────────────────────────
+
+Outputs:
+  ApiGatewayUrl:
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/lab
+    Description: URL base del API Gateway para el laboratorio
+  EventBusBusName:
+    Value: chiper-bus
+    Description: Nombre del custom bus de EventBridge
+  VentaCreadaQueueUrl:
+    Value: !Ref VentaCreadaQueue
+    Description: URL de la cola SQS para el consumer de Inventario
+  VentaCreadaDLQUrl:
+    Value: !Ref VentaCreadaDLQ
+    Description: URL de la Dead Letter Queue
+  ResumenTiendaTableName:
+    Value: chiper-resumen-tienda
+    Description: Nombre de la tabla DynamoDB del read model CQRS
+  RdsEndpoint:
+    Value: !GetAtt RdsInstance.Endpoint.Address
+    Description: Endpoint de la instancia RDS PostgreSQL
