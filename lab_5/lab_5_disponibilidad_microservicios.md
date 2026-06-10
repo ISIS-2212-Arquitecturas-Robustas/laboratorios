@@ -1,14 +1,15 @@
-# Lab 5 — Disponibilidad en Microservicios: Circuit Breaker, Retry y Rate Limiting
+# Lab 5 — Disponibilidad en Microservicios: Circuit Breaker, Retry, Rate Limiting, Outbox e Idempotencia
 
 ## Etapas del laboratorio
 
 | Etapa                                      | Resumen                                                                                                          | Uso de IA generativa                                                                                      |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 1. Contexto del experimento de resiliencia | Modelado del escenario de retry storm y definicion de ASRs de resiliencia para Chiper.                           | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
+| 1. Contexto del experimento de resiliencia | Modelado del escenario de retry storm y definicion de ASRs de resiliencia y consistencia para Chiper.            | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
 | 2. Arquitectura y tacticas                 | Analisis de microservicios, patrón sidecar, graceful degradation, circuit breaker y control de recursos.         | Recomendado para comparar parametros y riesgos de configuracion.                                          |
 | 3. Preparacion de infraestructura con IaC  | Despliegue reproducible en AWS mediante CloudFormation y verificacion del stack.                                  | Recomendado para asistir en comandos y troubleshooting de despliegue.                                     |
 | 4. Configuración del sidecar de resiliencia | Implementacion de falla controlada en Inventario y configuración del proxy Envoy en Ventas.                     | Recomendado para soporte de implementacion, revision de parametros y pruebas; validar manualmente resultados. |
-| 5. Ejecucion de experimentos y analisis    | Comparacion de baseline vs tacticas y evaluacion de impacto en ASRs.                                            | No recomendado para redactar conclusiones sin evidencia empirica del laboratorio.                         |
+| 5. Ejecucion de experimentos y analisis    | Comparacion de baseline vs tacticas y evaluacion de impacto en ASRs de infraestructura.                          | No recomendado para redactar conclusiones sin evidencia empirica del laboratorio.                         |
+| 6. Consistencia bajo fallo: Outbox e Idempotencia | Demostración del problema de inconsistencia y resolución con Outbox HTTP + idempotencia en Inventario.   | Recomendado para soporte de implementacion; validar manualmente el experimento.                           |
 
 ## Objetivos
 
@@ -16,6 +17,7 @@
 - Implementar tres tácticas de resiliencia a nivel de infraestructura: retry con backoff exponencial, circuit breaker con graceful degradation, y rate limiting.
 - Desplegar la infraestructura del laboratorio usando Infraestructura como Código (IaaC) con AWS CloudFormation.
 - Evaluar el impacto de cada táctica sobre los ASRs del negocio de Chiper mediante pruebas de carga.
+- Demostrar que la resiliencia de infraestructura (circuit breaker, retry) no garantiza consistencia de datos, e implementar el patrón **Outbox** e **Idempotencia** para cerrar esa brecha.
 - Reflexionar sobre las limitaciones de las tácticas locales frente a enfoques de resiliencia distribuida centralizada.
 
 ## Índice
@@ -27,8 +29,9 @@
 - [5. Configuración del sidecar y ajuste de código](#5-configuración-del-sidecar-y-ajuste-de-código)
 - [6. Parte 1 — Reproducir el fallo en cascada](#6-parte-1--reproducir-el-fallo-en-cascada)
 - [7. Parte 2 — Aplicar tácticas de resiliencia](#7-parte-2--aplicar-tácticas-de-resiliencia)
-- [8. Interpretación de resultados](#8-interpretación-de-resultados)
-- [9. Entregables](#9-entregables)
+- [8. Parte 3 — Consistencia bajo fallo: Outbox e Idempotencia](#8-parte-3--consistencia-bajo-fallo-outbox-e-idempotencia)
+- [9. Interpretación de resultados](#9-interpretación-de-resultados)
+- [10. Entregables](#10-entregables)
 
 ## 1. Experimento
 
@@ -62,6 +65,7 @@ Un aspecto crítico de este escenario, y que este lab reproduce explícitamente,
 | ASR-1 | Como tendero, quiero poder confirmar un pedido incluso cuando el servicio de Inventario esté degradado. Un pedido con stock no confirmado es preferible a un error que me impida completar la compra. | Durante fallo total de Inventario, Ventas responde HTTP 200 con `status: pending_stock_confirmation` en p99 < 3000 ms                           |
 | ASR-2 | Como negocio, quiero que los reintentos automáticos ante fallos no amplifiquen la carga sobre servicios ya degradados, para evitar empeorar el incidente.                                             | El volumen de requests recibidos por Inventario con reintentos activos no debe superar 2x el volumen de la línea base sin reintentos            |
 | ASR-3 | Como negocio, quiero que el tráfico de confirmación de pedidos no se vea afectado por picos de tráfico de baja prioridad (ej. consultas de catálogo masivas).                                         | El rate limiter rechaza el tráfico excedente con HTTP 429 sin que el throughput de pedidos válidos caiga más de un 10% respecto a la línea base |
+| ASR-4 | Como negocio, quiero que toda venta registrada, incluso en modo degradado (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere. | Tras la recuperación de Inventario, toda venta con OutboxHttpCall en estado PENDING transita a DELIVERED en < 30 s; ningún `item_inventario.cantidad` refleja decrementos duplicados. |
 
 ### 1.4 Qué se va a probar
 
@@ -71,6 +75,7 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 2. **Con retry + backoff exponencial** (sidecar activado, solo política de retry): el proxy Envoy reintenta automáticamente ante errores 5xx.
 3. **Con circuit breaker + graceful degradation** (sidecar con outlier detection): Envoy abre el circuito y Ventas retorna `pending_stock_confirmation`.
 4. **Con las tres tácticas combinadas** (retry + circuit breaker en sidecar + rate limiting en API Gateway).
+5. **Con Outbox + Idempotencia**: Inventario caído, se crean ventas que retornan `pending_stock_confirmation`. Se restaura Inventario y se observa la reconciliación automática vía Outbox. Se valida que reintentos con la misma clave no producen decrementos dobles.
 
 > [!IMPORTANT]
 > **Pregunta 2:**
@@ -585,7 +590,167 @@ Con las tres tácticas activas simultáneamente (sidecar completo + rate limitin
 
 Complete la tabla comparativa (ver entregables).
 
-## 8. Interpretación de resultados
+---
+
+## 8. Parte 3 — Consistencia bajo fallo: Outbox e Idempotencia
+
+### 8.1 El problema que el circuit breaker no resuelve
+
+El circuit breaker y la "caida con gracia" mantienen a Ventas *disponible*: el tendero recibe HTTP 200 incluso cuando Inventario está caído. Pero hay un efecto secundario silencioso: **el stock nunca se decrementó**. Cuando Inventario se recupera, el sistema no sabe cuántas ventas ocurrieron mientras estaba caído.
+
+Peor aún, cuando se retoman llamadas normales (circuito HALF-OPEN → CLOSED), si un cliente externo reintentó su llamada durante la degradación, el decremento puede llegar dos veces.
+
+Esto demuestra que **resiliencia de infraestructura ≠ consistencia de datos**.
+
+### 8.2 Fase 0 — Demostración del problema (sin Outbox ni Idempotencia)
+
+Para ver el problema, ejecute el siguiente flujo con el código de la rama **antes del commit del Outbox** (o revierta el `VentaService` a la versión sin `OutboxHttpCall`):
+
+1. Registrar el stock inicial de un producto:
+   ```bash
+   GET <BASE_URL>/inventory/items/<itemInventarioId>
+   # Anotar cantidad inicial
+   ```
+
+2. Bajar el contenedor de Inventario:
+   ```bash
+   docker-compose stop inventario
+   ```
+
+3. Crear 3 ventas (el circuit breaker está cerrado al principio, se abrirá tras algunos fallos):
+   ```bash
+   POST <BASE_URL>/ventas/ventas
+   { "tiendaId": "...", "items": [{ "productoId": "...", "cantidad": 1, ... }] }
+   # Repetir 3 veces — primeros pedidos fallarán; cuando el circuito abre, retornarán pending_stock_confirmation
+   ```
+
+4. Restaurar Inventario:
+   ```bash
+   docker-compose start inventario
+   ```
+
+5. Esperar 30 segundos y verificar el stock:
+   ```bash
+   GET <BASE_URL>/inventory/items/<itemInventarioId>
+   ```
+   **Resultado esperado**: la cantidad NO cambió — el stock sigue igual aunque se registraron ventas.
+
+6. Enviar la misma venta dos veces consecutivas (simula retry de cliente):
+   ```bash
+   POST <BASE_URL>/ventas/ventas
+   # Misma petición dos veces
+   ```
+   Luego verificar stock: bajó en 2 cuando debería haber bajado en 1.
+
+> [!IMPORTANT]
+> **Pregunta 9:**
+> Describa con precisión el estado de inconsistencia que se produce en cada escenario:
+> 1. Ventas registradas durante degradación: ¿qué diferencia hay entre lo que dice `ventas` en PostgreSQL y lo que dice `item_inventario.cantidad`?
+> 2. Retry sin idempotencia: ¿qué invariante de negocio se viola? ¿Cómo lo detectaría operacionalmente en Chiper?
+
+### 8.3 Conceptos: Outbox e Idempotencia
+
+#### Outbox HTTP
+
+El **patrón Outbox** resuelve la inconsistencia del escenario 1. En lugar de intentar decrementar el stock en el mismo momento que se crea la venta (lo cual falla si Inventario está caído), se escribe en una tabla local `outbox_http_calls` dentro de **la misma transacción** que guarda la venta:
+
+```
+POST /ventas/ventas
+  ├── INSERT ventas                ┐
+  └── INSERT outbox_http_calls     ┘  misma transacción → atomicidad garantizada
+                                       si la tx hace commit, el decremento llegará eventualmente
+                                       si la tx hace rollback, tampoco queda ningún outbox pendiente
+
+OutboxHttpPublisherService (polling 2 s):
+  SELECT * FROM outbox_http_calls WHERE status = 'PENDING'
+  → POST /inventory/ventas/desde-outbox (con X-Idempotency-Key)
+  → UPDATE SET status = 'DELIVERED' si 2xx o 409
+```
+
+La garantía: **at-least-once** — si la venta se guardó, el decremento de stock se entregará eventualmente, incluso si Inventario estuvo caído horas.
+
+#### Idempotencia
+
+El **patrón de Idempotencia** resuelve la inconsistencia del escenario 2. El publisher puede enviar el mismo `OutboxHttpCall` más de una vez (si falla entre enviar y marcar `DELIVERED`). El endpoint `/inventory/ventas/desde-outbox` usa el `id` del `OutboxHttpCall` como `X-Idempotency-Key`:
+
+```
+POST /inventory/ventas/desde-outbox  (Header: X-Idempotency-Key: <outbox-id>)
+  → ¿Existe processed_calls WHERE idempotencyKey = <outbox-id>?
+      SÍ → responder 409 (ya procesado, no hacer nada)
+      NO → decrementar stock + INSERT processed_calls en la misma transacción
+```
+
+Combinando at-least-once (Outbox) con idempotencia (ProcessedCall), el sistema efectivamente garantiza que cada venta decrementa el stock **exactamente una vez**.
+
+### 8.4 Tarea 3.1 — Revisar el write transaccional en `VentaService`
+
+Archivo: `libs/ventas/src/services/venta.service.ts`
+
+El método `create()` ya implementa el Outbox. Revise el código y verifique:
+1. La `Venta` y el `OutboxHttpCall` se guardan en la misma transacción. ¿Qué ocurre si el proceso muere entre el `manager.save(Venta)` y el `manager.save(OutboxHttpCall)`?
+2. ¿Por qué el `OutboxHttpCall` se crea incluso en el path degradado (`isDegraded = true`)?
+3. ¿Qué payload lleva el `OutboxHttpCall`? Verifique que incluye todos los campos que `POST /inventory/ventas/desde-outbox` necesita.
+
+### 8.5 Tarea 3.2 — Revisar el endpoint de idempotencia en Inventario
+
+Archivo: `libs/inventario/src/services/registro-venta.service.ts` → método `createDesdeOutbox()`
+
+Analice el flujo implementado y responda:
+1. ¿Qué ocurre si el proceso de Inventario muere entre `decrementCantidad()` y el `save(ProcessedCall)`? ¿Puede producirse un decremento sin ProcessedCall?
+2. ¿Por qué se usa el `id` del `OutboxHttpCall` como clave de idempotencia en lugar del `ventaId`?
+
+### 8.6 Fase 2 — Verificación del Outbox + Idempotencia
+
+Con el código completo del Outbox activado:
+
+1. Registrar el stock inicial:
+   ```bash
+   GET <BASE_URL>/inventory/items/<itemInventarioId>
+   # Anotar cantidad
+   ```
+
+2. Bajar Inventario:
+   ```bash
+   docker-compose stop inventario
+   ```
+
+3. Crear 3 ventas — deberían retornar `pending_stock_confirmation`:
+   ```bash
+   POST <BASE_URL>/ventas/ventas  # x3
+   ```
+
+4. Verificar que hay OutboxHttpCalls pendientes:
+   ```sql
+   SELECT id, status, attempts FROM outbox_http_calls ORDER BY created_at DESC LIMIT 5;
+   ```
+   **Esperado**: `status = 'PENDING'`, `attempts` creciendo cada 2 s.
+
+5. Restaurar Inventario y esperar ~10 s:
+   ```bash
+   docker-compose start inventario
+   ```
+
+6. Verificar reconciliación automática:
+   ```sql
+   SELECT id, status, delivered_at FROM outbox_http_calls ORDER BY created_at DESC LIMIT 5;
+   ```
+   **Esperado**: `status = 'DELIVERED'`.
+
+   ```bash
+   GET <BASE_URL>/inventory/items/<itemInventarioId>
+   ```
+   **Esperado**: la cantidad bajó exactamente en 3 (una por cada venta).
+
+7. Probar idempotencia: enviar de nuevo `POST /inventory/ventas/desde-outbox` con el mismo `X-Idempotency-Key`:
+   ```bash
+   POST <BASE_URL>/inventory/ventas/desde-outbox
+   Header: X-Idempotency-Key: <id-del-outbox-call>
+   ```
+   **Esperado**: HTTP 409. La cantidad no cambia.
+
+---
+
+## 9. Interpretación de resultados
 
 Analice los resultados con enfoque en disponibilidad:
 
@@ -594,15 +759,18 @@ Analice los resultados con enfoque en disponibilidad:
 - Transiciones de estado del circuit breaker correlacionadas con la carga (logs del sidecar en CloudWatch).
 - Requests rechazadas por API Gateway (HTTP 429).
 
-### 8.1 Umbrales por ASR
+### 9.1 Umbrales por ASR
 
 - **ASR-1**: Ventas responde HTTP 200 con `pending_stock_confirmation` en p99 < 3000 ms durante fallo de Inventario. Se verifica en la ronda con circuit breaker activo en el sidecar.
 - **ASR-2**: Requests a Inventario con retry activo ≤ 2× los requests de la línea base. Se verifica comparando CloudWatch entre ronda baseline y ronda táctica 1.
 - **ASR-3**: Con rate limiting activo, throughput de pedidos válidos cae < 10% respecto a la línea base dentro del límite. Se verifica en la ronda con rate limiting.
+- **ASR-4**: Se verifica en dos dimensiones:
+  - **Consistencia**: toda venta con `pending_stock_confirmation` transita a `DELIVERED` en < 30 s tras la recuperación de Inventario; ningún `item_inventario.cantidad` refleja decrementos duplicados.
+  - **Impacto en latencia**: el p99 de `POST /ventas` con Inventario sano y Outbox activo no debe superar en más de 50 ms el p99 de la Ronda 4 (tácticas combinadas sin Outbox). Esto verifica que la escritura transaccional adicional en `outbox_http_calls` no degrada perceptiblemente la latencia de la operación principal.
 
-## 9. Entregables
+## 10. Entregables
 
-### 9.1 Tabla comparativa de tácticas
+### 10.1 Tabla comparativa de tácticas
 
 Entregue una tabla con los resultados de las cuatro rondas:
 
@@ -624,7 +792,28 @@ Incluya también una tabla por escenario de carga (misma estructura que labs ant
 
 Presente una tabla por ronda de pruebas.
 
-### 9.2 Evidencias
+Agregue también la Ronda 5 (Outbox + Idempotencia).
+
+**5a. Impacto en latencia de `POST /ventas` (Inventario sano, circuito CLOSED):**
+
+Compare esta ronda con la Ronda 4 bajo las mismas condiciones de carga para aislar el overhead del Outbox:
+
+| Ronda | p99 Ventas (ms) | p95 Ventas (ms) | Throughput (req/s) | Error % |
+| --- | ---: | ---: | ---: | ---: |
+| Ronda 4 — tácticas combinadas (sin Outbox) | | | | |
+| Ronda 5 — tácticas combinadas + Outbox activo | | | | |
+| Δ absoluto (Ronda 5 − Ronda 4) | | | | |
+
+> Use la configuración de 500 threads / 50 s de ramp-up con Inventario sano (sin inyección de fallos) para que el circuito esté CLOSED y cada `POST /ventas` haga el write transaccional completo (Venta + OutboxHttpCall). El objetivo es cuantificar el overhead de la escritura adicional en la latencia del camino crítico.
+
+**5b. Consistencia y reconciliación:**
+
+| Ronda | Descripción | `outbox_http_calls` PENDING → DELIVERED (s) | Decrementos duplicados |
+| --- | --- | ---: | ---: |
+| Fase 0 — sin Outbox ni idempotencia | Problema: ventas sin decremento + duplicados | N/A | sí |
+| Fase 2 — con Outbox + idempotencia | Solución aplicada | | 0 |
+
+### 10.2 Evidencias
 
 Adjunte capturas de:
 
@@ -636,14 +825,18 @@ Adjunte capturas de:
 - Logs de CloudWatch del container `ventas-sidecar` mostrando: reintentos (acceso log con múltiples líneas por request) y transiciones de estado del circuit breaker (`ejections_active`).
 - Respuesta HTTP 200 con `status: pending_stock_confirmation` capturada en JMeter durante el fallo de Inventario.
 - Summary Report de JMeter para la ronda baseline y la ronda con tácticas combinadas.
+- Captura de la tabla `outbox_http_calls` en estado PENDING durante el fallo de Inventario.
+- Captura de la misma tabla con status DELIVERED tras la recuperación.
+- Respuesta HTTP 409 ante un retry con el mismo `X-Idempotency-Key`.
+- Valor de `item_inventario.cantidad` antes y después de la reconciliación: debe bajar exactamente N unidades (una por cada venta creada en degradación).
 
-### 9.3 Evidencias y prompts
+### 10.3 Evidencias y prompts
 
 Adjunte:
 - Prompts utilizados (si usó IA).
 - Scripts adicionales de carga (si aplica).
 
-### 9.4 Análisis breve
+### 10.4 Análisis breve
 
 Incluya un análisis de 1 a 2 páginas que responda:
 
@@ -655,6 +848,8 @@ Incluya un análisis de 1 a 2 páginas que responda:
 6. En este laboratorio las tácticas de resiliencia se implementaron en un sidecar en lugar de en el código de negocio. ¿Qué ventajas concretas tuvo este enfoque? ¿En qué escenarios el sidecar no sería suficiente y se necesitaría lógica de resiliencia dentro de la aplicación?
 7. Lea el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash. ¿Qué problema específico resuelve Aperture que el sidecar Envoy de este lab no resuelve? ¿En qué punto del crecimiento de Chiper tendría sentido adoptar un enfoque centralizado como ese?
 8. ¿Qué ventajas concretas tuvo desplegar con CloudFormation frente a la configuración manual del Lab 4? ¿En qué escenarios del negocio de Chiper (ej. expansión a México o Brasil, un incidente que requiera reconstruir el ambiente) sería esta capacidad crítica?
+9. ¿Por qué at-least-once + idempotencia no equivale a exactly-once distribuido? ¿Qué requeriría una garantía de exactly-once real entre dos servicios con bases de datos independientes?
+10. Con base en los datos de la tabla 5a, ¿el patrón Outbox aumenta la latencia de `POST /ventas`? Argumente en qué condiciones ese overhead sería aceptable para Chiper y en cuáles representaría un riesgo para los ASRs. Considere: tamaño del volumen transaccional, latencia de la base de datos RDS, y si el write adicional en `outbox_http_calls` ocurre dentro o fuera de la transacción principal.
 
 ## Nota final (créditos AWS)
 

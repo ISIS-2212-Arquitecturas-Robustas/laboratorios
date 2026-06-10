@@ -1,14 +1,14 @@
-# Lab 8 - Microservicios Orientados a Eventos: CQRS, Event Sourcing y Patrones de Confiabilidad
+# Lab 8 - Microservicios Orientados a Eventos: EDA, CQRS y Event Sourcing
 
 ## Etapas del laboratorio
 
 | Etapa | Resumen | Uso de IA generativa |
 | --- | --- | --- |
 | 1. Experimento y ASRs | Contextualizar EDA como respuesta a las limitaciones del Lab 7 y definir criterios de éxito con los mismos ASRs. | Uso acotado para ordenar hipótesis; la justificación de la arquitectura debe ser propia. |
-| 2. Arquitectura y conceptos | Análisis de EDA, CQRS, Event Sourcing, Outbox e idempotencia como conjunto coherente. | Recomendado para contrastar trade-offs de consistencia eventual vs. fuerte. |
+| 2. Arquitectura y conceptos | Análisis de EDA, CQRS y Event Sourcing; trade-offs de consistencia eventual y confiabilidad en la publicación. | Recomendado para contrastar trade-offs de consistencia eventual vs. fuerte. |
 | 3. Infraestructura (CloudFormation) | Despliegue de EventBridge, SQS, DynamoDB en AWS. | Recomendado para asistencia operativa; verifique manualmente en la consola. |
 | 4. Parte 1 - Event Sourcing | Completar el event store de Pedidos y verificar el historial de transiciones. | Recomendado para soporte de implementación; validar comportamiento real. |
-| 5. Parte 2 - Outbox + CQRS | Conectar el write model con el read model vía Outbox e idempotencia. | Recomendado para soporte; no sustituye la comprensión del flujo de eventos. |
+| 5. Parte 2 - CQRS Read Model | Verificar que el read model en DynamoDB se actualiza a partir de los eventos consumidos desde SQS. | Recomendado para soporte; no sustituye la comprensión del flujo de eventos. |
 | 6. Experimento comparativo | Medir EDA vs. síncrono bajo la misma matriz del Lab 7 y verificar ASRs. | No recomendado para generar conclusiones sin evidencia cuantitativa propia. |
 
 ## Objetivos
@@ -16,7 +16,7 @@
 - Implementar una arquitectura orientada a eventos que satisfaga los mismos ASRs que el patrón síncrono del Lab 7 no pudo cumplir.
 - Separar modelos de escritura (PostgreSQL) y lectura (DynamoDB) mediante CQRS, eliminando el fan-out en tiempo de consulta.
 - Implementar Event Sourcing para el ciclo de vida de Pedidos, habilitando la re-proyección del estado a partir del log de eventos.
-- Aplicar el patrón Outbox para garantizar entrega at-least-once de eventos, e idempotencia en el consumer para manejar duplicados.
+- Evaluar los trade-offs de confiabilidad en la publicación de eventos: at-most-once (implementación directa a EventBridge) vs. at-least-once (patrón Outbox), y reflexionar sobre cuándo cada garantía es apropiada para el negocio.
 - Comparar cuantitativamente la latencia EDA vs. síncrona y reflexionar sobre los trade-offs y limitaciones de EDA.
 
 ## Índice
@@ -26,7 +26,7 @@
 - [3. Tecnologías](#3-tecnologías)
 - [4. Preparación: IaaC con CloudFormation](#4-preparación-iaac-con-cloudformation)
 - [5. Parte 1 - Event Sourcing: historial de Pedidos](#5-parte-1--event-sourcing-historial-de-pedidos)
-- [6. Parte 2 - Outbox y CQRS Read Model](#6-parte-2--outbox-y-cqrs-read-model)
+- [6. Parte 2 - CQRS Read Model](#6-parte-2--cqrs-read-model)
 - [7. Experimento comparativo](#7-experimento-comparativo)
 - [8. Entregables](#8-entregables)
 
@@ -115,26 +115,20 @@ sequenceDiagram
     actor Tendero
     participant Ventas
     participant PostgreSQL
-    participant OutboxPublisher
     participant EventBridge
     participant SQS
     participant Consumer as Consumer (Inventario)
     participant DynamoDB
 
     Tendero->>Ventas: POST /ventas/ventas
-    Ventas->>PostgreSQL: INSERT ventas + outbox (misma tx)
+    Ventas->>PostgreSQL: INSERT ventas
+    Ventas->>EventBridge: PutEvents (VentaCreada) [at-most-once]
     Ventas-->>Tendero: 201 Created
-
-    OutboxPublisher->>PostgreSQL: poll outbox
-    OutboxPublisher->>EventBridge: PutEvents (VentaCreada)
-    OutboxPublisher->>PostgreSQL: marcar publishedAt
 
     EventBridge->>SQS: enrutar VentaCreada
 
     Consumer->>SQS: poll mensajes
-    Consumer->>PostgreSQL: ¿outboxId ya procesado?
     Consumer->>DynamoDB: UpdateItem resumen-tienda
-    Consumer->>PostgreSQL: INSERT processed_events
     Consumer->>SQS: DeleteMessage
 ```
 
@@ -221,7 +215,7 @@ export interface ChiperEvent {
 }
 ```
 
-`EventBridgeService` es consumido por `OutboxPublisherService` (no por los servicios de negocio directamente). Los servicios de negocio solo escriben en la tabla `outbox`; el publisher se encarga del resto.
+`EventBridgeService` es consumido directamente por `VentaService` al crear una venta. La publicación es **at-most-once**: si EventBridge no está disponible en el momento del write, el evento se pierde. Esta es una simplificación deliberada; el patrón que resuelve este riesgo (Outbox + idempotencia) se estudia en el Lab 5.
 
 Para consumir eventos desde SQS, `VentaCreadaConsumer` (en Inventario) usa `setInterval` + `ReceiveMessageCommand` directamente desde `@aws-sdk/client-sqs`, sin dependencia de frameworks externos:
 
@@ -273,7 +267,7 @@ async getResumen(tiendaId: string): Promise<ResumenTiendaDto | null> {
 }
 ```
 
-El write model (PostgreSQL) no fue modificado. La tabla `ventas` y `items_venta` siguen siendo las mismas; lo único que cambió es que `VentaService.create()` ahora también escribe en la tabla `outbox` dentro de la misma transacción (ver patrón Outbox).
+El write model (PostgreSQL) no fue modificado. La tabla `ventas` y `items_venta` siguen siendo las mismas; lo único que cambió es que `VentaService.create()` ahora también publica un evento en EventBridge tras guardar la venta (ver sección EDA arriba).
 
 ---
 
@@ -320,123 +314,26 @@ Se agregó también el endpoint `GET /logistics/pedidos/:id/historial` en `pedid
 
 ---
 
-### 2.4 Patrones de confiabilidad
+### 2.4 Trade-offs de confiabilidad en la publicación de eventos
 
-#### Outbox
-
-El patrón Outbox resuelve el problema de **publicar un evento de forma confiable cuando se produce un cambio en la base de datos**. Sin él, hay una brecha entre el `save()` en PostgreSQL y el `publish()` en EventBridge: si el proceso muere entre los dos, el evento se pierde aunque el dato esté guardado.
-
-**Cómo se ve en Chiper**
-
-Cuando `VentaService.create()` registra una venta, escribe en la tabla `ventas` **y** en la tabla `outbox` dentro de la **misma transacción PostgreSQL**. Si la transacción hace commit, el evento existe en `outbox`. Si hace rollback, tampoco existe el evento. `OutboxPublisherService` lee el outbox cada 1 s, publica en EventBridge y marca `publishedAt = now()`.
-
-```
-POST /ventas/ventas
-  ├── INSERT ventas        ┐
-  └── INSERT outbox        ┘  misma transacción → atomicidad garantizada
-
-OutboxPublisherService (polling 1 s):
-  SELECT * FROM outbox WHERE publishedAt IS NULL
-  → PutEvents en EventBridge
-  → UPDATE outbox SET publishedAt = now()
-```
-
-**Por qué importa**
-
-- Garantiza que si el dato se guardó, el evento **se publicará eventualmente**: no puede haber una venta registrada sin su correspondiente `VentaCreada` en EventBridge.
-- El productor no necesita que EventBridge esté disponible en el momento del write: la entrega se delega al publisher que reintenta de forma autónoma.
-
-**Riesgo**
-
-- Si el publisher publica exitosamente pero muere antes de marcar `publishedAt`, al reiniciar **publicará el mismo evento otra vez** (at-least-once, no exactly-once). Por eso el consumer necesita idempotencia.
-- El polling cada 1 s introduce una latencia mínima entre el write y la publicación del evento, lo cual contribuye a la ventana de consistencia eventual de ASR-EDA-4.
-
-**Cambios en el código**
-
-Se creó la entidad compartida `libs/shared/outbox/src/outbox-entry.entity.ts`:
+La implementación de este lab publica eventos a EventBridge directamente desde `VentaService.create()` tras guardar la venta en PostgreSQL. Esta es una entrega **at-most-once**: si EventBridge no está disponible en el momento exacto del write (error de red, throttle temporal), el evento se pierde aunque la venta esté guardada.
 
 ```typescript
-@Entity('outbox')
-export class OutboxEntry {
-  @PrimaryGeneratedColumn('uuid') id: string;
-  @Column('varchar') eventSource: string;   // 'chiper.ventas' | 'chiper.logistica'
-  @Column('varchar') eventType: string;     // 'VentaCreada' | 'PedidoCreado' | ...
-  @Column('uuid')    aggregateId: string;
-  @Column('jsonb')   payload: Record<string, unknown>;
-  @Column('timestamp', { nullable: true, default: null }) publishedAt: Date | null;
-  @CreateDateColumn() createdAt: Date;
-}
+// libs/ventas/src/services/venta.service.ts (fragmento simplificado)
+const venta = await this.ventaRepository.create(ventaData);   // write de dominio
+await this.eventBridgeService.publish({ source: 'chiper.ventas', detailType: 'VentaCreada', detail: { ... } });
+// Si esta línea falla, la venta existe pero el evento nunca llegó a SQS.
 ```
 
-`VentaService.create()` y `PedidoService.create/update()` fueron modificados para escribir en `outbox` dentro de la transacción del write de dominio usando `dataSource.transaction()`:
-
-```typescript
-// libs/ventas/src/services/venta.service.ts (fragmento)
-await this.dataSource.transaction(async (manager) => {
-  const venta = await manager.save(Venta, ventaData);
-  await manager.save(OutboxEntry, {
-    eventSource: 'chiper.ventas',
-    eventType: 'VentaCreada',
-    aggregateId: venta.id,
-    payload: { ventaId: venta.id, tiendaId: venta.tiendaId, total: venta.total, ... },
-  });
-});
-```
-
-`OutboxPublisherService` en `libs/shared/outbox/src/outbox-publisher.service.ts` es un servicio de background pre-construido que corre en todos los servicios que usan el módulo Outbox. Los estudiantes no lo implementan; solo necesitan entender su flujo para responder la Pregunta 2.
-
----
-
-#### Idempotencia
-
-La idempotencia garantiza que **procesar el mismo evento dos veces produce el mismo resultado que procesarlo una sola vez**. Es necesaria cuando el sistema de entrega es at-least-once (SQS + Outbox).
-
-**Cómo se ve en Chiper**
-
-`VentaCreadaConsumer` usa el `outboxId` del evento como clave de idempotencia. Antes de actualizar DynamoDB, consulta la tabla `processed_events`:
-
-```
-¿Existe processed_events WHERE eventId = outboxId?
-  SÍ → skip (el evento ya fue procesado, no hacer nada)
-  NO → updateResumenTienda() en DynamoDB
-     → INSERT processed_events (eventId, eventType)
-     → deleteMessage() de SQS
-```
-
-Se usa `outboxId` y no `ventaId` porque el mismo evento `VentaCreada` puede ser publicado dos veces por el Outbox (si el publisher murió entre publicar y marcar). Esos dos mensajes tienen el mismo `outboxId`, lo que permite detectar el duplicado.
-
-**Por qué importa**
-
-- Sin idempotencia, un duplicado de `VentaCreada` incrementaría `ventasMes` en 2 en lugar de 1 en DynamoDB, produciendo totales incorrectos en el resumen del tendero.
-- La tabla `processed_events` actúa como un registro local de lo que ya fue procesado, sin necesidad de coordinar con el productor.
-
-**Riesgo**
-
-- Existe una ventana de vulnerabilidad entre `updateResumenTienda()` y el `INSERT processed_events`: si el proceso muere en ese instante, el siguiente intento actualizará DynamoDB dos veces (el primer intento ya actualizó pero no registró el evento como procesado). Mitigación: hacer el `INSERT processed_events` en la misma transacción que cualquier efecto en PostgreSQL, y diseñar las operaciones en DynamoDB para ser lo más idempotentes posible (ej. `SET` en vez de `ADD` donde aplique).
-- La tabla `processed_events` crece con el tiempo. Requiere una política de retención (ej. eliminar eventos con más de 30 días).
-
-**Cambios en el código**
-
-Se creó la entidad `libs/inventario/src/repositories/entities/processed-event.entity.ts`:
-
-```typescript
-@Entity('processed_events')
-export class ProcessedEvent {
-  @PrimaryColumn('uuid') eventId: string;   // = outboxId del evento recibido
-  @Column('varchar')     eventType: string;
-  @CreateDateColumn()    processedAt: Date;
-}
-```
-
-El flujo completo del consumer es la **Tarea 3.2** que los estudiantes implementan en `VentaCreadaConsumer.processMessage()`. El esqueleto ya existe con el check de idempotencia y la llamada a `updateResumenTienda()` — los estudiantes deben entender el orden y la razón de cada paso.
+El patrón que resuelve este riesgo —el **Outbox**— garantiza at-least-once: escribe el evento en una tabla de la misma base de datos dentro de la misma transacción, y un servicio de background lo publica de forma autónoma con reintentos. Combinado con **idempotencia** en el consumer, se obtiene un sistema que tolera fallos sin duplicar efectos. Estos patrones se estudian e implementan en el **Lab 5** (rama `availability`).
 
 > [!IMPORTANT]
 > **Pregunta 2:**
-> El `OutboxPublisherService` lee entradas de la tabla `outbox` con `publishedAt IS NULL`, las publica en EventBridge y marca `publishedAt = now()`.
-> Considere este escenario: el publisher publica exitosamente en EventBridge, pero el proceso muere antes de ejecutar `UPDATE outbox SET publishedAt = now()`. Al reiniciar, vuelve a leer la misma entrada y la publica nuevamente.
+> `VentaService.create()` publica directamente a EventBridge después de guardar la venta en PostgreSQL.
 >
-> ¿Qué garantía de entrega tiene el sistema con el patrón Outbox (at-most-once, at-least-once, o exactly-once)?
-> ¿Qué escenario concreto de Chiper hace que at-most-once sea **inaceptable** para el evento `VentaCreada`? Piense en el impacto sobre el read model de DynamoDB.
+> 1. ¿Qué garantía de entrega tiene esta implementación: at-most-once, at-least-once, o exactly-once? Justifique.
+> 2. Describa un escenario concreto en Chiper donde esta garantía sería un problema real. ¿Qué estado quedaría inconsistente y cómo se manifestaría para el tendero?
+> 3. Proponga a alto nivel cómo lo resolvería sin cambiar el esquema de PostgreSQL. No es necesario implementarlo; basta con describir el mecanismo.
 
 ---
 
@@ -545,7 +442,7 @@ La **versión monotónica** garantiza el orden de los eventos. Reproduciendo los
 ### 5.2 Implementación
 
 > El código vive en la rama `chiper-eda` del repositorio `chiper-api-microservices`.
-> Las entidades `EventoPedido` y `OutboxEntry` ya están definidas. Los repositorios tienen métodos con `throw new Error('Not implemented')` que deben completarse.
+> La entidad `EventoPedido` ya está definida. Los repositorios tienen métodos con `throw new Error('Not implemented')` que deben completarse.
 
 #### Tarea 1.1 - Completar `EventoPedidoRepository`
 
@@ -571,7 +468,7 @@ async appendEvent(data: Omit<EventoPedido, 'id' | 'createdAt'>): Promise<EventoP
 Archivo: `libs/logistica/src/services/pedido.service.ts`
 
 El método `update()` ya tiene el esqueleto que llama a `eventoPedidoRepository.nextVersion(id)`. Verifique que:
-1. La llamada a `appendEvent()` ocurre **dentro de la transacción** junto con el `UPDATE pedidos` y el `INSERT outbox`.
+1. La llamada a `appendEvent()` ocurre **dentro de la transacción** junto con el `UPDATE pedidos`.
 2. El evento `PedidoCambioEstado` incluye `estadoAnterior`, `estadoNuevo` y `version`.
 3. Sólo se registra el evento si `dto.estado` es diferente al estado actual.
 
@@ -604,77 +501,9 @@ La respuesta debe mostrar **4 eventos** en orden: `PedidoCreado` (versión 1) + 
 
 ---
 
-## 6. Parte 2 - Outbox y CQRS Read Model
+## 6. Parte 2 - CQRS Read Model
 
-### 6.1 Concepto: el problema de at-most-once
-
-En la versión más simple del patrón, el service haría:
-
-```typescript
-await this.ventaRepository.save(venta);           // DB commit
-await this.eventBridgeService.publish(event);     // llamada a AWS
-```
-
-Si EventBridge falla entre estas dos líneas (error de red, throttle, outage parcial), la venta quedó registrada en PostgreSQL pero el evento nunca se publicó. El read model de DynamoDB nunca se actualizará. ASR-EDA-4 se viola indefinidamente.
-
-**El patrón Outbox** resuelve esto con atomicidad local:
-
-```typescript
-// Una sola transacción PostgreSQL:
-await this.dataSource.transaction(async (manager) => {
-  await manager.save(Venta, ventaData);           // write de dominio
-  await manager.save(OutboxEntry, outboxData);    // registro de intención
-});
-// Si la transacción commit, el evento está garantizado en el Outbox.
-// El OutboxPublisherService lee el Outbox y publica a EventBridge de forma separada.
-```
-
-La garantía: **si el write de dominio ocurre, el evento se publicará eventualmente** (at-least-once, puede publicarse más de una vez si el publisher falla entre publicar y marcar `publishedAt`).
-
-### 6.2 Concepto: idempotencia en el consumer
-
-Dado que el Outbox garantiza at-least-once delivery, el consumer puede recibir el mismo evento más de una vez. Sin idempotencia:
-- `VentaCreada` llega dos veces → `ventasMes` se incrementa dos veces → read model incorrecto.
-
-La estrategia usada en este lab: **tabla de eventos procesados** en PostgreSQL.
-
-```typescript
-// Antes de procesar:
-const alreadyProcessed = await processedEventRepo.findOne({ where: { eventId } });
-if (alreadyProcessed) return; // skip
-
-// Procesar + registrar (idealmente en la misma transacción):
-await dynamoService.updateResumen(payload);
-await processedEventRepo.save({ eventId, eventType: 'VentaCreada' });
-```
-
-> [!IMPORTANT]
-> **Pregunta 3:**
-> SQS entrega at-least-once. Con el patrón Outbox implementado, el evento `VentaCreada` puede llegar al consumer de Inventario más de una vez.
->
-> **Sin idempotencia**, describa qué estado queda incorrecto en DynamoDB si el consumer procesa el mismo `VentaCreada` dos veces. Sea específico: ¿qué campos del documento se ven afectados y cómo?
->
-> **Con la idempotencia implementada**, explique por qué usar `outboxId` (y no `ventaId`) como `eventId` para el check de idempotencia es la decisión correcta. ¿Qué escenario cubriría que `ventaId` no cubriría?
-
-### 6.3 Implementación
-
-#### Tarea 2.1 - Revisar el write transaccional en `VentaService`
-
-Archivo: `libs/ventas/src/services/venta.service.ts`
-
-El método `create()` ya escribe `Venta` y `OutboxEntry` en la misma transacción. Verifique:
-1. El `payload` del `OutboxEntry` incluye todos los campos que el consumer de Inventario necesita (`ventaId`, `tiendaId`, `total`, `fechaHora`, `items`).
-2. La transacción incluye tanto el `save(Venta)` como el `save(OutboxEntry)`.
-3. Si la transacción falla, no queda ningún registro ni en `ventas` ni en `outbox`.
-
-#### Tarea 2.2 - Revisar `OutboxPublisherService` (pre-construido)
-
-Archivo: `libs/shared/outbox/src/outbox-publisher.service.ts`
-
-Este servicio es pre-construido. Léalo y entienda:
-1. ¿Cada cuánto tiempo hace el polling?
-2. ¿Qué pasa si EventBridge falla al publicar un entry?
-3. ¿Qué pasa si el proceso muere entre la publicación y el `UPDATE publishedAt`?
+### 6.1 Implementación
 
 #### Tarea 3.1 - Revisar `updateResumenTienda()` en `VentaCreadaConsumer`
 
@@ -685,17 +514,19 @@ El método `updateResumenTienda()` ya tiene la expresión DynamoDB completa. Ver
 - `:total` → `Number(payload.total)` (para el `ADD totalVentasMes`)
 - `:nuevaVenta` → array de un elemento con `{ ventaId, fechaHora, total }`
 
-#### Tarea 3.2 - Revisar `processMessage()` con idempotencia
-
-Archivo: `libs/inventario/src/consumers/venta-creada.consumer.ts`
-
-El método `processMessage()` ya implementa el check de idempotencia. Analice el flujo completo y responda la Pregunta 3.
-
-#### Tarea 3.3 - Revisar `ResumenTiendaService.getResumen()`
+#### Tarea 3.2 - Revisar `ResumenTiendaService.getResumen()`
 
 Archivo: `libs/ventas/src/services/resumen-tienda.service.ts`
 
 El método `getResumen()` ya hace el `GetItem` de DynamoDB. Verifique que la clave `{ tiendaId, sk: 'RESUMEN' }` coincide con la clave que el consumer escribe en `updateResumenTienda()`.
+
+> [!IMPORTANT]
+> **Pregunta 3:**
+> SQS entrega mensajes at-least-once. Esta implementación **no** tiene idempotencia en el consumer.
+>
+> 1. Describa qué estado queda incorrecto en DynamoDB si el consumer recibe el mismo mensaje `VentaCreada` dos veces. Sea específico: ¿qué campos del documento se ven afectados y cómo?
+> 2. ¿Bajo qué circunstancias puede SQS entregar el mismo mensaje más de una vez, incluso sin que haya un bug en el productor?
+> 3. Proponga a alto nivel cómo implementaría idempotencia en el consumer para evitar este problema. ¿Qué información necesitaría como clave de idempotencia?
 
 #### Verificación del flujo completo
 
@@ -704,7 +535,7 @@ El método `getResumen()` ya hace el `GetItem` de DynamoDB. Verifique que la cla
 POST <ApiGatewayUrl>/ventas/ventas
 { "tiendaId": "<tiendaId>", ... }
 
-# 2. Esperar ~5 segundos para que el Outbox publique y el consumer procese
+# 2. Esperar ~5 segundos para que el consumer procese desde SQS
 
 # 3. Consultar el read model
 GET <ApiGatewayUrl>/ventas/resumen-tienda/<tiendaId>
@@ -717,10 +548,6 @@ GET <ApiGatewayUrl>/ventas/resumen-tienda/<tiendaId>
   "ultimasVentas": [...],
   "ultimaActualizacion": "<timestamp>"
 }
-
-# 4. Consultar la tabla outbox en PostgreSQL (opcional)
-# Verificar que publishedAt no es NULL para los registros creados
-SELECT id, event_type, published_at FROM outbox ORDER BY created_at DESC LIMIT 10;
 ```
 
 ---
@@ -796,9 +623,10 @@ Esta diferencia en los Target Groups de CloudWatch es la evidencia más directa 
 > Responda con precisión:
 > 1. ¿Qué datos en **DynamoDB** son incorrectos? ¿Qué datos en **PostgreSQL** son correctos?
 > 2. ¿Cómo se detectaría el bug? ¿Qué tipo de alerta o métrica lo habría surfaceado antes?
-> 3. Para corregir DynamoDB, ¿qué información necesita? ¿Puede obtenerla del event store (`eventos_pedido`) o de la tabla `outbox` de Ventas? ¿Cómo sería el proceso de re-proyección?
+> 3. Para corregir DynamoDB, ¿qué información necesita? ¿Puede obtenerla del event store (`eventos_pedido`) o de la tabla `ventas` de PostgreSQL? ¿Cómo sería el proceso de re-proyección?
 > 4. ¿Existe algún estado que **no** pueda recuperarse automáticamente con event replay en este diseño? ¿Por qué?
 > 5. ¿Qué limitación estructural de EDA revela este escenario comparado con un sistema síncrono tradicional donde Inventario actualiza su estado directamente en cada llamada?
+> 6. Adicionalmente, dado que esta implementación usa entrega at-most-once hacia EventBridge: ¿en qué frecuencia de fallos de red o saturación de EventBridge se volvería crítico el riesgo de eventos perdidos para Chiper? ¿Qué volumen de ventas silenciosamente no reflejadas en el read model sería inaceptable para el negocio?
 
 ---
 
@@ -844,7 +672,7 @@ Adjunte capturas de:
 - JMeter Summary Report para ambos Thread Groups en cada nivel de carga (capturas side-by-side: `resumen-tienda-sync` vs. `resumen-tienda`).
 - CloudWatch → RequestCount del Target Group de **Logística** e **Inventario**: captura side-by-side durante el nivel de Operación normal para `resumen-tienda-sync` vs. `resumen-tienda`. Debe mostrar fan-out 1:2 en el sync y 0 requests en el EDA.
 - ECS → Inventario con `desired count = 0` durante la prueba de resiliencia (Pregunta 4).
-- ECS → Ventas respondiendo 201 a `POST /ventas/ventas` mientras Inventario está en desired count = 0.
+- ECS → Ventas respondiendo 201 a `POST /ventas/ventas` mientras Inventario está en `desired count = 0`.
 
 ### 8.4 Respuestas a las preguntas
 
@@ -857,7 +685,7 @@ Responda:
 1. ¿En qué nivel de carga el endpoint síncrono violó ASR-1? ¿El endpoint EDA llegó a violarlo? ¿Qué explica la diferencia estructural?
 2. ¿El endpoint EDA satisface ASR-3 con Inventario en `desired count = 0`? ¿El endpoint síncrono lo satisfacía con Inventario en `desired count = 1`? Compare ambos resultados.
 3. ¿Qué sacrificó Chiper al adoptar EDA para el resumen? Nombre dos escenarios de negocio concretos donde la **consistencia eventual** sería un problema real para Chiper.
-4. ¿En qué punto el overhead operativo de EDA (EventBridge + SQS + DynamoDB + Outbox + idempotencia) deja de valer la pena? ¿Cuándo no recomendaría este patrón?
+4. ¿En qué punto el overhead operativo de EDA (EventBridge + SQS + DynamoDB + Event Sourcing) deja de valer la pena? ¿Cuándo no recomendaría este patrón? Considere también el riesgo de at-most-once delivery: ¿qué nivel de pérdida de eventos sería tolerable para Chiper?
 5. Responda la Pregunta 5 (escenario de fallo). ¿Qué limitación de EDA revela ese escenario y cómo se mitigaría en producción?
 
 ---
