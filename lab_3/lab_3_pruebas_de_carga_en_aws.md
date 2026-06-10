@@ -4,14 +4,14 @@
 
 | Etapa                                  | Resumen                                                                                                   | Uso de IA generativa                                                                                                       |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 1. Experimento y ASRs                  | Definicion de objetivo de carga y criterios de exito para el monolito en AWS.                            | Uso acotado para apoyo conceptual; el criterio de priorizacion debe ser propio.                                            |
-| 2. Analisis de arquitectura desplegada | Revision de topologia monolito + ALB + multiples instancias y sus implicaciones.                          | Recomendado para contrastar patrones de escalamiento y limites del enfoque.                                                |
+| 1. Experimento y ASRs                  | Definicion de objetivo de carga y criterios de exito para el monolito en AWS.                            | Uso acotado para apoyo conceptual.                                            |
+| 2. Analisis de arquitectura desplegada | Revision de topologia monolito + ALB + multiples instancias y sus implicaciones.                          | Uso acotado para apoyo conceptual.                                                |
 | 3. Despliegue en AWS                   | Seguridad, provisionamiento de EC2, configuracion App/DB y ALB.                                            | Recomendado para apoyo operativo y deteccion de inconsistencias de configuracion.                                          |
-| 4. Diseno y ejecucion de pruebas       | Aplicacion de matriz de carga con JMeter o script Python para cargas altas.                               | Recomendado para automatizar ejecuciones y analizar resultados, con validacion de que el cliente no sea cuello de botella. |
-| 5. Interpretacion y entregables        | Identificacion robusta del punto de inflexion y documentacion de evidencia.                               | No recomendado para redactar conclusiones sin trazabilidad de datos.                                                       |
+| 4. Diseño y ejecucion de pruebas       | Aplicacion de matriz de carga con JMeter o script Python para cargas altas.                               | Recomendado para resolver errores. |
+| 5. Interpretacion y entregables        | Identificacion robusta del punto de inflexion y documentacion de evidencia.                               | No recomendado para redactar conclusiones.                                                       |
 
 
-> Este laboratorio continúa el trabajo del **Lab 2**. El objetivo es ejecutar **pruebas de carga con JMeter** sobre los **endpoints (GET y POST)** definidos en el Lab 2, ahora desplegados en **AWS (EC2)** con **Application Load Balancer (ALB)** y **tres instancias** del backend.
+> Este laboratorio continúa el trabajo del **Lab 2**. El objetivo es ejecutar pruebas de carga sobre los mismos endpoints (GET y POST) definidos en el Lab 2, ahora desplegados en AWS.
 
 ## Objetivos
 
@@ -49,8 +49,6 @@
 | --- | --- | --- |
 | REQ1 | Como tendero, quiero confirmar un pedido en menos de **2000 ms**. | **P99 < 2000 ms** |
 | REQ2 | Como Chiper, quiero que al menos el **90% de las peticiones** sean exitosas bajo alta demanda. | **Error % <= 10%** |
-
-> En este laboratorio medimos REQ1 y REQ2 con el **Summary Report** de JMeter.
 
 > [!IMPORTANT]
 > **Pregunta 1:**
