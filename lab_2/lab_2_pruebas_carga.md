@@ -4,16 +4,16 @@
 
 | Etapa                           | Resumen                                                                                | Uso de IA generativa                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 1. Contexto experimental y ASRs | Definicion del experimento, criterios de exito y marco de evaluacion del monolito.     | Uso acotado para sintetizar ASRs; el analisis de impacto debe ser propio.                     |
+| 1. Contexto experimental y ASRs | Definicion del experimento, criterios de exito y marco de evaluacion del monolito.     | Uso acotado para entender ASRs; el analisis de impacto debe ser propio.                     |
 | 2. Preparacion del entorno      | Levantamiento de base de datos, backend y verificacion inicial del entorno de pruebas. | Recomendado para resolver bloqueos tecnicos de instalacion y configuracion.                   |
-| 3. Diseno de pruebas            | Definicion de distribucion de datos, matriz de carga e hipotesis de degradacion.       | Uso acotado: puede ayudar a proponer disenos, pero se debe justificar con contexto de Chiper. |
-| 4. Ejecucion de pruebas         | Ejecucion con JMeter y opcion de script en Python para cargas altas.                   | Recomendado en cargas altas para generar o ajustar scripts de prueba y analisis.              |
-| 5. Entregables y conclusiones   | Reporte de resultados, punto de inflexion y propuestas de mejora arquitectonica.       | No recomendado para redactar conclusiones sin evidencia del experimento.                      |
+| 3. Diseño de pruebas            | Definicion de distribucion de datos, matriz de carga e hipotesis de degradacion.       | Puede ayudar a proponer diseños, pero se debe justificar con el contexto de Chiper. |
+| 4. Ejecución de pruebas         | Ejecución con JMeter y opcion de script en Python para cargas altas.                   | Recomendado en cargas altas para generar o ajustar scripts de prueba y analisis.              |
+| 5. Entregables y conclusiones   | Reporte de resultados, punto de inflexion y propuestas de mejora arquitectónica.       | No recomendado para redactar conclusiones sin evidencia del experimento.                      |
 
 ## Objetivos
 
 - Ejecutar **pruebas de carga locales** sobre el backend monolítico de Chiper.
-- Encontrar el **punto de inflexión** del sistema (máximo de usuarios/hilos antes de incumplir ASRs).
+- Encontrar el **punto de inflexión** del sistema (máximo de usuarios/hilos antes de incumplir un ASRs).
 - Analizar el comportamiento del monolito bajo carga: latencia, throughput, errores y cuellos de botella.
 - Proponer mejoras de arquitectura y tácticas para mejorar desempeño y disponibilidad.
 
@@ -23,28 +23,116 @@
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Propósito**                 | Determinar el punto de inflexión del sistema bajo carga concurrente de dos endpoints críticos <br><br>- Servicio GET de consulta con múltiples JOINs<br>- Servicio POST de escritura de una entidad extensa                                                                          |
 | **Sistema bajo prueba**       | Backend monolítico Chiper (NestJS + PostgreSQL)                                                                                                                                                                                                                                      |
-| **Resultados esperados**      | - Obtener el punto de inflexión (número máximo de usuarios en que los requerimientos no funcionales, e.g., REQ1 y REQ2, se dejan de respetar) de los servicios REST del sistema.<br><br>Para determinar esto, usaremos los resultados del “Summary Report” de la herramienta JMeter. |
-| **Infraestructura requerida** | Local (Node.js + PostgreSQL en Docker opcional)<br><br>Cliente local pruebas (JMeter)                                                                                                                                                                                                |
+| **Resultados esperados**      | - Obtener el punto de inflexión (número máximo de usuarios en que los requerimientos no funcionales, e.g., REQ1 y REQ2, se dejan de respetar) de los servicios REST del sistema. |
+| **Infraestructura requerida** | Local (Node.js + PostgreSQL en Docker opcional)<br><br>Cliente local pruebas (JMeter o script propio) |
 
 ## ASRs evaluados
 
 | ID    | Descripción                                                                                                                                                                                                                                                           | Medidas de respuesta a satisfacer |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| ASR 1 | Como tendero, quiero consultar los productos que alguna vez he pedido, que actualmente estén en promoción y disponibles en el catálogo de mi zona, con un p99 de **1000 ms** en operación normal (500 req/min).                                                       | Latencia p99 < 1000ms |
-| ASR 2 | Como tendero, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
+| ASR 1 | Como tendero, quiero consultar los productos que alguna vez he pedido, que actualmente estén en promoción y disponibles en el catálogo de mi zona, con una latencia p99 de **1000 ms** en operación normal (500 req/min).                                                       | Latencia p99 < 1000ms |
+| ASR 2 | Como director de operaciones de Chiper, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
 
 
 > **Criterio de punto de inflexión:** *basta con que se incumpla **al menos uno** de los dos ASRs.*
+
+
+
+Los dos endpoints evaluados en este laboratorio corresponden directamente a los ASRs definidos. Ambos forman parte del módulo `logistica` del backend monolítico de Chiper.
+
+---
+
+### ASR 1 — GET `/logistics/tenderos/productos-disponibles`
+
+**Método:** `GET`  
+**Ruta:** `/logistics/tenderos/productos-disponibles`
+
+**Query params:**
+
+| Parámetro  | Tipo   | Validación        | Descripción                                |
+| ---------- | ------ | ----------------- | ------------------------------------------ |
+| `tiendaId` | string | UUID, requerido   | Identificador de la tienda del tendero     |
+| `zona`     | string | string, requerido | Zona geográfica sobre la que se consulta   |
+
+**Ejemplo de request:**
+```
+GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-baf722e18ab9&zona=Zona+Norte
+```
+
+**Respuesta exitosa (200):** arreglo de productos con campos `id`, `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, entre otros.
+
+**Lógica interna (múltiples consultas secuenciales a la base de datos):**
+1. Recupera todos los pedidos históricos de la tienda y extrae sus `productoId`.
+2. Filtra las promociones activas (fecha vigente + tienda incluida) y extrae sus `productoId`.
+3. Obtiene los catálogos de la zona y consulta disponibilidad > 0 para cada uno.
+4. Calcula la intersección de los tres conjuntos y resuelve el detalle de cada producto.
+
+> Este endpoint realiza varios JOINs sobre tablas con una cantidad considerable de datos
+
+---
+
+### ASR 2 — POST `/logistics/pedidos`
+
+**Método:** `POST`  
+**Ruta:** `/logistics/pedidos`  
+**Content-Type:** `application/json`
+
+**Body (ejemplo con 10 ítems):**
+```json
+{
+  "identificador": "PED-20260601-001",
+  "tiendaId": "9a2f2e7b-40c4-4c5f-a37c-baf722e18ab9",
+  "fechaHoraCreacion": "2026-06-01T10:00:00.000Z",
+  "montoTotal": 150000,
+  "monedaId": "<uuid-moneda>",
+  "estado": "PENDIENTE",
+  "items": [
+    { "productoId": "<uuid>", "cantidad": 5, "precioUnitario": 12000, "descuento": 0,   "monedaId": "<uuid-moneda>" },
+    { "productoId": "<uuid>", "cantidad": 3, "precioUnitario": 8500,  "descuento": 500, "monedaId": "<uuid-moneda>" }
+  ]
+}
+```
+
+**Campos requeridos del body:**
+
+| Campo               | Tipo             | Descripción                               |
+| ------------------- | ---------------- | ----------------------------------------- |
+| `identificador`     | string (max 100) | Código único del pedido                   |
+| `tiendaId`          | UUID             | Tienda que realiza el pedido              |
+| `fechaHoraCreacion` | ISO 8601         | Fecha y hora de creación                  |
+| `montoTotal`        | number > 0       | Valor total del pedido                    |
+| `monedaId`          | UUID             | Moneda en que se expresa el monto         |
+| `estado`            | enum (opcional)  | Estado inicial del pedido                 |
+| `items`             | array (mín. 1)   | Productos con `productoId`, `cantidad`, `precioUnitario`, `descuento` y `monedaId` |
+
+**Respuesta exitosa (201):** objeto pedido creado con su `id` y lista de ítems.
+
+> Este endpoint realiza escritura transaccional en la base de datos. Bajo alta concurrencia puede generar contención de locks y saturación del pool de conexiones.
+
+---
+
+
+> [!IMPORTANT]
+> **Pregunta 1:**
+> En el contexto de Chiper, el endpoint GET evaluado combina lectura histórica, promociones y disponibilidad por zona, mientras el POST confirma pedidos en eventos de alta demanda.
+> Si solo pudiera optimizar **uno** antes de un pico comercial, ¿cuál priorizaría y por qué?
+>
+> Argumente su decisión en términos de:
+> - impacto en negocio,
+> - riesgo de incumplimiento de ASRs,
+> - tipo de carga,
+> - y costo/tiempo de implementación de mejoras.
+
 
 ## Diagrama de despliegue
 
 <img src="recursos/Pasted image 20260304160111.png"/>
 
-Note que todos los componentes están desplegados en un único nodo de ejecución, en este caso su máquina local, de igual forma note que la comunicación entre componentes sigue los mismos protocolos que si se ejecutara en nodos distintos.
+Note que todos los componentes están desplegados en un único nodo de ejecución, en este caso su máquina local, de igual forma note que la comunicación entre componentes sigue los mismos protocolos que seguiría si se ejecutaran en nodos distintos.
 
 ## Estilos de arquitectura
 
-| Estilos de Arquitectura asociados | Análisis (Atributos de calidad que favorece y desfavorece)                                                                |
+| Estilos de Arquitectura asociados | Análisis |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Monolito                          | - Favorece latencia y testeabilidad.<br>- Desfavorece escalabilidad y disponibilidad.                                     |
 | Cliente-servidor                  | - Favorece seguridad (el control de acceso a los datos es centralizado).<br>- Desfavorece escalabilidad y disponibilidad. |
@@ -62,19 +150,9 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 | **Contenedores (opcional)**   | - **Docker:** Permite levantar servicios en entornos aislados para facilitar reproducibilidad del experimento.                                                                                     |
 | **Librerías**                 | - **TypeORM:** ORM utilizado por NestJS para mapear entidades a tablas y manejar consultas, relaciones y transacciones.                                                                            |
 
-> [!IMPORTANT]
-> **Pregunta 1:**
-> En el contexto de Chiper, el endpoint GET evaluado combina lectura histórica, promociones y disponibilidad por zona, mientras el POST confirma pedidos en eventos de alta demanda.
-> Si solo pudiera optimizar **uno** antes de un pico comercial, ¿cuál priorizaría y por qué?
->
-> Argumente su decisión en términos de:
-> - impacto en negocio (pérdida de ventas vs. degradación de experiencia),
-> - riesgo de incumplimiento de ASRs,
-> - tipo de carga (I/O, CPU, contención en base de datos),
-> - y costo/tiempo de implementación de mejoras.
 
 ## Preparación del entorno
-En el repo del backend (chiper-api) diríjase a la rama `load-tests
+En el repo del backend (chiper-api) diríjase a la rama `load-tests`
 ### Levantar PostgreSQL con Docker (recomendado)
 
 ```bash
@@ -93,6 +171,7 @@ Verifique que la aplicación está corriendo:
 Usted debería ver algo así:
 
 <img src="recursos/Pasted image 20260305024253.png"/>
+
 ## Diseño de la prueba de carga
 
 Hay dos escenarios de carga importantes para este laboratorio (tomados de los ASRs):
@@ -103,6 +182,11 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 
 > [!WARNING]
 > Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
+> Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando el siguiente comando: 
+> ```bash
+> docker compose down -v postgres
+> ```
+> De igual forma en el archivo `seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas.
 
 > [!IMPORTANT]
 > **Pregunta 2:**
@@ -138,11 +222,11 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 > ¿Qué cambiaría en el diseño experimental para distinguir si el quiebre proviene principalmente de:
 > - saturación del pool de conexiones,
 > - consultas SQL ineficientes,
-> - límites del runtime de Node,
-> - o del generador de carga?
+> - límites del generador de carga?
 >
 > Defina un diseño alternativo con variables controladas y resultados esperados para cada hipótesis.
 > Incluya una gráfica esperada por hipótesis (curva o comparación) para mostrar cómo identificaría visualmente cada tipo de cuello de botella.
+> **Pista**: La distribución de pareto muchas veces ayuda a modelar mejor el comportamiento de un ecommerce que una distribución uniforme, dado que hay tiendas que compran mucho más que otras, zonas con más actividad comercial y productos que son más populares que otros.
 
 ## Pruebas de carga
 
@@ -156,7 +240,7 @@ El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-perfor
 Para escenarios de alta carca > 450 JMeter empieza a tener limitaciones de performance, por lo que como **alternativa lo invitamos a que use copilot o el agente de IA de su preferencia para generar un script para la ejecución de pruebas**, este script debe tener las siguientes características:
 - Las peticiones deben ser http a los endpoints a los cuales se busca hacer la prueba
 - El script debe permitir configurar Ramp-Up y Threads para cada prueba
-- Para POST, usar un body JSON realista de “pedido grande” con 10 ítems (productoId y cantidad)
+- Para POST, usar un body JSON realista de “pedido grande” con > 20 ítems (productoId y cantidad)
 - Debe registrar por request: timestamp, método, endpoint, status_code, latency_ms, error (si aplica).
 - Debe calcular al final:  
 	- total requests por tipo (GET/POST)  
@@ -167,12 +251,13 @@ Para escenarios de alta carca > 450 JMeter empieza a tener limitaciones de perfo
 
 Les dejamos un prompt de ejemplo, note que debe cambiar algunos valores para ajustarlo al laboratorio
 ```
-Actúa como un ingeniero de performance. Necesito un script en Python para ejecutar pruebas de carga ligeras contra un backend NestJS usando HTTP.
+Vamos a realizar pruebas de performance. Necesito un script en Python para ejecutar pruebas de carga ligeras contra un backend NestJS usando HTTP.
 
 Contexto:
 - Base URL: http://localhost:3000
-- Endpoint GET (lectura pesada): <RUTA_GET>
-- Endpoint POST (escritura): <RUTA_POST>
+- Endpoints a probar:
+  - Endpoint GET (lectura pesada): `/logistics/tenderos/productos-disponibles?tiendaId=<uuid>&zona=<zona>`
+  - Endpoint POST (escritura): `/logistics/pedidos`
 
 Requerimientos del script:
 * Debe permitir configurar por argumentos CLI o variables:
@@ -180,8 +265,9 @@ Requerimientos del script:
    - --users (concurrencia máxima)
    - --ramp-up (segundos)
    - --duration (segundos)
+   - --body (para POST, un JSON con > 20 ítems)
 
-* Para POST, usar un body JSON realista de “pedido grande” con 10 ítems (productoId y cantidad).
+* Para POST, usar un body JSON realista de “pedido grande” con > 20 ítems (productoId y cantidad).
 
 * Debe registrar por request: timestamp, método, endpoint, status_code, latency_ms, error (si aplica).
 * Debe calcular al final:
@@ -191,16 +277,16 @@ Requerimientos del script:
    - Error % por tipo (status >= 400 + timeouts + connection errors)
 * Debe exportar resultados a CSV: results_get.csv y results_post.csv con columnas:
    timestamp_iso,status_code,latency_ms,error
-* Debe imprimir un resumen final claro en consola.
+* Debe imprimir un resumen final claro en consola. Opcionalmente, generar gráficos de latencia y throughput usando matplotlib o seaborn.
 
 Restricciones:
 - Usa solo librerías estándar o, si necesitas, sugiere instalar exactamente UNA librería: httpx o aiohttp. Prefiero async/await.
 - Maneja timeouts y errores de conexión, debes registrarlos.
 - Incluye instrucciones de ejecución y ejemplo:
-  python load_test.py --users 100 --ramp-up 50 --duration 60
+  python load_test.py --users 100 --ramp-up 50 --duration 60 --endpoint POST --body sample_body.json
 ```
 
-Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot) le explicará como usarlo
+Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot.md) le explicará como usarlo
 
 > [!IMPORTANT]
 > **Pregunta 4:**
