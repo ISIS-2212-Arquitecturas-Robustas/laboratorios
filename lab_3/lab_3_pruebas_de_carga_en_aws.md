@@ -6,8 +6,8 @@
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | 1. Experimento y ASRs                  | Definicion de objetivo de carga y criterios de exito para el monolito en AWS.                            | Uso acotado para apoyo conceptual.                                            |
 | 2. Analisis de arquitectura desplegada | Revision de topologia monolito + ALB + multiples instancias y sus implicaciones.                          | Uso acotado para apoyo conceptual.                                                |
-| 3. Despliegue en AWS                   | Seguridad, provisionamiento de EC2, configuracion App/DB y ALB.                                            | Recomendado para apoyo operativo y deteccion de inconsistencias de configuracion.                                          |
-| 4. Diseño y ejecucion de pruebas       | Aplicacion de matriz de carga con JMeter o script Python para cargas altas.                               | Recomendado para resolver errores. |
+| 3. Despliegue en AWS                   | Seguridad, provisionamiento de EC2, configuracion App/DB y ALB.                                            | Recomendado para deteccion de inconsistencias de configuracion.                                          |
+| 4. Diseño y ejecucion de pruebas       | Aplicacion de matriz de carga con JMeter o script Python/Bash para cargas altas.                               | Recomendado para resolver errores. |
 | 5. Interpretacion y entregables        | Identificacion robusta del punto de inflexion y documentacion de evidencia.                               | No recomendado para redactar conclusiones.                                                       |
 
 
@@ -45,10 +45,10 @@
 
 ### 1.2 ASRs involucrados (del Lab 2)
 
-| ID | Descripcion | Metricas a satisfacer |
-| --- | --- | --- |
-| REQ1 | Como tendero, quiero confirmar un pedido en menos de **2000 ms**. | **P99 < 2000 ms** |
-| REQ2 | Como Chiper, quiero que al menos el **90% de las peticiones** sean exitosas bajo alta demanda. | **Error % <= 10%** |
+| ID    | Descripción                                                                                                                                                                                                                                                           | Medidas de respuesta a satisfacer |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| ASR 1 | Como tendero, quiero consultar los productos que alguna vez he pedido, que actualmente estén en promoción y disponibles en el catálogo de mi zona, con una latencia p99 de **1000 ms** en operación normal (500 req/min).                                                       | Latencia p99 < 1000ms |
+| ASR 2 | Como director de operaciones de Chiper, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
 
 > [!IMPORTANT]
 > **Pregunta 1:**
@@ -80,8 +80,8 @@ Se prueban dos escenarios (del Lab 2):
 | Estilos de arquitectura asociados | Analisis (atributos de calidad que favorece y desfavorece) |
 | --- | --- |
 | Monolito | Favorece latencia y mantenibilidad.<br>Desfavorece escalabilidad y disponibilidad. |
-| Cliente / Servidor | Favorece control centralizado.<br>Desfavorece escalabilidad y disponibilidad. |
-| Capas (Nest: Controller -> Service -> Repository/ORM) | Favorece mantenibilidad.<br>Puede desfavorecer latencia (mas saltos y abstraccion) y complejidad. |
+| Cliente / Servidor | Favorece mantenibilidad.<br>Desfavorece escalabilidad y disponibilidad. |
+| Capas | Favorece mantenibilidad.<br>Puede desfavorecer latencia (mas saltos y abstraccion) y complejidad. |
 
 > [!IMPORTANT]
 > **Pregunta 2:**
@@ -107,8 +107,7 @@ Se prueban dos escenarios (del Lab 2):
 
 | Tacticas | Analisis |
 | --- | --- |
-| No aplica tactica especifica | En este experimento se mide el comportamiento base del monolito sin incorporar tacticas adicionales para comparar contra una linea base. |
-| Balanceador de carga (ALB) | Distribuye el trafico entrante entre 3 instancias EC2 para reducir hotspots y mejorar disponibilidad percibida. No elimina cuellos internos del monolito ni garantiza menor latencia si la base de datos es el limite. |
+| Balanceador de carga | Distribuye el trafico entrante entre 3 instancias de computo para  mejorar disponibilidad y en algunos casos escalabilidad. No elimina cuellos internos del monolito ni garantiza menor latencia si la base de datos es el limite. |
 
 ### 2.5 Tactica: Balanceador de carga (ALB)
 
@@ -118,18 +117,18 @@ El **Application Load Balancer (ALB)** se usa como tactica de escalamiento horiz
 
 - Aumenta capacidad total de procesamiento al repartir solicitudes.
 - Reduce el riesgo de que una sola instancia se sature primero.
-- Mejora disponibilidad percibida si una instancia falla (el ALB deja de enrutarle).
+- Mejora disponibilidad si una instancia falla (el ALB deja de enrutarle).
 
 **Que no resuelve**
 
 - No evita cuellos de botella compartidos (DB, pool de conexiones, locks).
-- No mejora el desempeno de una consulta costosa por si sola.
-- Puede ocultar inconsistencia de configuracion entre instancias si no se revisan metricas por target.
+- No mejora el desempeño de una consulta costosa por si sola.
+- Puede ocultar inconsistencia de configuracion entre instancias si no se revisan metricas por instancia.
 
 **Como se observa en los resultados**
 
 - Throughput total mayor que el de una instancia individual, hasta el limite de la base de datos.
-- p95/p99 mas estables en cargas medias, pero degradacion similar si la DB se satura.
+- p95/p99 mas estables en cargas medias, pero degradacion similar si la base de datos se satura.
 
 ## 3. Tecnologías
 
@@ -140,7 +139,6 @@ El **Application Load Balancer (ALB)** se usa como tactica de escalamiento horiz
 | Base de datos            | PostgreSQL    |
 | ORM                      | TypeORM       |
 | Plataforma de despliegue | AWS EC2       |
-| Pruebas de carga         | Apache JMeter |
 
 ## 4. Despliegue (AWS)
 
@@ -164,15 +162,9 @@ Inicie el **Learning Lab** (esto habilita los créditos del curso). Usted debe v
 > [!WARNING]
 > Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Usted puede escoger cualquiera de las dos formas, sin embargo **es importante que sepa como usar la UI (consola de AWS) ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.** Se recomienda que use ambas formas de usar AWS al menos una vez y después escoja la que más le convenga.
 
-> [!IMPORTANT]
-> **Pregunta 4:**
-> En un incidente de Chiper previo a un pico promocional, debe reconstruir rápidamente la infraestructura mínima del laboratorio.
-> ¿Qué partes implementaría por consola y cuáles por CloudShell para equilibrar velocidad de recuperación y control de errores de configuración?
-> Incluya un diagrama de flujo del plan de recuperación que propondría (pasos, decisiones y validaciones) con la decisión que tome para reiniciar una instancia de EC2 que falló.
-
 ### 4.2 Configuración de seguridad (Security Groups)
 
-> Nota práctica: use nombres **sin tildes** y sin caracteres especiales.
+> Nota: use nombres **sin tildes** y sin caracteres especiales.
 
 Cree los siguientes Security Groups (VPC por defecto del lab):
 - [Tutorial para crear Security Groups en AWS](../tutoriales/crear_security_groups.md)
@@ -183,7 +175,7 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 | ------------ | ------------------------------ |
 | Nombre       | `chiper-ssh`                   |
 | Descripción  | Acceso SSH a instancias        |
-| Inbound rule | SSH (22) desde `Anywhere-IPv4` |
+| Inbound rule | TCP 22 (SSH) desde `Anywhere-IPv4` |
 
 #### 4.2.2 Security Group 2 — PostgreSQL
 
@@ -195,16 +187,16 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 
 > En un entorno real, 5432 **no** se abre a todo internet. Para el laboratorio lo haremos así por simplicidad.
 
-> [!IMPORTANT]
-> **Pregunta 5:**
-> Proponga un diseño mínimo de seguridad para Chiper que elimine la exposición pública de infraestructura que debería ser privada.
->
-> Debe incluir al menos:
-> - origen permitido de tráfico,
-> - estrategia de segmentación de red
->
-> Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
-> Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
+   > [!IMPORTANT]
+   > **Pregunta 4:**
+   > Proponga un diseño mínimo de seguridad para Chiper que elimine la exposición pública de infraestructura que debería ser privada.
+   >
+   > Debe incluir al menos:
+   > - origen permitido de tráfico,
+   > - estrategia de segmentación de red
+   >
+   > Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
+   > Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
 
 #### 4.2.3 Security Group 3 — HTTP API (Chiper)
 
@@ -229,7 +221,7 @@ Cree una instancia EC2 con los parámetros:
 | ----------------- | -------------------------- |
 | Nombre            | `chiper-db`                |
 | AMI               | Ubuntu Server 24.04 LTS    |
-| Tipo de instancia | `t2.nano`                  |
+| Tipo de instancia | `t2.medium`                  |
 | IP pública        | Habilitar                  |
 | Security Groups   | `chiper-ssh` + `chiper-db` |
 | Almacenamiento    | 8 GB                       |
@@ -272,16 +264,19 @@ sudo docker ps
 
 ### 4.4 Crear instancias EC2 para la App (Chiper Monolito)
 
-Cree **tres** instancias EC2 con los mismos parámetros (nombre sugerido: `chiper-app-1`, `chiper-app-2`, `chiper-app-3`).
+Cree **tres** instancias EC2, una por cada zona de disponibilidad. Distribuirlas en AZs distintas garantiza que una falla de zona no derribe todas las instancias al mismo tiempo, mejorando la disponibilidad del sistema.
 
-| Parámetro         | Valor                        |
-| ----------------- | ---------------------------- |
-| Nombre            | `chiper-app-1`               |
-| AMI               | Ubuntu Server 24.04 LTS      |
-| Tipo de instancia | `t2.nano`                    |
-| IP pública        | Habilitar                    |
-| Security Groups   | `chiper-ssh` + `chiper-http` |
-| Almacenamiento    | 8 GB                         |
+| Parámetro         | `chiper-app-1`               | `chiper-app-2`               | `chiper-app-3`               |
+| ----------------- | ---------------------------- | ---------------------------- | ---------------------------- |
+| Nombre            | `chiper-app-1`               | `chiper-app-2`               | `chiper-app-3`               |
+| AMI               | Ubuntu Server 24.04 LTS      | Ubuntu Server 24.04 LTS      | Ubuntu Server 24.04 LTS      |
+| Tipo de instancia | `t2.medium`                  | `t2.medium`                  | `t2.medium`                  |
+| IP pública        | Habilitar                    | Habilitar                    | Habilitar                    |
+| Security Groups   | `chiper-ssh` + `chiper-http` | `chiper-ssh` + `chiper-http` | `chiper-ssh` + `chiper-http` |
+| Almacenamiento    | 8 GB                         | 8 GB                         | 8 GB                         |
+| AZ (Zona)         | `us-east-1a`                 | `us-east-1b`                 | `us-east-1c`                 |
+
+Para obtener el `SubnetId` de cada AZ antes de crear cada instancia, siga el **Paso 5** del [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md).
 
 #### 4.4.1 Conexión por SSH
 
@@ -317,11 +312,12 @@ npm -v
 
 #### 4.4.3 Clonar el repositorio del backend
 
-Clone el repositorio del backend de su proyecto (reemplace la URL):
+Clone el repositorio del backend de su proyecto (reemplace la URL, y recuerde que estamos trabajando sobre la rama load_tests):
 
 ```bash
 git clone <URL_REPO_BACKEND_CHIPER>
 cd <CARPETA_REPO>
+nvm install
 ```
 
 Instale dependencias:
@@ -332,9 +328,16 @@ npm install
 
 #### 4.4.4 Configuración de conexión a la base de datos
 
-Configure variables de entorno o archivo `.env` (según cómo esté el proyecto). La idea es que **HOST** apunte a la **IP privada** de `chiper-db` (misma VPC).
+Configure variables de entorno o archivo. La idea es que **HOST** apunte a la **IP privada** de `chiper-db` (misma VPC).
 
-Ejemplo de variables típicas:
+
+Para configurarlo copie el archivo de ejemplo
+
+``` bash
+cp .env.example .env
+```
+
+Con el comando `cat .env` usted verá el contenido del archivo:
 
 ```bash
 DB_HOST=<IP_PRIVADA_DB>
@@ -345,22 +348,25 @@ DB_NAME=chiper_db
 PORT=3000
 ```
 
+Modifique las variables de conexión a la base de datos para que apunten a la IP privada de `chiper-db` (puerto 5432, usuario y contraseña según lo definido en el contenedor de PostgreSQL). La idea es que HOST apunte a la IP **privada** de chiper-db (misma VPC)
+
+Para modificar el archivo puede usar `nano` o `vim`:
+
+```bash
+nano .env
+```
+
 > [!IMPORTANT]
-> **Pregunta 6:**
+> **Pregunta 5:**
 > Para el laboratorio usaremos la IP privada para conectar la aplicación a la base de datos. Compare el uso de IP privada vs IP pública para la conexión entre App y Base de Datos en este laboratorio.
 >
 > ¿Qué diferencias esperaría en seguridad, latencia, estabilidad y costo operativo para Chiper, y en qué casos podría justificarse usar cada opción?
 > Apoye la comparación con una tabla de trade-offs.
 
-#### 4.4.5 Migraciones / seed de datos (si aplica)
-
-Ejecute los comandos que su proyecto defina para crear tablas y datos.
-
-Ejemplos (ajuste a su repo):
+#### 4.4.5 Ejecucuión y seed de datos (si aplica)
 
 ```bash
-# Ejemplo A: migraciones TypeORM
-npm run migration:run
+npm run start
 ```
 
 > El Lab 3 asume que el backend ya tiene datos suficientes para ejecutar las pruebas del Lab 2 (consulta con JOINs y escritura de entidad grande).
@@ -394,10 +400,8 @@ sudo docker ps
 npm run start:dev
 ```
 
-> Si su repo está listo para producción, puede usar `npm run start`.
-
 > [!IMPORTANT]
-> **Pregunta 7:**
+> **Pregunta 6:**
 > Si una de las tres instancias queda con configuración de entorno distinta (por ejemplo timeout, pool de conexiones o variables de DB), ¿cómo se manifestaría este problema en resultados agregados?
 > Incluya al menos una gráfica de ejemplo (p95/p99/error %) que muestre cómo detectaría visualmente la inconsistencia entre instancias.
 
@@ -520,4 +524,4 @@ Incluya un análisis (1–2 páginas) que responda:
 ## Nota final (créditos AWS)
 
 Cuando termine:
-- **Detenga o elimine** las instancias según la regla del curso.
+- **Detenga o elimine** las instancias e infraestructura creada.

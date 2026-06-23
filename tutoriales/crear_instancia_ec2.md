@@ -29,17 +29,19 @@ La instancia que vamos a crear en el tutorial está definida en la siguiente tab
 | ----------------- | ---------------------------- |
 | Nombre            | `chiper-app`                 |
 | AMI               | Ubuntu Server 24.04 LTS      |
-| Tipo de instancia | `t2.nano`                    |
+| Tipo de instancia | `t2.medium`                  |
 | IP pública        | Habilitar                    |
 | Security Groups   | `chiper-ssh` + `chiper-http` |
 | Almacenamiento    | 8 GB                         |
+| AZ (Zona)         | `<AZ_ASIGNADA>`              |
 ### 1. Abrir AWS CloudShell
 
 1. Inicie sesión en la **AWS Console**.
 2. En la barra superior seleccione el ícono de **CloudShell**.
 
 El ícono luce así:
-![](Pasted%20image%2020260310221313.png)
+![](./recursos/cloudshell_aws.png)
+
 3. Espere a que se abra la terminal.
 
 CloudShell ya incluye:
@@ -85,7 +87,7 @@ Guarde estos IDs.
 Las AMIs son identificadores de imágenes de sistemas operativos. Estos cambian constantemente, por lo que se busca la más reciente utilizando el siguiente comando:
 
 ``` bash
-aws ec2 describe-images --filters "Name=name,Values=ubuntu/images/*/ubuntu-*-24.04-*" "Name=state,Values=available" --query "Images | sort_by(@,&CreationDate)[-1].ImageId" --output text
+aws ec2 describe-images --owners 099720109477 --filters "Name=name,Values=ubuntu/images/*/ubuntu-*-24.04-*" "Name=state,Values=available" --query "Images | sort_by(@,&CreationDate)[-1].ImageId" --output text
 ```
 
 Ejemplo de salida:
@@ -94,24 +96,54 @@ Ejemplo de salida:
 ami-123abc456
 ```
 
-Note que este comando usa expresiones regulares para traer la versión que haga match con la última imagen de ubuntu 24.04.
+Note que este comando usa expresiones regulares para traer la versión que haga match con la última imagen de ubuntu 24.04. (El id que aparece en owners es el de Canonical, organización que mantiene las imágenes oficiales de Ubuntu en AWS)
 
 Guarde el **ImageId**.
 
 > [!NOTE]
 > Los códigos AMI y los sistemas operativos que ofrece AWS cambian constantemente, en caso de que el anterior comando no le retorne ningún AMI disponible, puede seguir el [tutorial de aws](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/finding-an-ami.html) para encontrar AMIs
-### 5. Crear la instancia EC2
+### 5. Obtener el ID de la Subnet según la AZ asignada
+
+Cada zona de disponibilidad (AZ) tiene una o más subnets asociadas dentro de la VPC. Debe usar la subnet que corresponda a la AZ indicada en la tabla del paso 0.
+
+Ejecute el siguiente comando reemplazando `<AZ_ASIGNADA>` con el valor de su tabla (por ejemplo `us-east-1a`):
+
+```bash
+aws ec2 describe-subnets \
+  --filters "Name=availability-zone,Values=<AZ_ASIGNADA>" \
+  --query "Subnets[*].{SubnetId:SubnetId,AZ:AvailabilityZone,CIDR:CidrBlock,VPC:VpcId}"
+```
+
+Ejemplo de salida:
+
+```json
+[
+    {
+        "SubnetId": "subnet-0abc1234",
+        "AZ": "us-east-1a",
+        "CIDR": "172.31.0.0/20",
+        "VPC": "vpc-0def5678"
+    }
+]
+```
+
+Guarde el **SubnetId** que corresponda a su AZ asignada.
+
+> [!NOTE]
+> Si aparecen varias subnets para la misma AZ, use cualquiera de ellas, ya que todas pertenecen a la misma zona.
+
+### 6. Crear la instancia EC2
 Ejecute:
 
 ``` bash
-aws ec2 run-instances --image-id <AMI_ID> --instance-type t2.nano --key-name chiper-key --security-group-ids <SG_SSH_ID> <SG_HTTP_ID> --associate-public-ip-address --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":8}}]' --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=chiper-app}]'
+aws ec2 run-instances --image-id <AMI_ID> --instance-type <INSTANCE_TYPE> --key-name <KEY_NAME> --security-group-ids <SG_ID_1> <SG_ID_2> <SG_ID_N> --subnet-id <SUBNET_ID> --associate-public-ip-address --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":8}}]' --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=<NOMBRE_INSTANCIA>}]'
 ```
 Esto creará la instancia.
-### 6. Obtener la IP pública
+### 7. Obtener la IP pública
 
 Para consultar la IP pública:
 ```bash
-aws ec2 describe-instances --filters "Name=tag:Name,Values=chiper-app" --query "Reservations[*].Instances[*].PublicIpAddress" --output text
+aws ec2 describe-instances --filters "Name=tag:Name,Values=<NOMBRE_INSTANCIA>" --query "Reservations[*].Instances[*].PublicIpAddress" --output text
 ```
 
 Ejemplo:
@@ -157,7 +189,7 @@ Se ha creado una instancia EC2 con:
 |---|---|
 |Nombre|`chiper-app`|
 |AMI|Ubuntu 24.04|
-|Tipo|`t2.nano`|
+|Tipo|`t2.medium`|
 |Almacenamiento|8 GB|
 |Acceso SSH|habilitado|
 |API|puerto 3000 habilitado|
@@ -171,7 +203,7 @@ Si ya no necesita la instancia creada, puede eliminarla usando **AWS CloudShell*
 Primero obtenga el **InstanceId** de la instancia `chiper-app`:
 
 ```bash
-aws ec2 describe-instances --filters "Name=tag:Name,Values=chiper-app" --query "Reservations[*].Instances[*].InstanceId"
+aws ec2 describe-instances --filters "Name=tag:Name,Values=<NOMBRE_INSTANCIA>" --query "Reservations[*].Instances[*].InstanceId"
 ```
 
 Luego elimine la instancia usando el id anterior
