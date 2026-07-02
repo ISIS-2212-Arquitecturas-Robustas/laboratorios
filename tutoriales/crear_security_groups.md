@@ -31,7 +31,7 @@ La VPC que vamos a crear en el tutorial está definida en la siguiente tabla
 
 El ícono luce así:
 ![](./recursos/cloudshell_aws.png)
-
+w
 3. Espere a que se abra la terminal.
 
 CloudShell ya incluye:

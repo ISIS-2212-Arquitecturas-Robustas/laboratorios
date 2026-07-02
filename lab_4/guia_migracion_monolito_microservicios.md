@@ -163,14 +163,14 @@ export class AppModule {}
 
 ### 3.3 Crear módulo de base de datos dinámico
 
-El monolito usaba un módulo de base de datos estático que descubría todas las entidades con un glob:
+El monolito usaba un módulo de base de datos estático que descubría todas las entidades que hicieran match con el regex:
 
 ```typescript
 // ANTES — src/datasources/database.providers.ts
 entities: [__dirname + '/../**/*.entity{.ts,.js}'],  // descubre todo
 ```
 
-En microservicios se creó un módulo dinámico en `libs/shared/database/` que recibe las entidades explícitamente:
+En microservicios se creó un módulo dinámico en `libs/shared/database/` que recibe las entidades explícitamente ya que cada servicio solo registra sus propias entidades:
 
 ```typescript
 // DESPUÉS — libs/shared/database/src/database.module.ts

@@ -4,7 +4,7 @@
 
 | Etapa                                  | Resumen                                                                                     | Uso de IA generativa                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 1. Experimento y ASRs de escalabilidad | Definicion de objetivos de carga simultanea y criterios de exito para microservicios.       | Uso acotado para ordenar hipotesis; la priorizacion de ASRs debe ser propia en la pregunta 1                    |
+| 1. Experimento y ASRs de escalabilidad | Definicion de objetivos de carga simultanea y criterios de exito para microservicios.       | Uso acotado para ordenar hipotesis; la priorizacion de ASRs debe ser propia en la pregunta 1.                    |
 | 2. Analisis arquitectonico             | Evaluacion de estilos (microservicios, API Gateway) y tacticas de escalamiento.             | Recomendado para contrastar trade-offs.                      |
 | 3. Despliegue en AWS                   | Publicacion de imagenes, configuracion de RDS, ECS y API Gateway.                           | Recomendado para asistencia operativa (comandos/configuracion), con verificacion manual en AWS. |
 | 4. Pruebas de carga simultaneas        | Ejecucion de GET y POST en paralelo para observar aislamiento y escalabilidad por servicio. | Recomendado para automatizar experimentos.                   |
@@ -37,7 +37,7 @@
 | Título | Prueba de carga a arquitectura de microservicios de Chiper en AWS |
 | Propósito | Evaluar la escalabilidad del sistema al ejecutar cargas simultaneas en endpoints GET y POST |
 | Resultados esperados | Evidenciar como la separacion en microservicios permite escalar de forma independiente y sostener mayor carga |
-| Infraestructura | API Gateway + ECS/Fargate (microservicios) + ECR + RDS + computador personal para ejecutar JMeter |
+| Infraestructura | API Gateway + ECS/Fargate + ECR + RDS + computador personal para ejecutar JMeter |
 
 ### 1.2 ASRs involucrados
 
@@ -45,16 +45,16 @@
 | --- | --- | --- |
 | REQ1 | Como tendero, quiero confirmar un pedido dentro del umbral de tiempo definido por el curso. | p99 < 2000 ms |
 | REQ2 | Como negocio, quiero mantener una alta proporcion de respuestas exitosas incluso en eventos de alta demanda. | Error % <= 10% |
-| REQ3 | Como tendero, quiero que la aplicacion funcione correctamente incluso durante picos de carga de 5000 req/min. | Durante 5000 req/min en ejecucion simultanea GET + POST, sostener throughput total >= 83.3 req/s y Error % <= 10%. |
+| REQ3 | Como tendero, quiero que la aplicacion funcione correctamente incluso durante picos de carga (5000 req/min). | Durante 5000 req/min en ejecucion simultanea GET + POST, sostener throughput total >= 83.3 req/s y Error % <= 10%. |
 
 > [!IMPORTANT]
 > **Pregunta 1:**
 > REQ1, REQ2 y REQ3 pueden degradarse de forma diferente por servicio.
-> Defina un criterio matemático simple (por ejemplo, ganancia marginal de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Chiper.
+> Defina una medida de respuesta simple (por ejemplo, ganancia de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados del laboratorio pasado y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Chiper cuando se escala verticalmente.
 
 ### 1.3 Qué se va a probar
 
-Se prueban dos escenarios funcionales, pero ahora en paralelo:
+Se prueban dos escenarios funcionales:
 
 1. GET (lectura pesada / consulta con JOINs)
    - Consultar productos que un usuario haya pedido, que esten en promocion y disponibles.
@@ -82,10 +82,10 @@ Se prueban dos escenarios funcionales, pero ahora en paralelo:
 
 | Tacticas | Analisis (atributos de calidad que favorece y desfavorece) |
 | --- | --- |
-| Replicacion horizontal de tareas ECS | Favorece mayor capacidad de procesamiento y tolerancia a fallos por redundancia.<br>Desfavorece aumento de costo y mayor complejidad para controlar estado compartido y consistencia. |
-| Escalamiento independiente por microservicio | Favorece optimizacion de recursos al escalar solo los servicios que lo requieren.<br>Desfavorece riesgo de desbalance entre servicios y necesidad de observabilidad por componente. |
-| Balanceo de trafico por servicio | Favorece distribucion uniforme de carga y menor saturacion de instancias individuales.<br>Desfavorece posible latencia adicional y dependencia de una configuracion correcta del balanceo. |
-| Uso de base de datos administrada (RDS) para separar responsabilidades de infraestructura | Favorece alta disponibilidad operativa, simplificacion de administracion y backups gestionados.<br>Desfavorece posible cuello de botella centralizado y mayor costo bajo cargas altas. |
+| Replicacion horizontal | Favorece mayor capacidad de procesamiento y tolerancia a fallos por redundancia.<br>Desfavorece costos y mantenibilidad. |
+| Escalamiento independiente por microservicio | Favorece costos, escalabilidad y elasticidad.<br>Desfavorece mantenibilidad. |
+| Balanceo de trafico por servicio | Favorece disponibilidad.<br>Desfavorece latencia y mantenibilidad. |
+| Uso de base de datos administrada | Favorece disponibilidad y mantenibilidad.<br>Desfavorece costos y portabilidad. |
 
 > [!IMPORTANT]
 > **Pregunta 2:**
@@ -95,14 +95,13 @@ Se prueban dos escenarios funcionales, pero ahora en paralelo:
 
 | Categoría | Tecnologías |
 | --- | --- |
-| Gateway de entrada | Amazon API Gateway |
+| API Gateway | Amazon API Gateway |
 | Orquestación de contenedores | Amazon ECS (Fargate) |
 | Registro de imágenes | Amazon ECR |
 | Base de datos relacional | Amazon RDS (PostgreSQL) |
 | Framework backend | NestJS |
 | Lenguaje | TypeScript |
 | ORM | TypeORM |
-| Pruebas de carga | Apache JMeter |
 
 ## 4. Despliegue (AWS)
 
@@ -112,13 +111,13 @@ Antes de iniciar el despliegue, revise la guía de migración, es importante que
 
 ### 4.1 Publicar imágenes en ECR
 
-Debe crear un repositorio por servicio
+Debe crear un repositorio por servicio. Los cambios con respecto al monolito están en la rama `microservicios`
 
-| Servicio   | Nombre sugerido repositorio | Tag imagen |
-| ---------- | --------------------------- | ---------- |
-| Logistica  | `chiper-logistica`          | `1.0.0`    |
-| Inventario | `chiper-inventario`         | `1.0.0`    |
-| Ventas     | `chiper-ventas`             | `1.0.0`    |
+| Servicio   | Nombre sugerido del repositorio | Nombre de la imagen | Tag imagen |
+| ---------- | --------------------------- | ---------- | ---------- |
+| Logistica  | `chiper-logistica`          | `logistica-service`          | `1.0.0`    |
+| Inventario | `chiper-inventario`         | `inventario-service`         | `1.0.0`    |
+| Ventas     | `chiper-ventas`             | `ventas-service`             | `1.0.0`    |
 
 Para cada servicio debe: construir una imagen, etiquetar con el URI del repositorio y publicar en ECR.
 

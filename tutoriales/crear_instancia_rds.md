@@ -3,8 +3,7 @@
 ## Objetivos
 
 - Crear una instancia de Amazon RDS con PostgreSQL para el laboratorio.
-- Configurar red y seguridad para permitir acceso desde microservicios en ECS.
-- Validar conectividad y dejar la base lista para migraciones y pruebas.
+- Configurar red y seguridad para permitir acceso a la base de datos.
 
 ## Marco conceptual
 
@@ -63,21 +62,14 @@ Guarde al menos 2 subredes de distintas zonas:
 aws rds create-db-subnet-group  --db-subnet-group-name chiper-db-subnet-group  --db-subnet-group-description "Subnet group para RDS de Chiper"  --subnet-ids <SUBNET_1> <SUBNET_2>
 ```
 
-### 3. Security Groups requeridos
+### 3. Crear Security Group para RDS
 
-No se detallan de nuevo los pasos de creacion de Security Groups. Configure los siguientes grupos (o equivalentes) antes de crear RDS:
-
-| Security Group | Descripción | Regla de entrada | Origen |
-| --- | --- | --- | --- |
-| `chiper-rds-sg` | Acceso a la base de datos RDS | TCP 5432 | Security Group de ECS (`chiper-ecs-sg`) |
-| `chiper-ecs-sg` | Trafico de tareas/servicios ECS | Segun puertos de microservicios | ALB/API Gateway/VPC segun su arquitectura |
-
-Luego use el ID de `chiper-rds-sg` como valor de `--vpc-security-group-ids` al crear la instancia.
+Cree un security group que permita trafico en el puerto 5432:
 
 ### 4. Crear la instancia RDS PostgreSQL
 
 ```bash
-aws rds create-db-instance  --db-instance-identifier chiper-rds  --db-instance-class db.t3.micro  --engine postgres  --engine-version 16.3  --master-username postgres  --master-user-password <PASSWORD_SEGURA>  --allocated-storage 20  --db-subnet-group-name chiper-db-subnet-group  --vpc-security-group-ids <SG_RDS_ID>  --no-publicly-accessible  --backup-retention-period 1  --storage-type gp3
+aws rds create-db-instance  --db-instance-identifier chiper-rds  --db-instance-class db.t3.micro --db-name chiper  --engine postgres  --engine-version 18.2  --master-username postgres  --master-user-password <PASSWORD_SEGURA>  --allocated-storage 20  --db-subnet-group-name chiper-db-subnet-group  --vpc-security-group-ids <SG_RDS_ID>  --no-publicly-accessible  --backup-retention-period 1  --storage-type gp3
 ```
 
 ### 5. Esperar disponibilidad
@@ -97,26 +89,6 @@ Con esto obtiene:
 - `DB_HOST`
 - `DB_PORT` (normalmente 5432)
 
-### 7. Configurar microservicios
-
-Configure variables de entorno en ECS task definitions:
-
-```text
-DB_HOST=<ENDPOINT_RDS>
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=<PASSWORD_SEGURA>
-DB_NAME=chiper
-```
-
-Luego despliegue una nueva revision de cada servicio.
-
-### 8. Verificación rápida
-
-- Verifique que cada servicio conecta correctamente a RDS.
-- Revise logs en CloudWatch para confirmar inicio sin errores de conexion.
-- Ejecute migraciones/seed si su proyecto lo requiere.
-
 ## Resultado final
 
 Al finalizar debe tener:
@@ -124,7 +96,7 @@ Al finalizar debe tener:
 | Recurso | Nombre sugerido | Estado esperado |
 | --- | --- | --- |
 | DB Subnet Group | `chiper-db-subnet-group` | Creado |
-| Security Group RDS | `chiper-rds-sg` | 5432 permitido desde ECS |
+| Security Group RDS | `chiper-rds-sg` | 5432 habilitado |
 | Instancia RDS | `chiper-rds` | `available` |
 
 ## Limpiar recursos (opcional)

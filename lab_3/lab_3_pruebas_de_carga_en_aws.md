@@ -447,9 +447,9 @@ Ejecute al menos **8 ejecuciones** para *Operación normal* y *Estrés fuerte*. 
 3. Ejecute la primera parte de la matriz de pruebas.
 
 
-### 5.4 Opción B — Cargas altas con script en Python
+### 5.4 Opción B — Cargas altas con script en Python/Bash
 
-A partir de **> 450 threads**, JMeter puede empezar a ser el cuello de botella del cliente. En esos casos use el script en Python del anterior laboratorio
+A partir de **> 450 threads**, JMeter puede empezar a ser el cuello de botella del cliente. En esos casos use el script en Python/Bash del anterior laboratorio
 
 ## 6. Interpretación de resultados
 
@@ -457,6 +457,7 @@ Saque conclusiones respecto a los siguientes parámetros registrados:
 
 - **# Samples:** cantidad total de peticiones.
 - **Average:** tiempo promedio de respuesta (ms).
+- **p95/p99:** percentiles de latencia.
 - **Min/Max:** tiempos extremos.
 - **Std. Dev.:** variabilidad.
 - **Error %:** porcentaje de fallos.
@@ -471,7 +472,7 @@ Saque conclusiones respecto a los siguientes parámetros registrados:
 
 Para cada endpoint:
 
-- Es el **mayor** número de threads donde **todavía** se cumplen ambos:
+- Es el **mayor** número de threads donde **todavía** se cumple cada uno de los ASRs:
   - p99 < 2000 ms
   - Error % ≤ 10%
 
@@ -505,7 +506,7 @@ Adjunte capturas de pantalla de:
 
 Adjunte evidencias de:
 
-- Configuración de la prueba (JMeter o script Python).
+- Configuración de la prueba (JMeter o script).
 - Ejecución de pruebas (capturas de Summary Report o logs del script).
 - Iteración donde **deja de cumplir** algún ASR.
 - **Prompts utilizados** (si usó IA) y el **script final**.
