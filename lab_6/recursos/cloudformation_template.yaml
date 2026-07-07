@@ -195,14 +195,24 @@ Resources:
           FromPort: 3001
           ToPort: 3003
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-        # Comunicación interna entre servicios (Ventas → Inventario)
-        - IpProtocol: tcp
-          FromPort: 3001
-          ToPort: 3003
-          SourceSecurityGroupId: !Ref ECSSecurityGroup
       Tags:
         - Key: Name
           Value: chiper-lab6-ecs-sg
+
+  # Comunicación interna entre servicios (Ventas → Inventario).
+  # IMPORTANTE: no puede ir dentro de las SecurityGroupIngress inline de ECSSecurityGroup de
+  # arriba: un security group no puede referenciarse a si mismo en sus propias Properties
+  # (el recurso aun no tiene ID mientras se define), y CloudFormation rechaza el template
+  # entero con "Circular dependency between resources". Por eso va como un recurso
+  # AWS::EC2::SecurityGroupIngress aparte, creado despues de que ECSSecurityGroup ya existe.
+  ECSSecurityGroupSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3001
+      ToPort: 3003
+      SourceSecurityGroupId: !Ref ECSSecurityGroup
 
   # Solo permite acceso a PostgreSQL desde las tareas ECS
   RDSSecurityGroup:
@@ -259,21 +269,6 @@ Resources:
     Properties:
       ClusterName: chiper-lab6-cluster
 
-  # Rol que Fargate usa para arrancar los contenedores (pull imagen, logs, etc.)
-  ECSExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: chiper-lab6-ecs-execution-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-
   # --- LOGÍSTICA ---
 
   LogisticaTaskDef:
@@ -284,7 +279,7 @@ Resources:
       Memory: '512'
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: logistica
           Image: !Ref LogisticaImageUri
@@ -303,6 +298,12 @@ Resources:
               Value: !Ref DBPassword
             - Name: DB_NAME
               Value: !Ref DBName
+            - Name: COGNITO_REGION
+              Value: !Ref AWS::Region
+            - Name: COGNITO_USER_POOL_ID
+              Value: !Ref CognitoUserPool
+            - Name: COGNITO_CLIENT_ID
+              Value: !Ref CognitoUserPoolClient
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -331,7 +332,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref LabVPC
-      HealthCheckPath: /logistica/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   LogisticaListener:
@@ -355,10 +356,10 @@ Resources:
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PrivateSubnetA
-            - !Ref PrivateSubnetB
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
           SecurityGroups:
             - !Ref ECSSecurityGroup
       LoadBalancers:
@@ -376,7 +377,7 @@ Resources:
       Memory: '512'
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: inventario
           Image: !Ref InventarioImageUri
@@ -401,6 +402,12 @@ Resources:
             # RECOVERY_TIME_MS: tiempo desde el arranque hasta la auto-recuperación
             - Name: RECOVERY_TIME_MS
               Value: !Ref RecoveryTimeMs
+            - Name: COGNITO_REGION
+              Value: !Ref AWS::Region
+            - Name: COGNITO_USER_POOL_ID
+              Value: !Ref CognitoUserPool
+            - Name: COGNITO_CLIENT_ID
+              Value: !Ref CognitoUserPoolClient
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -429,7 +436,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref LabVPC
-      HealthCheckPath: /inventario/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   InventarioListener:
@@ -453,10 +460,10 @@ Resources:
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PrivateSubnetA
-            - !Ref PrivateSubnetB
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
           SecurityGroups:
             - !Ref ECSSecurityGroup
       LoadBalancers:
@@ -474,7 +481,7 @@ Resources:
       Memory: '512'
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: ventas
           Image: !Ref VentasImageUri
@@ -496,6 +503,12 @@ Resources:
             # URL interna al ALB de Inventario — Ventas llama a Inventario a través de este ALB
             - Name: INVENTARIO_BASE_URL
               Value: !Sub 'http://${InventarioALB.DNSName}'
+            - Name: COGNITO_REGION
+              Value: !Ref AWS::Region
+            - Name: COGNITO_USER_POOL_ID
+              Value: !Ref CognitoUserPool
+            - Name: COGNITO_CLIENT_ID
+              Value: !Ref CognitoUserPoolClient
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -524,7 +537,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref LabVPC
-      HealthCheckPath: /ventas/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   VentasListener:
@@ -548,10 +561,10 @@ Resources:
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PrivateSubnetA
-            - !Ref PrivateSubnetB
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
           SecurityGroups:
             - !Ref ECSSecurityGroup
       LoadBalancers:
@@ -652,7 +665,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistica/{proxy}'
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistics/{proxy}'
       PayloadFormatVersion: '1.0'
 
   InventarioIntegration:
@@ -661,7 +674,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventario/{proxy}'
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventory/{proxy}'
       PayloadFormatVersion: '1.0'
 
   VentasIntegration:
@@ -679,7 +692,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: POST
-      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas'
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/ventas'
       PayloadFormatVersion: '1.0'
 
   VentasRootRoute:
@@ -726,7 +739,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: GET
-      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistica/health'
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/health'
       PayloadFormatVersion: '1.0'
 
   InventarioHealthIntegration:
@@ -735,7 +748,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: GET
-      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventario/health'
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/health'
       PayloadFormatVersion: '1.0'
 
   VentasHealthIntegration:
@@ -744,7 +757,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: GET
-      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/health'
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/health'
       PayloadFormatVersion: '1.0'
 
   LogisticaHealthRoute:

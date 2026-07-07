@@ -90,35 +90,24 @@ Login Succeeded
 > [!WARNING]
 > ECS Fargate ejecuta las tareas sobre arquitectura `linux/amd64`. Si construye la imagen con `docker build` normal en una máquina con otra arquitectura (por ejemplo un Mac con chip M1/M2/M3, o un runner ARM), la imagen quedará compilada para esa arquitectura y ECS fallará al arrancar el contenedor. Para evitar esto, todas las imágenes de este tutorial se deben construir con `docker buildx build` forzando la plataforma `linux/amd64`, sin importar desde qué máquina esté construyendo.
 
-Ubíquese en la carpeta donde está el `Dockerfile` de su servicio y ejecute:
+> [!IMPORTANT]
+> El `Dockerfile` de cada servicio en chiper-api vive en `apps/<nombre_servicio>/Dockerfile`, pero copia `package*.json` y el código fuente desde la **raíz** del repositorio (`COPY package*.json ./` y `COPY . .`). Por eso el build **no** se hace parado dentro de `apps/<servicio>`, sino desde la raíz del repositorio, apuntando al Dockerfile con `-f`.
+
+Ubíquese en la raíz del repositorio (donde está el `package.json` principal) y ejecute:
 
 ```bash
-docker buildx build --platform linux/amd64 -t inventario-service:0.0.1 --load .
+docker buildx build --platform linux/amd64 -f apps/inventario/Dockerfile -t inventario-service:0.0.1 --load .
 ```
 
-Este comando construye una imagen local para la arquitectura `linux/amd64` usando el `Dockerfile` del directorio del servicio, y le asigna el nombre `inventario-service:0.0.1`. La bandera `--load` carga la imagen resultante en el daemon local de Docker para que quede disponible con `docker images` y pueda etiquetarla y subirla en los siguientes pasos.
+Este comando construye una imagen local para la arquitectura `linux/amd64` usando el `Dockerfile` del servicio `inventario`, y le asigna el nombre `inventario-service:0.0.1`. La bandera `--load` carga la imagen resultante en el daemon local de Docker para que quede disponible con `docker images` y pueda etiquetarla y subirla en los siguientes pasos.
 
-> Recuerde que el `Dockerfile` de cada servicio en chiper-api se encuentra en `apps/<nombre_servicio>` por lo que debe construir la imagen con el siguiente comando `docker build -f apps/<microservicio>/Dockerfile -t <nombre-imagen> .`
+Para los otros servicios, reemplace `inventario` por `logistica` o `ventas` tanto en `-f apps/<servicio>/Dockerfile` como en el nombre de la imagen.
 
-Si quiere una etiqueta desde el inicio, puede hacerlo así:
+Si quiere construir y etiquetar en un solo paso, puede hacerlo así:
 
 ```bash
-docker buildx build --platform linux/amd64
+docker buildx build --platform linux/amd64 -f apps/inventario/Dockerfile -t 123456789012.dkr.ecr.us-east-1.amazonaws.com/chiper-inventario:0.0.1 --load .
 ```
-
-> [!WARNING] 
-> Para construir la imagen necesita de Node, puede instalarlo fácilmente ejecutando los siguientes comandos en la carpeta raíz de la aplicación
-> 
-> ```bash
-> curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-> 
-> export NVM_DIR="$HOME/.nvm"
-> [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
-> 
-> nvm install
-> ```
-> 
-> Para crear la build, recuerde que debe instalar las dependencias con `npm i`
 
 ## 8. Paso 4: etiquetar la imagen con la URI de ECR
 
@@ -131,8 +120,7 @@ Para subir la imagen a ECR, debe etiquetarla con la URI completa del repositorio
 Ejemplo:
 
 ```bash
-docker tag inventario-service:0.0.1 
-123456789012.dkr.ecr.us-east-1.amazonaws.com/chiper-inventario:0.0.1
+docker tag inventario-service:0.0.1 123456789012.dkr.ecr.us-east-1.amazonaws.com/chiper-inventario:0.0.1
 ```
 
 Aquí está creando una nueva referencia para la misma imagen local, pero ahora con el nombre exacto que ECR espera para poder recibirla.

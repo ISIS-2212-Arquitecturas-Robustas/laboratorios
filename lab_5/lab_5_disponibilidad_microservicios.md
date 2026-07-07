@@ -270,7 +270,7 @@ Tutorial de apoyo:
 ### 4.4 Desplegar el stack
 
 ```bash
-aws cloudformation deploy  --template-file lab_5/recursos/cloudformation_template.yaml  --stack-name chiper-lab5  --parameter-overrides LogisticaImageUri=<URI_ECR_LOGISTICA>:2.0.0 InventarioImageUri=<URI_ECR_INVENTARIO>:2.0.0 VentasImageUri=<URI_ECR_VENTAS>:2.0.0  VentasSidecarImageUri=<URI_ECR_SIDECAR>:2.0.0 DBPassword=<SU_CONTRASEÑA>  --capabilities CAPABILITY_NAMED_IAM  --region us-east-1
+aws cloudformation deploy  --template-file lab_5/recursos/cloudformation_template.yaml  --stack-name chiper-lab5  --parameter-overrides LogisticaImageUri=<URI_ECR_LOGISTICA>:2.0.0 InventarioImageUri=<URI_ECR_INVENTARIO>:2.0.0 VentasImageUri=<URI_ECR_VENTAS>:2.0.0  VentasSidecarImageUri=<URI_ECR_SIDECAR>:2.0.0 DBPassword=<SU_CONTRASEÑA>  --region us-east-1
 ```
 
 Monitoree el progreso en la consola de AWS → CloudFormation → Stack `chiper-lab5` → pestaña **Events**.

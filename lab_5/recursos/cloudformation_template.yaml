@@ -21,6 +21,10 @@ Parameters:
     Type: String
     Description: URI completo de la imagen ECR para el servicio Ventas
 
+  VentasSidecarImageUri:
+    Type: String
+    Description: URI completo de la imagen ECR del sidecar Envoy (construida desde apps/ventas/sidecar/Dockerfile)
+
   DBPassword:
     Type: String
     NoEcho: true
@@ -181,14 +185,26 @@ Resources:
           FromPort: 3001
           ToPort: 3003
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-        # Comunicación interna entre servicios (Ventas → Inventario)
-        - IpProtocol: tcp
-          FromPort: 3001
-          ToPort: 3003
-          SourceSecurityGroupId: !Ref ECSSecurityGroup
       Tags:
         - Key: Name
           Value: chiper-lab5-ecs-sg
+
+  # Comunicación interna entre servicios (Ventas → Inventario).
+  # IMPORTANTE: esta regla NO puede ir dentro de las SecurityGroupIngress inline de
+  # ECSSecurityGroup de arriba: un security group no puede referenciarse a si mismo dentro
+  # de sus propias Properties (el recurso todavia no tiene ID mientras se esta definiendo),
+  # y CloudFormation rechaza el template entero con "Circular dependency between resources"
+  # (el ciclo se propaga a casi todo lo demás porque RDS, ECS Services, etc. dependen de este
+  # security group). Por eso se declara como un recurso AWS::EC2::SecurityGroupIngress aparte,
+  # que se crea DESPUES de que ECSSecurityGroup ya existe.
+  ECSSecurityGroupSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3001
+      ToPort: 3003
+      SourceSecurityGroupId: !Ref ECSSecurityGroup
 
   # Solo permite acceso a PostgreSQL desde las tareas ECS
   RDSSecurityGroup:
@@ -245,21 +261,6 @@ Resources:
     Properties:
       ClusterName: chiper-lab5-cluster
 
-  # Rol que Fargate usa para arrancar los contenedores (pull imagen, logs, etc.)
-  ECSExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: chiper-lab5-ecs-execution-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-
   # --- LOGÍSTICA ---
 
   LogisticaTaskDef:
@@ -270,7 +271,7 @@ Resources:
       Memory: '512'
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: logistica
           Image: !Ref LogisticaImageUri
@@ -317,7 +318,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref LabVPC
-      HealthCheckPath: /logistica/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   LogisticaListener:
@@ -341,10 +342,10 @@ Resources:
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PrivateSubnetA
-            - !Ref PrivateSubnetB
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
           SecurityGroups:
             - !Ref ECSSecurityGroup
       LoadBalancers:
@@ -362,7 +363,7 @@ Resources:
       Memory: '512'
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: inventario
           Image: !Ref InventarioImageUri
@@ -415,7 +416,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref LabVPC
-      HealthCheckPath: /inventario/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   InventarioListener:
@@ -439,10 +440,10 @@ Resources:
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PrivateSubnetA
-            - !Ref PrivateSubnetB
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
           SecurityGroups:
             - !Ref ECSSecurityGroup
       LoadBalancers:
@@ -456,14 +457,16 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: td-chiper-ventas
-      Cpu: '256'
-      Memory: '512'
+      # 512/1024 en lugar de 256/512: la tarea ahora corre dos contenedores (app + sidecar Envoy)
+      Cpu: '512'
+      Memory: '1024'
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: ventas
           Image: !Ref VentasImageUri
+          Essential: true
           PortMappings:
             - ContainerPort: 3003
           Environment:
@@ -479,13 +482,38 @@ Resources:
               Value: !Ref DBPassword
             - Name: DB_NAME
               Value: !Ref DBName
-            # URL interna al ALB de Inventario — Ventas llama a Inventario a través de este ALB
+            # Ventas NO llama a Inventario directamente: pasa por el sidecar Envoy (localhost:10000),
+            # que corre en el mismo task (awsvpc comparte namespace de red -> "localhost" = mismo task).
+            # Esto es lo que permite que retry/circuit breaker se apliquen sin tocar el código de Ventas.
             - Name: INVENTARIO_BASE_URL
-              Value: !Sub 'http://${InventarioALB.DNSName}'
+              Value: 'http://localhost:10000'
           LogConfiguration:
             LogDriver: awslogs
             Options:
               awslogs-group: /ecs/chiper-ventas
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+              awslogs-create-group: 'true'
+        # Sidecar Envoy: intercepta el tráfico de Ventas hacia Inventario y aplica
+        # retry/circuit breaker según libs/../envoy.yaml.tmpl (apps/ventas/sidecar/).
+        - Name: ventas-sidecar
+          Image: !Ref VentasSidecarImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: 10000
+            - ContainerPort: 9901
+          Environment:
+            # Inventario corre en un ECS Service/task DISTINTO al de Ventas (no comparten
+            # namespace de red), así que el sidecar lo alcanza vía el ALB de Inventario,
+            # no por localhost. Ver apps/ventas/sidecar/envoy.yaml.tmpl, caso "ECS cross-task".
+            - Name: INVENTARIO_UPSTREAM_HOST
+              Value: !GetAtt InventarioALB.DNSName
+            - Name: INVENTARIO_UPSTREAM_PORT
+              Value: '80'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chiper-ventas-sidecar
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
               awslogs-create-group: 'true'
@@ -510,7 +538,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref LabVPC
-      HealthCheckPath: /ventas/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   VentasListener:
@@ -534,10 +562,10 @@ Resources:
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PrivateSubnetA
-            - !Ref PrivateSubnetB
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
           SecurityGroups:
             - !Ref ECSSecurityGroup
       LoadBalancers:
@@ -565,15 +593,18 @@ Resources:
         AllowHeaders:
           - '*'
 
-  # Integraciones: reenvía cada ruta al ALB del servicio correspondiente
-
+  # Integraciones: reenvía cada ruta al ALB del servicio correspondiente.
+  # IMPORTANTE: el prefijo de la ruta expuesta al estudiante (/logistica, /inventario) es en
+  # español, pero el codigo de los controladores usa prefijos en ingles (logistics, inventory) —
+  # solo "ventas" coincide. El URI de integracion debe traducir al prefijo real del backend,
+  # si no toda request via API Gateway devuelve 404.
   LogisticaIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/{proxy}'
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistics/{proxy}'
       PayloadFormatVersion: '1.0'
 
   InventarioIntegration:
@@ -582,7 +613,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/{proxy}'
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventory/{proxy}'
       PayloadFormatVersion: '1.0'
 
   VentasIntegration:
@@ -591,7 +622,7 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/{proxy}'
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/{proxy}'
       PayloadFormatVersion: '1.0'
 
   LogisticaRoute:
@@ -614,6 +645,57 @@ Resources:
       ApiId: !Ref ChiperHttpApi
       RouteKey: 'ANY /ventas/{proxy+}'
       Target: !Sub 'integrations/${VentasIntegration}'
+
+  # Health checks: cada microservicio expone /health SIN prefijo (a diferencia de las rutas
+  # de negocio), por eso necesitan su propia integracion de ruta fija en vez de compartir el
+  # proxy de negocio de arriba.
+  LogisticaHealthIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/health'
+      PayloadFormatVersion: '1.0'
+
+  InventarioHealthIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/health'
+      PayloadFormatVersion: '1.0'
+
+  VentasHealthIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/health'
+      PayloadFormatVersion: '1.0'
+
+  LogisticaHealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'GET /logistica/health'
+      Target: !Sub 'integrations/${LogisticaHealthIntegration}'
+
+  InventarioHealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'GET /inventario/health'
+      Target: !Sub 'integrations/${InventarioHealthIntegration}'
+
+  VentasHealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ChiperHttpApi
+      RouteKey: 'GET /ventas/health'
+      Target: !Sub 'integrations/${VentasHealthIntegration}'
 
   # Stage con throttling habilitado (Táctica 3 del lab)
   # Rate y Burst se configuran manualmente desde la consola según las instrucciones del lab

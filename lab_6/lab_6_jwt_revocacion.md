@@ -170,6 +170,8 @@ JWT es “stateless”: una vez emitido, un access token firmado seguirá siendo
 
 Este lab incluye un template de CloudFormation basado en el Lab 4, extendido con Cognito y un JWT authorizer.
 
+Antes de desplegar, publique las imágenes Docker en ECR desde la rama `cognito-auth`.
+
 ### 4.1 Desplegar el stack
 
 Desde la carpeta `lab_6/recursos/`:
@@ -178,7 +180,6 @@ Desde la carpeta `lab_6/recursos/`:
 aws cloudformation deploy \
   --stack-name chiper-lab6-jwt \
   --template-file cloudformation_template.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
     LogisticaImageUri=<URI_ECR_LOGISTICA> \
     InventarioImageUri=<URI_ECR_INVENTARIO> \
@@ -203,8 +204,7 @@ Los endpoints de health deben ser **públicos** para monitoreo:
 
 ## 5. Implementación mínima en microservicios
 
-> El código vive en la rama `lab6/cognito-auth` del repositorio `chiper-api`
-> (worktree disponible en `../chiper-api-lab6`).
+> El código vive en la rama `cognito-auth` del repositorio `chiper-api`.
 
 ### 5.1 Arquitectura de la implementación
 

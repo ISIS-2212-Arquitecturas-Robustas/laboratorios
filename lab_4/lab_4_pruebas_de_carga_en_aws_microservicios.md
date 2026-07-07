@@ -146,6 +146,7 @@ Recursos de ECS (Fargate) y parametros necesarios para el proyecto del curso:
 | ---------- | ---------------------- | ----------------------- | ----------------- | --------------------- | -------------------------------------------------------------------------------------------- |
 | Logistica  | `td-chiper-logistica`  | `svc-chiper-logistica`  | 3001              | 1                     | `PORT=3001`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`                       |
 | Inventario | `td-chiper-inventario` | `svc-chiper-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
+| Ventas     | `td-chiper-ventas`     | `svc-chiper-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
 
 Verifique que todas las tareas queden en estado RUNNING antes de pasar a API Gateway.
 
@@ -168,9 +169,17 @@ Recursos de API Gateway (una ruta por servicio) y parametros necesarios:
 
 | Servicio   | Route track (prefijo) |
 | ---------- | --------------------- |
-| Logistica  | `/logistica/*`        |
-| Inventario | `/inventario/*`       |
+| Logistica  | `/logistics/*`        |
+| Inventario | `/inventory/*`        |
 | Ventas     | `/ventas/*`           |
+
+Ademas del proxy de negocio (`/<prefijo>/{proxy+}`), cree una ruta especifica por servicio para el healthcheck, ya que el `HealthController` de cada microservicio expone `/health` en la raiz del contenedor (sin el prefijo del servicio):
+
+| Servicio   | Ruta en API Gateway | Backend real          |
+| ---------- | -------------------- | ---------------------- |
+| Logistica  | `GET /logistics/health` | `http://<IP_TAREA_LOGISTICA>:3001/health` |
+| Inventario | `GET /inventory/health` | `http://<IP_TAREA_INVENTARIO>:3002/health` |
+| Ventas     | `GET /ventas/health`    | `http://<IP_TAREA_VENTAS>:3003/health`    |
 
 Recursos globales de API Gateway y parametros necesarios:
 
@@ -182,11 +191,16 @@ Recursos globales de API Gateway y parametros necesarios:
 
 ### 4.5 Verificación rápida
 
-Desde su computador:
+> [!WARNING]
+> Las tareas de Fargate creadas con `assignPublicIp=ENABLED` reciben una IP publica nueva cada vez que la tarea se reinicia (por ejemplo, si falla un healthcheck, se actualiza la task definition o se hace un despliegue). Si en algun momento sus endpoints dejan de responder, revise primero si la IP publica de la tarea cambio (`aws ecs describe-tasks` + `aws ec2 describe-network-interfaces`, ver [tutorial de ECS](../tutoriales/crear_instancia_ecs.md#15-cómo-obtener-la-ip-pública-de-la-tarea)) y actualice la integracion de API Gateway (`aws apigatewayv2 update-integration --integration-uri http://<NUEVA_IP>:<PUERTO>/...`) con la IP nueva.
 
-- GET: `https://<API_ID>.execute-api.<REGION>.amazonaws.com/<STAGE>/health`
+Desde su computador, pruebe primero el health de cada servicio (no existe un `/health` global unico, cada microservicio expone el suyo bajo su propio prefijo de ruta):
 
-Verifique que ambos endpoints respondan correctamente antes de iniciar pruebas de carga.
+- GET: `https://<API_ID>.execute-api.<REGION>.amazonaws.com/<STAGE>/logistics/health`
+- GET: `https://<API_ID>.execute-api.<REGION>.amazonaws.com/<STAGE>/inventory/health`
+- GET: `https://<API_ID>.execute-api.<REGION>.amazonaws.com/<STAGE>/ventas/health`
+
+Verifique que los tres respondan correctamente antes de iniciar pruebas de carga.
 
 ## 5. Pruebas de carga con JMeter
 

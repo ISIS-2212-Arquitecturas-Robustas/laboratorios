@@ -178,7 +178,7 @@ Este cambio no requiere nuevos contenedores ni nuevas rutas de red: el fan-out o
 
 El despliegue de este laboratorio sigue **exactamente los mismos pasos del Lab 4** (ECR + RDS + ECS + API Gateway), con dos diferencias:
 
-1. **Código fuente**: use la rama `microservices-2` del repositorio `chiper-api-microservices`.
+1. **Código fuente**: use la rama `microservices-2` del repositorio `chiper-api`.
 2. **Tag de imágenes**: use `3.0.0` para distinguirlas de las versiones anteriores.
 
 Consulte el Lab 4 para el detalle completo de cada paso. A continuación se resume lo que cambia.
@@ -209,24 +209,27 @@ Tutoriales de apoyo del Lab 4:
 
 ### 4.3 Configurar RDS, ECS y API Gateway
 
-Siga los pasos 4.2, 4.3 y 4.4 del Lab 4 sin modificaciones.
+Siga los pasos 4.2, 4.3 y 4.4 del Lab 4 sin modificaciones. **Use los prefijos de ruta reales del backend** (`/logistics/*`, `/inventory/*`, `/ventas/*`, ver sección 4.4 y 4.5 del Lab 4)
 
-La única diferencia en ECS es que la Task Definition de **Ventas** requiere dos variables de entorno adicionales para los clientes HTTP del nuevo endpoint:
+La única diferencia en ECS es que la Task Definition de **Ventas** requiere variables de entorno adicionales para los clientes HTTP del nuevo endpoint. Recuerde que, igual que en el Lab 4, no hay ALB: estas URLs apuntan directo a la IP pública de la tarea ECS correspondiente (y deben actualizarse si esa tarea se reinicia, ver advertencia de IP volátil en la sección 4.5 del Lab 4):
 
 | Variable | Valor | Descripción |
 | --- | --- | --- |
-| `INVENTARIO_BASE_URL` | URL interna del ALB de Inventario | Para que Ventas llame a Inventario |
+| `LOGISTICA_BASE_URL` | `http://<IP_TAREA_LOGISTICA>:3001` | Para que Ventas llame a Logistica (nuevo cliente `LogisticaCatalogosClient`) |
+| `INVENTARIO_BASE_URL` | `http://<IP_TAREA_INVENTARIO>:3002` | Para que Ventas llame a Inventario |
 | `INVENTARIO_TIMEOUT_MS` | `8000` | Timeout de 8 s por llamada a Inventario |
 | `LOGISTICA_TIMEOUT_MS` | `8000` | Timeout de 8 s por llamada a Logística (sobreescribe el default de 3 s) |
 
 ### 4.4 Verificación rápida
 
+El endpoint requiere un `tiendaId` (UUID) como query param obligatorio:
+
 ```bash
 # Nuevo endpoint orquestado
-GET https://<API_ID>.execute-api.<REGION>.amazonaws.com/lab/ventas/resumen-operativo
+GET https://<API_ID>.execute-api.<REGION>.amazonaws.com/lab/ventas/resumen-operativo?tiendaId=<UUID_TIENDA>
 ```
 
-El endpoint orquestado debe responder con un JSON que incluya secciones `catalogos`, `inventario` y `ventas`. Verifique que las tres secciones tengan datos antes de iniciar las pruebas de carga.
+El endpoint orquestado debe responder con un JSON que incluya secciones `catalogos`, `inventario` y `ventas` (además de `tiendaId`). Verifique que las tres secciones tengan datos antes de iniciar las pruebas de carga — si están vacías, revise que la tienda usada ya tenga catálogos, items de inventario y ventas cargados (ver `npm run db:seed` o cree los datos manualmente vía los endpoints POST de cada servicio).
 
 ---
 
@@ -234,24 +237,24 @@ El endpoint orquestado debe responder con un JSON que incluya secciones `catalog
 
 ### 5.1 Fase 1 — Baseline individual
 
-Ejecute la matriz sobre los endpoints individuales **de forma aislada** (un Thread Group a la vez):
+Ejecute la matriz sobre los endpoints individuales **de forma aislada** (un Thread Group a la vez). Use el mismo `tiendaId` en los tres para que sea comparable con el endpoint orquestado de la Fase 2:
 
-- `GET /logistica/logistics/catalogos`
-- `GET /inventario/inventory/items`
-- `GET /ventas/ventas/ventas`
+- `GET /logistics/catalogos?tiendaId=<UUID_TIENDA>`
+- `GET /inventory/items?tiendaId=<UUID_TIENDA>`
+- `GET /ventas/ventas?tiendaId=<UUID_TIENDA>`
 
 El objetivo es medir el p99 de cada servicio por separado para alimentar la fórmula de la sección 1.4 y establecer la línea base de comparación.
 
 ### 5.2 Fase 2 — Carga sobre el endpoint orquestado
 
-Ejecute la misma matriz sobre `GET /ventas/resumen-operativo`. **No modifique la infraestructura respecto a la Fase 1**: el fan-out ya está incorporado en el endpoint.
+Ejecute la misma matriz sobre `GET /ventas/resumen-operativo?tiendaId=<UUID_TIENDA>` (mismo `tiendaId` de la Fase 1). **No modifique la infraestructura respecto a la Fase 1**: el fan-out ya está incorporado en el endpoint.
 
 ### 5.3 Fase 3 — Servicio dependiente degradado
 
 Antes de esta fase:
 1. Vaya a ECS → Servicio de Inventario → actualice `desired count` a **1 tarea**.
 2. Espere a que ECS rebalancee (puede tardar 1-2 minutos).
-3. Ejecute la carga media y alta de la matriz sobre `GET /ventas/resumen-operativo`.
+3. Ejecute la carga media y alta de la matriz sobre `GET /ventas/resumen-operativo?tiendaId=<UUID_TIENDA>`.
 
 Observe: ¿a partir de qué nivel de carga el error % del endpoint orquestado supera el umbral de ASR-3?
 

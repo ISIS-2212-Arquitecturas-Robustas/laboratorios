@@ -41,12 +41,20 @@ Resources:
   EcsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: SG para tareas ECS de Chiper Lab 8
+      GroupDescription: SG para tareas ECS, ALBs y VPC Link de Chiper Lab 8
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3001
           ToPort: 3003
+          CidrIp: 0.0.0.0/0
+        # Puerto 80: los Listeners de los 3 ALBs escuchan aqui. Sin esta regla, el
+        # VPC Link (que usa este mismo SG) no puede alcanzar los ALBs y API Gateway
+        # responde 503 "Service Unavailable" para toda ruta, aunque los targets del
+        # ALB ya esten healthy.
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
@@ -171,93 +179,13 @@ Resources:
           KeyType: RANGE
 
   # ─── IAM Roles ───────────────────────────────────────────────────────────────
-
-  EcsTaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: chiper-lab8-ecs-execution-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-
-  EcsTaskRoleLogistica:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: chiper-lab8-logistica-task-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: eventbridge-publish
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: events:PutEvents
-                Resource: !GetAtt ChiperEventBus.Arn
-
-  EcsTaskRoleVentas:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: chiper-lab8-ventas-task-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: eventbridge-and-dynamo
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: events:PutEvents
-                Resource: !GetAtt ChiperEventBus.Arn
-              - Effect: Allow
-                Action:
-                  - dynamodb:GetItem
-                Resource: !GetAtt ResumenTiendaTable.Arn
-
-  EcsTaskRoleInventario:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: chiper-lab8-inventario-task-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: sqs-and-dynamo
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - sqs:ReceiveMessage
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                Resource: !GetAtt VentaCreadaQueue.Arn
-              - Effect: Allow
-                Action:
-                  - dynamodb:UpdateItem
-                  - dynamodb:GetItem
-                  - dynamodb:PutItem
-                Resource: !GetAtt ResumenTiendaTable.Arn
+  # Este template NO crea roles IAM propios: en un AWS Academy Learner Lab (el
+  # caso más común en este curso) el rol del estudiante no tiene iam:CreateRole.
+  # Todas las tareas ECS (ejecución y aplicación) usan el rol ya provisto por el
+  # Learner Lab (`LabRole`), que en Academy normalmente ya incluye permisos amplios
+  # sobre EventBridge, DynamoDB y SQS para fines de aprendizaje. Si su cuenta no es
+  # un Learner Lab y no existe `LabRole`, cree un rol equivalente con permiso
+  # `sts:AssumeRole` para `ecs-tasks.amazonaws.com` y acceso a EventBridge/DynamoDB/SQS.
 
   # ─── ECS Cluster ─────────────────────────────────────────────────────────────
 
@@ -297,8 +225,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt EcsTaskRoleLogistica.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      TaskRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: logistica
           Image: !Ref LogisticaImageUri
@@ -337,8 +265,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt EcsTaskRoleInventario.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      TaskRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: inventario
           Image: !Ref InventarioImageUri
@@ -381,8 +309,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt EcsTaskRoleVentas.Arn
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      TaskRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
       ContainerDefinitions:
         - Name: ventas
           Image: !Ref VentasImageUri
@@ -443,7 +371,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VpcId
-      HealthCheckPath: /logistica/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   LogisticaListener:
@@ -475,7 +403,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VpcId
-      HealthCheckPath: /inventario/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   InventarioListener:
@@ -507,7 +435,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VpcId
-      HealthCheckPath: /ventas/health
+      HealthCheckPath: /health
       HealthCheckIntervalSeconds: 30
 
   VentasListener:
@@ -600,24 +528,39 @@ Resources:
       StageName: lab
       AutoDeploy: true
 
-  VpcLinkApi:
-    Type: AWS::ApiGatewayV2::VpcLink
-    Properties:
-      Name: chiper-lab8-vpc-link
-      SubnetIds:
-        - !Ref PublicSubnet1
-      SecurityGroupIds:
-        - !Ref EcsSecurityGroup
-
+  # IMPORTANTE: este template usaba antes una integracion VPC_LINK apuntando al Listener ARN
+  # de cada ALB. En pruebas sobre una cuenta de AWS Academy Learner Lab, esa combinacion
+  # (API Gateway VPC Link -> ALB Listener directo, sin Network Load Balancer intermedio)
+  # devolvio consistentemente 503 Service Unavailable con ~9s de latencia de integracion,
+  # pese a que el ALB, sus targets y el security group estaban correctamente configurados
+  # (confirmado probando el ALB directamente: 200 OK). Esto aparenta ser una restriccion de
+  # red propia del sandbox, no un error de configuracion. Como los 3 ALBs ya son
+  # internet-facing (ver LogisticaALB/InventarioALB/VentasALB mas arriba), la solucion mas
+  # simple y confiable es integrar API Gateway directamente contra el DNS publico del ALB
+  # (HTTP_PROXY con ConnectionType INTERNET, igual que en el Lab 4), sin VPC Link.
+  #
+  # Requiere DOS integraciones por servicio: una para las rutas de negocio (con proxy,
+  # reescribiendo el prefijo espanol al prefijo real del backend) y otra para /health
+  # (ruta fija, sin prefijo, ya que el HealthController de cada microservicio expone
+  # /health en la raiz del contenedor).
   IntegrationLogistica:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref ApiGateway
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Ref LogisticaListener
-      ConnectionType: VPC_LINK
-      ConnectionId: !Ref VpcLinkApi
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistics/{proxy}'
+      ConnectionType: INTERNET
+      PayloadFormatVersion: '1.0'
+
+  IntegrationLogisticaHealth:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/health'
+      ConnectionType: INTERNET
       PayloadFormatVersion: '1.0'
 
   IntegrationInventario:
@@ -626,9 +569,18 @@ Resources:
       ApiId: !Ref ApiGateway
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Ref InventarioListener
-      ConnectionType: VPC_LINK
-      ConnectionId: !Ref VpcLinkApi
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventory/{proxy}'
+      ConnectionType: INTERNET
+      PayloadFormatVersion: '1.0'
+
+  IntegrationInventarioHealth:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/health'
+      ConnectionType: INTERNET
       PayloadFormatVersion: '1.0'
 
   IntegrationVentas:
@@ -637,9 +589,18 @@ Resources:
       ApiId: !Ref ApiGateway
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
-      IntegrationUri: !Ref VentasListener
-      ConnectionType: VPC_LINK
-      ConnectionId: !Ref VpcLinkApi
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/{proxy}'
+      ConnectionType: INTERNET
+      PayloadFormatVersion: '1.0'
+
+  IntegrationVentasHealth:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/health'
+      ConnectionType: INTERNET
       PayloadFormatVersion: '1.0'
 
   RouteLogistica:
@@ -649,6 +610,13 @@ Resources:
       RouteKey: ANY /logistica/{proxy+}
       Target: !Sub integrations/${IntegrationLogistica}
 
+  RouteLogisticaHealth:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: GET /logistica/health
+      Target: !Sub integrations/${IntegrationLogisticaHealth}
+
   RouteInventario:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -656,12 +624,26 @@ Resources:
       RouteKey: ANY /inventario/{proxy+}
       Target: !Sub integrations/${IntegrationInventario}
 
+  RouteInventarioHealth:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: GET /inventario/health
+      Target: !Sub integrations/${IntegrationInventarioHealth}
+
   RouteVentas:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref ApiGateway
       RouteKey: ANY /ventas/{proxy+}
       Target: !Sub integrations/${IntegrationVentas}
+
+  RouteVentasHealth:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: GET /ventas/health
+      Target: !Sub integrations/${IntegrationVentasHealth}
 
 # ─── Outputs ──────────────────────────────────────────────────────────────────
 

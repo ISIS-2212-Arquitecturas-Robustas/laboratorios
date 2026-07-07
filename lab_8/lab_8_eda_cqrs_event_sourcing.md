@@ -370,16 +370,21 @@ Use el tag `4.0.0` para las imágenes de esta rama:
 
 ### 4.2 Desplegar el stack
 
+> [!WARNING]
+> Este template, a diferencia de los de Lab 5/6, **no crea su propia VPC**: usted debe pasarle una VPC y dos subnets públicas existentes (`VpcId`, `PublicSubnet1`, `PublicSubnet2`). Puede reutilizar la VPC/subnets por defecto de su cuenta — ejecute `aws ec2 describe-subnets --query 'Subnets[].[SubnetId,VpcId,MapPublicIpOnLaunch]' --output table` y elija dos subnets con `MapPublicIpOnLaunch=True` de la misma VPC.
+
 ```bash
 aws cloudformation deploy \
   --stack-name chiper-lab8-eda \
   --template-file laboratorios/lab_8/recursos/cloudformation_template.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
     LogisticaImageUri=<URI_ECR_LOGISTICA>:4.0.0 \
     InventarioImageUri=<URI_ECR_INVENTARIO>:4.0.0 \
     VentasImageUri=<URI_ECR_VENTAS>:4.0.0 \
-    DBPassword=<PASSWORD>
+    DBPassword=<PASSWORD> \
+    VpcId=<VPC_ID> \
+    PublicSubnet1=<SUBNET_ID_1> \
+    PublicSubnet2=<SUBNET_ID_2>
 ```
 
 Al finalizar, guarde los **Outputs** del stack:
@@ -441,7 +446,7 @@ La **versión monotónica** garantiza el orden de los eventos. Reproduciendo los
 
 ### 5.2 Implementación
 
-> El código vive en la rama `chiper-eda` del repositorio `chiper-api-microservices`.
+> El código vive en la rama `chiper-eda` del repositorio `chiper-api`.
 > La entidad `EventoPedido` ya está definida. Los repositorios tienen métodos con `throw new Error('Not implemented')` que deben completarse.
 
 #### Tarea 1.1 - Completar `EventoPedidoRepository`
