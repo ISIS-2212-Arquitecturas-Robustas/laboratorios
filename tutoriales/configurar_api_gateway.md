@@ -18,6 +18,9 @@ Mas informacion en: [Amazon API Gateway](https://docs.aws.amazon.com/apigateway/
 
 Un stage representa un entorno desplegado de la API (por ejemplo `dev`, `qa`, `prod`) y define una URL de invocacion.
 
+> [!IMPORTANT]
+> El nombre del stage (`dev`) no es solo una etiqueta: en HTTP API queda como **prefijo de ruta** en la URL de invocacion. Todas las rutas creadas (`/<prefijo_servicio>/health`, `/<prefijo_servicio>/{proxy+}`) quedan disponibles bajo `/dev/...`, no en la raiz del dominio. Es decir, la ruta real es `https://<API_ID>.execute-api.<REGION>.amazonaws.com/dev/logistics/health`, **no** `.../logistics/health`. Si olvida el `/dev` al probar o al configurar JMeter, obtendra 404 aunque la integracion este bien configurada.
+
 ## Tutorial consola AWS
 
 Si prefiere interfaz grafica, puede apoyarse en:

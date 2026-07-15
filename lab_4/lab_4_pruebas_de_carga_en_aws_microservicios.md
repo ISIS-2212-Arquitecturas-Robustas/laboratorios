@@ -148,6 +148,8 @@ Recursos de ECS (Fargate) y parametros necesarios para el proyecto del curso:
 | Inventario | `td-chiper-inventario` | `svc-chiper-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
 | Ventas     | `td-chiper-ventas`     | `svc-chiper-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
 
+Antes de crear los servicios, configure el security group de las tareas para permitir trafico entrante en los puertos 3001, 3002 y 3003. Sin esa regla, las tareas quedan en `RUNNING` pero inaccesibles desde afuera, y tanto el curl directo como los healthchecks de API Gateway fallaran con timeout.
+
 Verifique que todas las tareas queden en estado RUNNING antes de pasar a API Gateway.
 
 > [!IMPORTANT]
@@ -201,6 +203,9 @@ Desde su computador, pruebe primero el health de cada servicio (no existe un `/h
 - GET: `https://<API_ID>.execute-api.<REGION>.amazonaws.com/<STAGE>/ventas/health`
 
 Verifique que los tres respondan correctamente antes de iniciar pruebas de carga.
+
+> [!TIP]
+> Si alguna de estas rutas no responde, no diagnostique solo desde API Gateway: primero pruebe `curl http://<IP_TAREA>:<PUERTO>/health` directo a la tarea. Si eso tambien falla, puede ser el security group (ver seccion 4.3). Si el curl directo funciona pero la ruta de API Gateway da 404, la integracion de health probablemente quedo apuntando a `/<prefijo>/health` en vez de `/health
 
 ## 5. Pruebas de carga con JMeter
 

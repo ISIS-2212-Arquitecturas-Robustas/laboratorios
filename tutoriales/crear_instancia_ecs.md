@@ -67,6 +67,13 @@ Security Group: sg-xxxxxxxx
 
 Recuerde reemplazar esos valores por los de su cuenta.
 
+## 6.1 Paso 0: configurar el security group para los puertos de la aplicación
+
+> [!IMPORTANT]
+> En este laboratorio las tareas Fargate reciben IP pública y **no hay balanceador de carga ni VPC Link** — API Gateway y JMeter llegan directo a la IP pública de cada tarea. Si el security group de las tareas no permite trafico entrante en el puerto del contenedor, la tarea queda `RUNNING` en ECS pero **inaccesible desde afuera** (curl directo a la IP:puerto se queda colgado o da timeout), y por lo tanto los healthchecks de API Gateway tambien fallan aunque la integracion este bien configurada.
+
+Antes de crear el servicio, verifique o cree el security group que usaran las tareas y agregue una regla de entrada por cada puerto de contenedor (3001, 3002, 3003)
+
 ## 7. Paso 1: crear el clúster
 
 Ahora cree el clúster de ECS:
