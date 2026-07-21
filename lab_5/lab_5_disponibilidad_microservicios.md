@@ -4,7 +4,7 @@
 
 | Etapa                                      | Resumen                                                                                                          | Uso de IA generativa                                                                                      |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 1. Contexto del experimento de resiliencia | Modelado del escenario de retry storm y definicion de ASRs de resiliencia y consistencia para Chiper.            | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
+| 1. Contexto del experimento de resiliencia | Modelado del escenario de retry storm y definicion de ASRs de resiliencia y consistencia para Cheapest.            | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
 | 2. Arquitectura y tacticas                 | Analisis de microservicios, patrón sidecar, graceful degradation, circuit breaker y control de recursos.         | Recomendado para comparar parametros y riesgos de configuracion.                                          |
 | 3. Preparacion de infraestructura con IaC  | Despliegue reproducible en AWS mediante CloudFormation y verificacion del stack.                                  | Recomendado para asistir en comandos y troubleshooting de despliegue.                                     |
 | 4. Configuración del sidecar de resiliencia | Implementacion de falla controlada en Inventario y configuración del proxy Envoy en Ventas.                     | Recomendado para soporte de implementacion, revision de parametros y pruebas; validar manualmente resultados. |
@@ -16,7 +16,7 @@
 - Reproducir experimentalmente un fallo en cascada (cascading failure) provocado por un retry storm, tal como ocurre en sistemas en producción reales.
 - Implementar tres tácticas de resiliencia a nivel de infraestructura: retry con backoff exponencial, circuit breaker con graceful degradation, y rate limiting.
 - Desplegar la infraestructura del laboratorio usando Infraestructura como Código (IaaC) con AWS CloudFormation.
-- Evaluar el impacto de cada táctica sobre los ASRs del negocio de Chiper mediante pruebas de carga.
+- Evaluar el impacto de cada táctica sobre los ASRs del negocio de Cheapest mediante pruebas de carga.
 - Demostrar que la resiliencia de infraestructura (circuit breaker, retry) no garantiza consistencia de datos, e implementar el patrón **Outbox** e **Idempotencia** para cerrar esa brecha.
 - Reflexionar sobre las limitaciones de las tácticas locales frente a enfoques de resiliencia distribuida centralizada.
 
@@ -39,20 +39,20 @@
 
 | Elemento             | Detalle                                                                                                                                                                 |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Título               | Resiliencia bajo fallo del servicio de Inventario en la arquitectura de microservicios de Chiper                                                                        |
+| Título               | Resiliencia bajo fallo del servicio de Inventario en la arquitectura de microservicios de Cheapest                                                                        |
 | Propósito            | Reproducir un cascading failure provocado por un retry storm y mitigarlo con circuit breaker, retry con backoff y rate limiting, implementados vía sidecar Envoy        |
 | Resultados esperados | Con las tácticas aplicadas, el servicio de Ventas mantiene disponibilidad y responde con graceful degradation en lugar de errores 500, incluso con Inventario degradado |
 | Infraestructura      | CloudFormation + API Gateway + ECS/Fargate + ECR + RDS + computador personal para JMeter                                                                                |
 
 ### 1.2 Contexto de negocio
 
-Los lunes por la mañana, los tenderos de Chiper realizan sus reabastecimientos semanales. En estos picos, el servicio de **Inventario**, que valida disponibilidad de stock antes de confirmar un pedido, recibe una carga muy superior a la normal. Sin protecciones, el servicio de **Ventas** (que depende de Inventario) empieza a fallar en cadena: los tenderos no pueden confirmar pedidos, las apps móviles reintentán automáticamente, y ese volumen de reintentos amplifica la carga sobre un servicio ya degradado. El resultado: un sistema que se colapsa a sí mismo.
+Los lunes por la mañana, los tenderos de Cheapest realizan sus reabastecimientos semanales. En estos picos, el servicio de **Inventario**, que valida disponibilidad de stock antes de confirmar un pedido, recibe una carga muy superior a la normal. Sin protecciones, el servicio de **Ventas** (que depende de Inventario) empieza a fallar en cadena: los tenderos no pueden confirmar pedidos, las apps móviles reintentán automáticamente, y ese volumen de reintentos amplifica la carga sobre un servicio ya degradado. El resultado: un sistema que se colapsa a sí mismo.
 
 Este escenario es conocido en la industria como **retry storm** y es uno de los patrones de fallo descritos en el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash.
 
 > [!IMPORTANT]
 > **Pregunta 1:**
-> En Chiper, ¿qué decisión de producto y operación debería tomarse primero cuando aparece un retry storm: proteger disponibilidad percibida (respuestas degradadas) o proteger consistencia estricta (rechazar operaciones)?
+> En Cheapest, ¿qué decisión de producto y operación debería tomarse primero cuando aparece un retry storm: proteger disponibilidad percibida (respuestas degradadas) o proteger consistencia estricta (rechazar operaciones)?
 > Argumente su respuesta considerando impacto en tenderos, riesgo financiero y costo de reconciliación posterior.
 > Acompañe la respuesta con un diagrama de decisión (árbol o flujo) que muestre criterios y consecuencias por camino.
 
@@ -79,7 +79,7 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 
 > [!IMPORTANT]
 > **Pregunta 2:**
-> Si fuera el líder encargado de ejecutar este plan en Chiper seguiría este orden teniendo en cuenta el riesgo de estos cambios? Describa un plan de migración que mitigue los riesgos asociados.
+> Si fuera el líder encargado de ejecutar este plan en Cheapest seguiría este orden teniendo en cuenta el riesgo de estos cambios? Describa un plan de migración que mitigue los riesgos asociados.
 > Incluya un diagrama de fases (timeline) con hitos, riesgo principal por fase y criterio de salida.
 
 ## 2. Arquitectura
@@ -113,7 +113,7 @@ Note que el el sidecar se despliega como un contenedor adicional dentro de la mi
 > [!IMPORTANT]
 > **Pregunta 3:**
 > Retry, circuit breaker y rate limiting pueden entrar en conflicto si se calibran mal.
-> Proponga un conjunto coherente de parámetros iniciales para Chiper (timeouts, retries, umbral de apertura, reset timeout, rate y burst) y justifique cómo evitaría inestabilidad sistémica.
+> Proponga un conjunto coherente de parámetros iniciales para Cheapest (timeouts, retries, umbral de apertura, reset timeout, rate y burst) y justifique cómo evitaría inestabilidad sistémica.
 > Presente además una gráfica temporal esperada (latencia/error/requests a Inventario) antes y después de aplicar la calibración propuesta.
 
 ### 2.4 Patrones de disponibilidad
@@ -148,7 +148,7 @@ Un **circuit breaker** es un control de fallos que corta el tráfico hacia un se
 
 ![Diagrama de estados del circuit breaker](./recursos/circuit_breaker.png)
 
-**Cómo se ve en Chiper**
+**Cómo se ve en Cheapest**
 
 - Ventas llama a Inventario a traves del sidecar Envoy.
 - Si Inventario empieza a fallar (timeouts o 5xx), Envoy cuenta los errores.
@@ -180,7 +180,7 @@ espera min(2x, max_interval)
 intento 3 -> exito o error final
 ```
 
-**Cómo se ve en Chiper**
+**Cómo se ve en Cheapest**
 
 - Envoy reintenta automaticamente cuando Inventario responde 5xx.
 - El timeout total de la ruta debe cubrir el tiempo de reintentos.
@@ -195,7 +195,7 @@ intento 3 -> exito o error final
 
 La **graceful degradation** es una decision de negocio: el servicio devuelve una respuesta util aunque parcial cuando un componente critico no esta disponible. No evita la falla, pero protege la experiencia del usuario.
 
-**Cómo se ve en Chiper**
+**Cómo se ve en Cheapest**
 
 - Si Inventario no responde, Ventas registra el pedido con `status: pending_stock_confirmation`.
 - El tendero recibe confirmacion de pedido, pero la verificacion de stock queda diferida.
@@ -250,16 +250,19 @@ El template incluye:
 | `Load Balancers`   | ALB por servicio con Target Groups y Health Checks                            |
 | `API Gateway`      | HTTP API con rutas `/logistica/*`, `/inventario/*`, `/ventas/*` y stage `lab` |
 
+> [!NOTE]
+> **Warm-up en clase:** las secciones 4 a 6 completas (desplegar CloudFormation, calibrar el sidecar Envoy y reproducir el fallo en cascada baseline) están disponibles como una sesión práctica extendida para trabajar en clase: [`lab_5_warmup.md`](lab_5_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Aplicar tácticas de resiliencia**, ya que el baseline y la configuración del sidecar quedaron listos.
+
 ### 4.3 Preparar parámetros
 
 Antes de desplegar, publique las imágenes Docker en ECR y anote los URIs. En este laboratorio hay **cuatro imágenes**: las tres del monorepo más la del sidecar Envoy.
 
 | Servicio          | Repositorio sugerido     | Tag     | Dockerfile                          |
 | ----------------- | ------------------------ | ------- | ----------------------------------- |
-| Logística         | `chiper-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
-| Inventario        | `chiper-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
-| Ventas            | `chiper-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
-| Ventas sidecar    | `chiper-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
+| Logística         | `Cheapest-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
+| Inventario        | `Cheapest-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
+| Ventas            | `Cheapest-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
+| Ventas sidecar    | `Cheapest-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
 
 Tutorial de apoyo:
 - [Subir imágenes Docker a Amazon ECR](../tutoriales/subir_imagenes%20_a_ecr.md)
@@ -270,10 +273,10 @@ Tutorial de apoyo:
 ### 4.4 Desplegar el stack
 
 ```bash
-aws cloudformation deploy  --template-file lab_5/recursos/cloudformation_template.yaml  --stack-name chiper-lab5  --parameter-overrides LogisticaImageUri=<URI_ECR_LOGISTICA>:2.0.0 InventarioImageUri=<URI_ECR_INVENTARIO>:2.0.0 VentasImageUri=<URI_ECR_VENTAS>:2.0.0  VentasSidecarImageUri=<URI_ECR_SIDECAR>:2.0.0 DBPassword=<SU_CONTRASEÑA>  --region us-east-1
+aws cloudformation deploy  --template-file lab_5/recursos/cloudformation_template.yaml  --stack-name Cheapest-lab5  --parameter-overrides LogisticaImageUri=<URI_ECR_LOGISTICA>:2.0.0 InventarioImageUri=<URI_ECR_INVENTARIO>:2.0.0 VentasImageUri=<URI_ECR_VENTAS>:2.0.0  VentasSidecarImageUri=<URI_ECR_SIDECAR>:2.0.0 DBPassword=<SU_CONTRASEÑA>  --region us-east-1
 ```
 
-Monitoree el progreso en la consola de AWS → CloudFormation → Stack `chiper-lab5` → pestaña **Events**.
+Monitoree el progreso en la consola de AWS → CloudFormation → Stack `Cheapest-lab5` → pestaña **Events**.
 
 ### 4.5 Verificar el despliegue
 
@@ -281,7 +284,7 @@ Una vez el stack esté en estado `CREATE_COMPLETE`:
 
 ```bash
 # Obtener la URL del API Gateway
-aws cloudformation describe-stacks --stack-name chiper-lab5 --query "Stacks[0].Outputs[?OutputKey=='ApiGatewayUrl'].OutputValue" --output text
+aws cloudformation describe-stacks --stack-name Cheapest-lab5 --query "Stacks[0].Outputs[?OutputKey=='ApiGatewayUrl'].OutputValue" --output text
 ```
 
 Desde su computador verifique que los tres servicios responden:
@@ -365,14 +368,14 @@ Los seis puntos a completar son:
 
 ```bash
 # Construir la imagen del sidecar
-docker build -t chiper-ventas-sidecar:local apps/ventas/sidecar/
+docker build -t Cheapest-ventas-sidecar:local apps/ventas/sidecar/
 
 # Lanzar el sidecar apuntando a un inventario local (para verificar que el YAML es válido)
 docker run --rm \
   -e INVENTARIO_UPSTREAM_HOST=host.docker.internal \
   -e INVENTARIO_UPSTREAM_PORT=3002 \
   -p 10000:10000 -p 9901:9901 \
-  chiper-ventas-sidecar:local
+  Cheapest-ventas-sidecar:local
 
 # En otra terminal: verificar que Envoy está listo
 curl http://localhost:9901/ready
@@ -446,7 +449,7 @@ Actualice las Task Definitions del template CloudFormation con las siguientes va
 
 ### 6.1 Configurar el fallo
 
-1. En la consola de AWS → ECS → Task Definition `td-chiper-inventario`, cree una nueva revisión con:
+1. En la consola de AWS → ECS → Task Definition `td-Cheapest-inventario`, cree una nueva revisión con:
    - `FAULT_DELAY_MS=5000`
    - `RECOVERY_TIME_MS=600000`
 2. Actualice el servicio ECS de Inventario para que use la nueva revisión y espere que las tareas sean reemplazadas.
@@ -561,12 +564,12 @@ Configure throttling en el stage `lab` del API Gateway para limitar el tráfico 
 
 | Parámetro | Valor | Justificación |
 | --- | --- | --- |
-| Rate (req/s) | 100 | Límite sostenido para operación normal de Chiper |
+| Rate (req/s) | 100 | Límite sostenido para operación normal de Cheapest |
 | Burst | 200 | Permite absorber picos breves sin rechazar pedidos legítimos |
 
 Pasos en la consola de AWS:
 
-1. API Gateway → seleccione `chiper-ms-api`.
+1. API Gateway → seleccione `Cheapest-ms-api`.
 2. Stage `lab` → **Default route throttling**.
 3. Configure `Rate` y `Burst` con los valores de la tabla.
 4. Haga clic en **Save**.
@@ -584,7 +587,7 @@ Con las tres tácticas activas simultáneamente (sidecar completo + rate limitin
 
 > [!IMPORTANT]
 > **Pregunta 4:**
-> Si las tres tácticas cumplen ASRs en este laboratorio, ¿qué riesgo residual seguiría existiendo para una operación real de Chiper a mayor escala?
+> Si las tres tácticas cumplen ASRs en este laboratorio, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala?
 > Responda identificando al menos dos clases de fallos que estas tácticas no resuelven por sí solas y qué capacidad adicional haría falta.
 > Incluya un diagrama de arquitectura objetivo (estado actual vs capacidades faltantes) para mostrar dónde se cerrarían esos riesgos residuales.
 
@@ -646,7 +649,7 @@ Para ver el problema, ejecute el siguiente flujo con el código de la rama **ant
 > **Pregunta 9:**
 > Describa con precisión el estado de inconsistencia que se produce en cada escenario:
 > 1. Ventas registradas durante degradación: ¿qué diferencia hay entre lo que dice `ventas` en PostgreSQL y lo que dice `item_inventario.cantidad`?
-> 2. Retry sin idempotencia: ¿qué invariante de negocio se viola? ¿Cómo lo detectaría operacionalmente en Chiper?
+> 2. Retry sin idempotencia: ¿qué invariante de negocio se viola? ¿Cómo lo detectaría operacionalmente en Cheapest?
 
 ### 8.3 Conceptos: Outbox e Idempotencia
 
@@ -840,23 +843,23 @@ Adjunte:
 
 Incluya un análisis de 1 a 2 páginas que responda:
 
-1. ¿Por qué el retry sin backoff ni jitter puede empeorar una situación de fallo? Relacione la respuesta con el ASR-2 y con el escenario de Chiper (tenderos reintentando pedidos en el pico del lunes).
+1. ¿Por qué el retry sin backoff ni jitter puede empeorar una situación de fallo? Relacione la respuesta con el ASR-2 y con el escenario de Cheapest (tenderos reintentando pedidos en el pico del lunes).
 2. ¿Qué diferencia operativa tiene para un tendero recibir un error 500 frente a `status: pending_stock_confirmation`? ¿Bajo qué condiciones la degradación es aceptable para el negocio?
 3. ¿En qué momento el circuit breaker debería pasar a estado HALF-OPEN? ¿Qué riesgos hay en abrir demasiado pronto frente a demasiado tarde?
 4. ¿Cómo se complementan retry y circuit breaker en el sidecar? ¿Pueden conflictuarse? Describa un escenario concreto donde usarlos juntos sin coordinación podría generar un problema.
 5. ¿Por qué el rate limiting en API Gateway protege mejor ante un retry storm que el rate limiting implementado dentro del propio servicio?
 6. En este laboratorio las tácticas de resiliencia se implementaron en un sidecar en lugar de en el código de negocio. ¿Qué ventajas concretas tuvo este enfoque? ¿En qué escenarios el sidecar no sería suficiente y se necesitaría lógica de resiliencia dentro de la aplicación?
-7. Lea el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash. ¿Qué problema específico resuelve Aperture que el sidecar Envoy de este lab no resuelve? ¿En qué punto del crecimiento de Chiper tendría sentido adoptar un enfoque centralizado como ese?
-8. ¿Qué ventajas concretas tuvo desplegar con CloudFormation frente a la configuración manual del Lab 4? ¿En qué escenarios del negocio de Chiper (ej. expansión a México o Brasil, un incidente que requiera reconstruir el ambiente) sería esta capacidad crítica?
+7. Lea el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash. ¿Qué problema específico resuelve Aperture que el sidecar Envoy de este lab no resuelve? ¿En qué punto del crecimiento de Cheapest tendría sentido adoptar un enfoque centralizado como ese?
+8. ¿Qué ventajas concretas tuvo desplegar con CloudFormation frente a la configuración manual del Lab 4? ¿En qué escenarios del negocio de Cheapest (ej. expansión a México o Brasil, un incidente que requiera reconstruir el ambiente) sería esta capacidad crítica?
 9. ¿Por qué at-least-once + idempotencia no equivale a exactly-once distribuido? ¿Qué requeriría una garantía de exactly-once real entre dos servicios con bases de datos independientes?
-10. Con base en los datos de la tabla 5a, ¿el patrón Outbox aumenta la latencia de `POST /ventas`? Argumente en qué condiciones ese overhead sería aceptable para Chiper y en cuáles representaría un riesgo para los ASRs. Considere: tamaño del volumen transaccional, latencia de la base de datos RDS, y si el write adicional en `outbox_http_calls` ocurre dentro o fuera de la transacción principal.
+10. Con base en los datos de la tabla 5a, ¿el patrón Outbox aumenta la latencia de `POST /ventas`? Argumente en qué condiciones ese overhead sería aceptable para Cheapest y en cuáles representaría un riesgo para los ASRs. Considere: tamaño del volumen transaccional, latencia de la base de datos RDS, y si el write adicional en `outbox_http_calls` ocurre dentro o fuera de la transacción principal.
 
 ## Nota final (créditos AWS)
 
 Cuando termine el laboratorio, elimine todos los recursos para evitar consumo innecesario de créditos:
 
 ```bash
-aws cloudformation delete-stack --stack-name chiper-lab5 --region us-east-1
+aws cloudformation delete-stack --stack-name Cheapest-lab5 --region us-east-1
 ```
 
 Verifique en la consola que el stack pase a estado `DELETE_COMPLETE` y que no queden recursos huérfanos (especialmente instancias RDS e imágenes en ECR).

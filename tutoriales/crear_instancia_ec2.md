@@ -27,11 +27,11 @@ La instancia que vamos a crear en el tutorial está definida en la siguiente tab
 
 | Parámetro         | Valor                        |
 | ----------------- | ---------------------------- |
-| Nombre            | `chiper-app`                 |
+| Nombre            | `Cheapest-app`                 |
 | AMI               | Ubuntu Server 24.04 LTS      |
 | Tipo de instancia | `t2.medium`                  |
 | IP pública        | Habilitar                    |
-| Security Groups   | `chiper-ssh` + `chiper-http` |
+| Security Groups   | `Cheapest-ssh` + `Cheapest-http` |
 | Almacenamiento    | 8 GB                         |
 | AZ (Zona)         | `<AZ_ASIGNADA>`              |
 ### 1. Abrir AWS CloudShell
@@ -54,14 +54,14 @@ La instancia utilizará una **clave SSH** para autenticación.
 Ejecute:  
   
 ``` bash  
-aws ec2 create-key-pair --key-name chiper-key --query 'KeyMaterial' --output text > chiper-key.pem
+aws ec2 create-key-pair --key-name Cheapest-key --query 'KeyMaterial' --output text > Cheapest-key.pem
 ```
 
 Esto le dará la llave para poder acceder a la máquina que va a crear a través de ssh ya sea desde cloudshell o desde su terminal
 
 Para usarla, cambie los permisos de la clave:
 ``` bash
-chmod 400 chiper-key.pem
+chmod 400 Cheapest-key.pem
 ```
 
 ### 3. Obtener el ID de los Security Groups
@@ -69,7 +69,7 @@ chmod 400 chiper-key.pem
 Buscamos los grupos creados previamente. ([Tutorial Security Groups](crear_security_groups.md))
 
 ``` bash
-aws ec2 describe-security-groups --filters Name=group-name,Values=chiper-ssh,chiper-http --query "SecurityGroups[*].GroupId"
+aws ec2 describe-security-groups --filters Name=group-name,Values=Cheapest-ssh,Cheapest-http --query "SecurityGroups[*].GroupId"
 ```
 
 Ejemplo de salida:
@@ -159,7 +159,7 @@ Las instancias Ubuntu utilizan el usuario: `ubuntu`
 
 Desde su terminal use ssh para conectarse
 ``` bash
-ssh -i chiper-key.pem ubuntu@IP_PUBLICA
+ssh -i Cheapest-key.pem ubuntu@IP_PUBLICA
 ```
 # Conexión desde Windows
 
@@ -168,12 +168,12 @@ ssh -i chiper-key.pem ubuntu@IP_PUBLICA
 Si Windows tiene OpenSSH instalado:
 
 ``` bash
-ssh -i chiper-key.pem ubuntu@IP_PUBLICA
+ssh -i Cheapest-key.pem ubuntu@IP_PUBLICA
 ```
 ## Opción 2 — PuTTY
 
 1. Abrir **PuTTYgen**
-2. Convertir `chiper-key.pem` a `chiper-key.ppk`
+2. Convertir `Cheapest-key.pem` a `Cheapest-key.ppk`
 3. Abrir **PuTTY**
 4. Configurar:
 Host: ubuntu@IP_PUBLICA
@@ -187,20 +187,20 @@ Se ha creado una instancia EC2 con:
 
 |Parámetro|Valor|
 |---|---|
-|Nombre|`chiper-app`|
+|Nombre|`Cheapest-app`|
 |AMI|Ubuntu 24.04|
 |Tipo|`t2.medium`|
 |Almacenamiento|8 GB|
 |Acceso SSH|habilitado|
 |API|puerto 3000 habilitado|
 
-Esta instancia servirá para ejecutar el **backend del sistema Chiper**
+Esta instancia servirá para ejecutar el **backend del sistema Cheapest**
 
 ## Eliminar la instancia EC2
 
 Si ya no necesita la instancia creada, puede eliminarla usando **AWS CloudShell** con el siguiente comando.
 
-Primero obtenga el **InstanceId** de la instancia `chiper-app`:
+Primero obtenga el **InstanceId** de la instancia `Cheapest-app`:
 
 ```bash
 aws ec2 describe-instances --filters "Name=tag:Name,Values=<NOMBRE_INSTANCIA>" --query "Reservations[*].Instances[*].InstanceId"

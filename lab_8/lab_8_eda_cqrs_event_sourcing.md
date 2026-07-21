@@ -38,7 +38,7 @@
 
 | Elemento | Detalle |
 | --- | --- |
-| Título | EDA como solución al compounding de latencia: CQRS y Event Sourcing en Chiper |
+| Título | EDA como solución al compounding de latencia: CQRS y Event Sourcing en Cheapest |
 | Propósito | Demostrar que los mismos ASRs que el endpoint síncrono del Lab 7 violó bajo carga se satisfacen con un read model pre-computado, y cuantificar los trade-offs de consistencia eventual que esto introduce |
 | Resultados esperados | `GET /ventas/resumen-tienda/:tiendaId` (EDA) responde con p99 < 100 ms bajo cualquier nivel de carga; `GET /ventas/resumen-tienda-sync/:tiendaId` (síncrono) viola ASR-1 a alta carga por el fan-out; `POST /ventas/ventas` responde 201 aunque Inventario esté con desired count = 0 |
 | Infraestructura | CloudFormation + ECS/Fargate + EventBridge + SQS + DynamoDB + RDS + computador personal para JMeter |
@@ -47,13 +47,13 @@
 
 En el Lab 7, el endpoint `GET /ventas/resumen-operativo` -que llama síncronamente a Logística e Inventario- violó ASR-1 (p99 < 2000 ms) a cargas donde los servicios individuales funcionaban correctamente. La causa estructural fue el **fan-out síncrono**: la latencia del orquestador es la suma de las latencias de sus dependientes, y bajo carga esa suma crece de forma no lineal. La Pregunta 3 del Lab 7 les pidió proponer una alternativa. Este laboratorio implementa esa alternativa.
 
-Chiper tiene tres necesidades que la arquitectura síncrona no puede satisfacer simultáneamente:
+Cheapest tiene tres necesidades que la arquitectura síncrona no puede satisfacer simultáneamente:
 
 **1. Resumen instantáneo bajo pico de demanda.** Los tenderos consultan su dashboard en quincena y fines de semana, exactamente cuando el sistema está más cargado. El endpoint del Lab 7 falló en ese momento. Con CQRS, el read model está pre-computado en DynamoDB: cada consulta es un `GetItem` de ~5 ms independientemente de la carga.
 
 **2. Resiliencia en el registro de ventas.** Una venta debe poderse registrar aunque el servicio de Inventario esté en un depliegue parcial o saturado. Con EDA, `POST /ventas/ventas` escribe en PostgreSQL y en el Outbox; la respuesta llega en milisegundos sin esperar a Inventario. Los eventos se procesan cuando Inventario se recupera.
 
-**3. Re-proyectabilidad del read model.** Si el consumer de Inventario tiene un bug que corrompe el read model de DynamoDB, ¿cómo se restaura? Solo es posible si los eventos están almacenados. El **event store** de Pedidos y el Outbox de Ventas son las fuentes de verdad que permiten reconstruir cualquier proyección en cualquier momento -incluyendo proyecciones futuras, como los modelos de demanda del equipo de forecasting de Chiper.
+**3. Re-proyectabilidad del read model.** Si el consumer de Inventario tiene un bug que corrompe el read model de DynamoDB, ¿cómo se restaura? Solo es posible si los eventos están almacenados. El **event store** de Pedidos y el Outbox de Ventas son las fuentes de verdad que permiten reconstruir cualquier proyección en cualquier momento -incluyendo proyecciones futuras, como los modelos de demanda del equipo de forecasting de Cheapest.
 
 > [!IMPORTANT]
 > **Pregunta 1:**
@@ -69,7 +69,7 @@ Los ASRs son **idénticos a los del Lab 7**. El objetivo es demostrar que EDA lo
 | --- | --- | --- |
 | ASR-1 | Como tendero, quiero consultar el resumen operativo de mi tienda en un tiempo razonable para tomar decisiones de reabastecimiento. | p99 < 2000 ms durante operación normal (500 req/min) |
 | ASR-2 | Como COO, quiero mantener una baja tasa de error incluso durante eventos de alta demanda para no perder operaciones de tenderos. | Error % ≤ 10% durante pico (5000 req/min) |
-| ASR-3 | Como tendero, quiero que si uno de los servicios de Chiper está lento, mi consulta del resumen de tienda siga respondiendo sin fallar por completo. | Con Inventario en `desired count = 0`, error % de `GET /ventas/resumen-tienda/:tiendaId` = 0% |
+| ASR-3 | Como tendero, quiero que si uno de los servicios de Cheapest está lento, mi consulta del resumen de tienda siga respondiendo sin fallar por completo. | Con Inventario en `desired count = 0`, error % de `GET /ventas/resumen-tienda/:tiendaId` = 0% |
 
 Adicionalmente, EDA introduce una propiedad nueva que la arquitectura síncrona no podía ofrecer:
 
@@ -187,7 +187,7 @@ sequenceDiagram
 
 En EDA los servicios se comunican publicando y consumiendo **eventos** a través de un broker, en lugar de llamarse directamente. El productor publica un evento y continúa; no sabe quién lo consumirá ni cuándo.
 
-**Cómo se ve en Chiper**
+**Cómo se ve en Cheapest**
 
 Ventas publica `VentaCreada` en EventBridge cuando registra una venta. Inventario consume ese evento desde SQS cuando puede, a su propio ritmo. Los dos servicios nunca se llaman directamente en este flujo.
 
@@ -204,12 +204,12 @@ Ventas publica `VentaCreada` en EventBridge cuando registra una venta. Inventari
 
 **Cambios en el código**
 
-Para soportar EDA se creó el módulo compartido `libs/shared/eventbridge/src/eventbridge.service.ts`. Es un wrapper sobre `@aws-sdk/client-eventbridge` que expone un método `publish()` tipado con la interfaz `ChiperEvent`:
+Para soportar EDA se creó el módulo compartido `libs/shared/eventbridge/src/eventbridge.service.ts`. Es un wrapper sobre `@aws-sdk/client-eventbridge` que expone un método `publish()` tipado con la interfaz `CheapestEvent`:
 
 ```typescript
-// libs/shared/eventbridge/src/chiper-event.interface.ts
-export interface ChiperEvent {
-  source: 'chiper.ventas' | 'chiper.logistica';
+// libs/shared/eventbridge/src/Cheapest-event.interface.ts
+export interface CheapestEvent {
+  source: 'Cheapest.ventas' | 'Cheapest.logistica';
   detailType: 'VentaCreada' | 'PedidoCreado' | 'PedidoCambioEstado';
   detail: Record<string, unknown>;
 }
@@ -232,7 +232,7 @@ onModuleInit() {
 
 CQRS separa el modelo de **escritura** (commands) del modelo de **lectura** (queries) en estructuras de datos distintas, optimizadas para cada propósito. No son dos bases de datos obligatoriamente, pero sí dos modelos distintos.
 
-**Cómo se ve en Chiper**
+**Cómo se ve en Cheapest**
 
 - **Write model**: PostgreSQL con tablas normalizadas (`ventas`, `items_venta`). Se optimiza para integridad transaccional.
 - **Read model**: DynamoDB con un documento desnormalizado por tienda (`{ tiendaId, ventasMes, totalVentasMes, ultimasVentas }`). Se optimiza para lecturas rápidas con un solo `GetItem`.
@@ -275,14 +275,14 @@ El write model (PostgreSQL) no fue modificado. La tabla `ventas` y `items_venta`
 
 En Event Sourcing el **log de eventos** es la fuente de verdad, no el estado actual. El estado actual de una entidad se obtiene reproduciendo todos los eventos en orden. Los eventos son inmutables y se agregan de forma append-only.
 
-**Cómo se ve en Chiper**
+**Cómo se ve en Cheapest**
 
 La tabla `eventos_pedido` registra cada transición de estado de un Pedido: `PedidoCreado`, `PedidoCambioEstado`. Cada evento tiene una versión monotónica. La tabla `pedidos` sigue existiendo como proyección del estado actual (cache), pero si se corrompe, puede reconstruirse reproduciendo los eventos.
 
 **Por qué importa**
 
 - Si el read model de DynamoDB se corrompe por un bug en el consumer, se puede reconstruir reproduciendo todos los eventos `VentaCreada` del Outbox desde el origen.
-- Es posible crear **proyecciones nuevas** a partir del log histórico de eventos sin tocar producción: el equipo de forecasting de Chiper puede consumir todos los `VentaCreada` para entrenar modelos de demanda.
+- Es posible crear **proyecciones nuevas** a partir del log histórico de eventos sin tocar producción: el equipo de forecasting de Cheapest puede consumir todos los `VentaCreada` para entrenar modelos de demanda.
 - El historial de transiciones de un Pedido (`GET /logistics/pedidos/:id/historial`) es una consulta directa al event store, no una reconstrucción desde logs de auditoría.
 
 **Riesgo**
@@ -321,7 +321,7 @@ La implementación de este lab publica eventos a EventBridge directamente desde 
 ```typescript
 // libs/ventas/src/services/venta.service.ts (fragmento simplificado)
 const venta = await this.ventaRepository.create(ventaData);   // write de dominio
-await this.eventBridgeService.publish({ source: 'chiper.ventas', detailType: 'VentaCreada', detail: { ... } });
+await this.eventBridgeService.publish({ source: 'Cheapest.ventas', detailType: 'VentaCreada', detail: { ... } });
 // Si esta línea falla, la venta existe pero el evento nunca llegó a SQS.
 ```
 
@@ -332,7 +332,7 @@ El patrón que resuelve este riesgo —el **Outbox**— garantiza at-least-once:
 > `VentaService.create()` publica directamente a EventBridge después de guardar la venta en PostgreSQL.
 >
 > 1. ¿Qué garantía de entrega tiene esta implementación: at-most-once, at-least-once, o exactly-once? Justifique.
-> 2. Describa un escenario concreto en Chiper donde esta garantía sería un problema real. ¿Qué estado quedaría inconsistente y cómo se manifestaría para el tendero?
+> 2. Describa un escenario concreto en Cheapest donde esta garantía sería un problema real. ¿Qué estado quedaría inconsistente y cómo se manifestaría para el tendero?
 > 3. Proponga a alto nivel cómo lo resolvería sin cambiar el esquema de PostgreSQL. No es necesario implementarlo; basta con describir el mecanismo.
 
 ---
@@ -341,7 +341,7 @@ El patrón que resuelve este riesgo —el **Outbox**— garantiza at-least-once:
 
 | Categoría | Tecnología |
 | --- | --- |
-| Event broker | AWS EventBridge (custom bus `chiper-bus`) |
+| Event broker | AWS EventBridge (custom bus `Cheapest-bus`) |
 | Cola de mensajes | Amazon SQS (estándar + DLQ) |
 | Read model / CQRS | Amazon DynamoDB (on-demand, document store) |
 | Write model / Event Store | PostgreSQL + TypeORM (sin cambios estructurales) |
@@ -357,16 +357,16 @@ El patrón que resuelve este riesgo —el **Outbox**— garantiza at-least-once:
 ### 4.1 Prerequisitos
 
 Este lab parte del stack del **Lab 7** (ECS + RDS + API Gateway). Asegúrese de tener:
-- Las imágenes de los tres servicios publicadas en ECR desde la rama `chiper-eda`
+- Las imágenes de los tres servicios publicadas en ECR desde la rama `Cheapest-eda`
 - El stack del Lab 7 desplegado (o el de Lab 4 como base)
 
 Use el tag `4.0.0` para las imágenes de esta rama:
 
 | Servicio | Repositorio ECR | Tag |
 | --- | --- | --- |
-| Logística | `chiper-logistica` | `4.0.0` |
-| Inventario | `chiper-inventario` | `4.0.0` |
-| Ventas | `chiper-ventas` | `4.0.0` |
+| Logística | `Cheapest-logistica` | `4.0.0` |
+| Inventario | `Cheapest-inventario` | `4.0.0` |
+| Ventas | `Cheapest-ventas` | `4.0.0` |
 
 ### 4.2 Desplegar el stack
 
@@ -375,7 +375,7 @@ Use el tag `4.0.0` para las imágenes de esta rama:
 
 ```bash
 aws cloudformation deploy \
-  --stack-name chiper-lab8-eda \
+  --stack-name Cheapest-lab8-eda \
   --template-file laboratorios/lab_8/recursos/cloudformation_template.yaml \
   --parameter-overrides \
     LogisticaImageUri=<URI_ECR_LOGISTICA>:4.0.0 \
@@ -422,6 +422,9 @@ GET <ApiGatewayUrl>/logistics/pedidos/<pedidoId>/historial
 
 ---
 
+> [!NOTE]
+> **Warm-up en clase:** las secciones 5 y 6 (Tareas 1.1-1.3 y 3.1-3.2 — completar y revisar el código de Event Sourcing y CQRS) están disponibles como una sesión práctica de 40 minutos para trabajar en clase, sin necesidad de tener el stack desplegado: [`lab_8_warmup.md`](lab_8_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Experimento comparativo**.
+
 ## 5. Parte 1 - Event Sourcing: historial de Pedidos
 
 ### 5.1 Concepto
@@ -442,11 +445,11 @@ abc-123  | PedidoCambioEstado | { anterior: 'aprobado',        | 3       | 2024-
 
 La **versión monotónica** garantiza el orden de los eventos. Reproduciendo los eventos en orden, se puede reconstruir el estado del pedido en cualquier punto del tiempo.
 
-**¿Por qué esto importa para Chiper?** Si el read model de DynamoDB tiene un error de cálculo (bug en el consumer), los eventos almacenados permiten **re-proyectar** el read model desde cero. Sin el event store, los eventos ya fueron procesados por EventBridge y no son recuperables.
+**¿Por qué esto importa para Cheapest?** Si el read model de DynamoDB tiene un error de cálculo (bug en el consumer), los eventos almacenados permiten **re-proyectar** el read model desde cero. Sin el event store, los eventos ya fueron procesados por EventBridge y no son recuperables.
 
 ### 5.2 Implementación
 
-> El código vive en la rama `chiper-eda` del repositorio `chiper-api`.
+> El código vive en la rama `Cheapest-eda` del repositorio `Cheapest-api`.
 > La entidad `EventoPedido` ya está definida. Los repositorios tienen métodos con `throw new Error('Not implemented')` que deben completarse.
 
 #### Tarea 1.1 - Completar `EventoPedidoRepository`
@@ -623,7 +626,7 @@ Esta diferencia en los Target Groups de CloudWatch es la evidencia más directa 
 
 > [!IMPORTANT]
 > **Pregunta 5:**
-> El equipo de Chiper despliega una nueva versión del consumer de Inventario con un bug: en lugar de `ADD ventasMes :uno`, usa `ADD ventasMes :dos` (incrementa en 2 en vez de 1). El bug pasa a producción durante 2 horas antes de ser detectado.
+> El equipo de Cheapest despliega una nueva versión del consumer de Inventario con un bug: en lugar de `ADD ventasMes :uno`, usa `ADD ventasMes :dos` (incrementa en 2 en vez de 1). El bug pasa a producción durante 2 horas antes de ser detectado.
 >
 > Responda con precisión:
 > 1. ¿Qué datos en **DynamoDB** son incorrectos? ¿Qué datos en **PostgreSQL** son correctos?
@@ -631,7 +634,7 @@ Esta diferencia en los Target Groups de CloudWatch es la evidencia más directa 
 > 3. Para corregir DynamoDB, ¿qué información necesita? ¿Puede obtenerla del event store (`eventos_pedido`) o de la tabla `ventas` de PostgreSQL? ¿Cómo sería el proceso de re-proyección?
 > 4. ¿Existe algún estado que **no** pueda recuperarse automáticamente con event replay en este diseño? ¿Por qué?
 > 5. ¿Qué limitación estructural de EDA revela este escenario comparado con un sistema síncrono tradicional donde Inventario actualiza su estado directamente en cada llamada?
-> 6. Adicionalmente, dado que esta implementación usa entrega at-most-once hacia EventBridge: ¿en qué frecuencia de fallos de red o saturación de EventBridge se volvería crítico el riesgo de eventos perdidos para Chiper? ¿Qué volumen de ventas silenciosamente no reflejadas en el read model sería inaceptable para el negocio?
+> 6. Adicionalmente, dado que esta implementación usa entrega at-most-once hacia EventBridge: ¿en qué frecuencia de fallos de red o saturación de EventBridge se volvería crítico el riesgo de eventos perdidos para Cheapest? ¿Qué volumen de ventas silenciosamente no reflejadas en el read model sería inaceptable para el negocio?
 
 ---
 
@@ -670,9 +673,9 @@ Muestre la respuesta completa de `GET /logistics/pedidos/:id/historial` para un 
 
 Adjunte capturas de:
 
-- Consola AWS → EventBridge: custom bus `chiper-bus` en estado `ACTIVE`.
-- Consola AWS → SQS: cola `chiper-venta-creada` con el número de mensajes procesados y la DLQ.
-- Consola AWS → DynamoDB: tabla `chiper-resumen-tienda` con al menos un ítem visible en la consola.
+- Consola AWS → EventBridge: custom bus `Cheapest-bus` en estado `ACTIVE`.
+- Consola AWS → SQS: cola `Cheapest-venta-creada` con el número de mensajes procesados y la DLQ.
+- Consola AWS → DynamoDB: tabla `Cheapest-resumen-tienda` con al menos un ítem visible en la consola.
 - `GET /ventas/resumen-tienda/:tiendaId` retornando el documento JSON completo.
 - JMeter Summary Report para ambos Thread Groups en cada nivel de carga (capturas side-by-side: `resumen-tienda-sync` vs. `resumen-tienda`).
 - CloudWatch → RequestCount del Target Group de **Logística** e **Inventario**: captura side-by-side durante el nivel de Operación normal para `resumen-tienda-sync` vs. `resumen-tienda`. Debe mostrar fan-out 1:2 en el sync y 0 requests en el EDA.
@@ -689,8 +692,8 @@ Responda:
 
 1. ¿En qué nivel de carga el endpoint síncrono violó ASR-1? ¿El endpoint EDA llegó a violarlo? ¿Qué explica la diferencia estructural?
 2. ¿El endpoint EDA satisface ASR-3 con Inventario en `desired count = 0`? ¿El endpoint síncrono lo satisfacía con Inventario en `desired count = 1`? Compare ambos resultados.
-3. ¿Qué sacrificó Chiper al adoptar EDA para el resumen? Nombre dos escenarios de negocio concretos donde la **consistencia eventual** sería un problema real para Chiper.
-4. ¿En qué punto el overhead operativo de EDA (EventBridge + SQS + DynamoDB + Event Sourcing) deja de valer la pena? ¿Cuándo no recomendaría este patrón? Considere también el riesgo de at-most-once delivery: ¿qué nivel de pérdida de eventos sería tolerable para Chiper?
+3. ¿Qué sacrificó Cheapest al adoptar EDA para el resumen? Nombre dos escenarios de negocio concretos donde la **consistencia eventual** sería un problema real para Cheapest.
+4. ¿En qué punto el overhead operativo de EDA (EventBridge + SQS + DynamoDB + Event Sourcing) deja de valer la pena? ¿Cuándo no recomendaría este patrón? Considere también el riesgo de at-most-once delivery: ¿qué nivel de pérdida de eventos sería tolerable para Cheapest?
 5. Responda la Pregunta 5 (escenario de fallo). ¿Qué limitación de EDA revela ese escenario y cómo se mitigaría en producción?
 
 ---
@@ -698,5 +701,5 @@ Responda:
 > **Nota:** Al terminar, elimine los recursos para evitar costos:
 >
 > ```bash
-> aws cloudformation delete-stack --stack-name chiper-lab8-eda
+> aws cloudformation delete-stack --stack-name Cheapest-lab8-eda
 > ```

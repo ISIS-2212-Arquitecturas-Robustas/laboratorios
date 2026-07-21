@@ -12,7 +12,7 @@
 
 ## Objetivos
 
-- Desplegar la aplicación de Chiper en una arquitectura de microservicios usando AWS.
+- Desplegar la aplicación de Cheapest en una arquitectura de microservicios usando AWS.
 - Ejecutar pruebas de carga sobre dos endpoints criticos (GET y POST) en simultaneo.
 - Evaluar el atributo de calidad principal del laboratorio: escalabilidad.
 - Analizar el comportamiento del sistema distribuido bajo carga: latencia, throughput, errores y capacidad de escalar por servicio.
@@ -34,7 +34,7 @@
 
 | Elemento | Detalle |
 |---|---|
-| Título | Prueba de carga a arquitectura de microservicios de Chiper en AWS |
+| Título | Prueba de carga a arquitectura de microservicios de Cheapest en AWS |
 | Propósito | Evaluar la escalabilidad del sistema al ejecutar cargas simultaneas en endpoints GET y POST |
 | Resultados esperados | Evidenciar como la separacion en microservicios permite escalar de forma independiente y sostener mayor carga |
 | Infraestructura | API Gateway + ECS/Fargate + ECR + RDS + computador personal para ejecutar JMeter |
@@ -50,7 +50,7 @@
 > [!IMPORTANT]
 > **Pregunta 1:**
 > REQ1, REQ2 y REQ3 pueden degradarse de forma diferente por servicio.
-> Defina una medida de respuesta simple (por ejemplo, ganancia de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados del laboratorio pasado y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Chiper cuando se escala verticalmente.
+> Defina una medida de respuesta simple (por ejemplo, ganancia de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados del laboratorio pasado y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Cheapest cuando se escala verticalmente.
 
 ### 1.3 Qué se va a probar
 
@@ -91,6 +91,7 @@ Se prueban dos escenarios funcionales:
 > **Pregunta 2:**
 > Si el sistema no cumple REQ3 durante carga simultánea, ¿cómo determinaría si el problema está en desacoplamiento insuficiente entre microservicios o en capacidad de infraestructura (ECS/RDS/API Gateway)?
 > Presente su respuesta con un diagrama de diagnóstico (hipótesis -> métricas -> evidencia -> decisión) y al menos una gráfica comparativa de soporte.
+
 ## 3. Tecnologías
 
 | Categoría | Tecnologías |
@@ -109,15 +110,18 @@ Antes de iniciar el despliegue, revise la guía de migración, es importante que
 
 - [Guia de migracion de monolito a microservicios](./guia_migracion_monolito_microservicios.md)
 
+> [!NOTE]
+> **Warm-up en clase:** la sección 4.1 (Publicar imágenes en ECR) está disponible como una sesión práctica de 40 minutos para trabajar en clase: [`lab_4_warmup.md`](lab_4_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **4.2 Configurar base de datos en RDS**.
+
 ### 4.1 Publicar imágenes en ECR
 
 Debe crear un repositorio por servicio. Los cambios con respecto al monolito están en la rama `microservicios`
 
 | Servicio   | Nombre sugerido del repositorio | Nombre de la imagen | Tag imagen |
 | ---------- | --------------------------- | ---------- | ---------- |
-| Logistica  | `chiper-logistica`          | `logistica-service`          | `1.0.0`    |
-| Inventario | `chiper-inventario`         | `inventario-service`         | `1.0.0`    |
-| Ventas     | `chiper-ventas`             | `ventas-service`             | `1.0.0`    |
+| Logistica  | `Cheapest-logistica`          | `logistica-service`          | `1.0.0`    |
+| Inventario | `Cheapest-inventario`         | `inventario-service`         | `1.0.0`    |
+| Ventas     | `Cheapest-ventas`             | `ventas-service`             | `1.0.0`    |
 
 Para cada servicio debe: construir una imagen, etiquetar con el URI del repositorio y publicar en ECR.
 
@@ -132,7 +136,7 @@ Y dentro de cada repositorio
 ### 4.2 Configurar base de datos en RDS
 
 Tutorial de apoyo:
-- [Crear una instancia RDS PostgreSQL para Chiper](../tutoriales/crear_instancia_rds.md)
+- [Crear una instancia RDS PostgreSQL para Cheapest](../tutoriales/crear_instancia_rds.md)
 
 1. Cree una instancia RDS PostgreSQL para el laboratorio.
 2. Configure Security Groups para permitir trafico solo desde ECS.
@@ -144,9 +148,9 @@ Recursos de ECS (Fargate) y parametros necesarios para el proyecto del curso:
 
 | Servicio   | Task Definition        | Servicio ECS            | Puerto contenedor | Desired count inicial | Variables a declarar                                                                         |
 | ---------- | ---------------------- | ----------------------- | ----------------- | --------------------- | -------------------------------------------------------------------------------------------- |
-| Logistica  | `td-chiper-logistica`  | `svc-chiper-logistica`  | 3001              | 1                     | `PORT=3001`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`                       |
-| Inventario | `td-chiper-inventario` | `svc-chiper-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
-| Ventas     | `td-chiper-ventas`     | `svc-chiper-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
+| Logistica  | `td-Cheapest-logistica`  | `svc-Cheapest-logistica`  | 3001              | 1                     | `PORT=3001`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`                       |
+| Inventario | `td-Cheapest-inventario` | `svc-Cheapest-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
+| Ventas     | `td-Cheapest-ventas`     | `svc-Cheapest-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
 
 Antes de crear los servicios, configure el security group de las tareas para permitir trafico entrante en los puertos 3001, 3002 y 3003. Sin esa regla, las tareas quedan en `RUNNING` pero inaccesibles desde afuera, y tanto el curl directo como los healthchecks de API Gateway fallaran con timeout.
 
@@ -155,7 +159,7 @@ Verifique que todas las tareas queden en estado RUNNING antes de pasar a API Gat
 > [!IMPORTANT]
 > **Pregunta 3:**
 > Suponga que solo puede aumentar `desired count` en un servicio antes de una ventana comercial crítica.
-> ¿Cuál escalaría primero en Chiper y bajo qué evidencia cuantitativa tomaría esa decisión?
+> ¿Cuál escalaría primero en Cheapest y bajo qué evidencia cuantitativa tomaría esa decisión?
 > Incluya qué métrica usaría para evitar escalar a ciegas.
 > Muestre esa decisión en una gráfica por servicio (por ejemplo saturación o costo-beneficio marginal) para justificar por qué ese servicio se prioriza.
 
@@ -165,7 +169,7 @@ Tutorial de apoyo:
 ### 4.4 Exponer APIs con API Gateway
 
 Tutorial de apoyo:
-- [Configurar API Gateway para microservicios de Chiper](../tutoriales/configurar_api_gateway.md)
+- [Configurar API Gateway para microservicios de Cheapest](../tutoriales/configurar_api_gateway.md)
 
 Recursos de API Gateway (una ruta por servicio) y parametros necesarios:
 
@@ -187,7 +191,7 @@ Recursos globales de API Gateway y parametros necesarios:
 
 | Recurso global | Nombre sugerido | Parametros necesarios                                                                   |
 | -------------- | --------------- | --------------------------------------------------------------------------------------- |
-| API            | `chiper-ms-api` | Tipo de API (HTTP/REST), CORS y esquema de autenticacion/autorizacion para laboratorio. |
+| API            | `Cheapest-ms-api` | Tipo de API (HTTP/REST), CORS y esquema de autenticacion/autorizacion para laboratorio. |
 | Stage          | `lab`           | Nombre de stage y variables de stage (si aplica).                                       |
 | Deployment     | `deploy-lab`    | Stage destino y version/publicacion de rutas e integraciones.                           |
 
@@ -237,7 +241,7 @@ Ejecute al menos 8 repeticiones para operacion normal y estres fuerte. Para el r
 
 > [!IMPORTANT]
 > **Pregunta 4:**
-> Diseñe una estrategia de distribución de carga GET/POST (por ejemplo 70/30, 60/40, 50/50) que represente un lunes de alta demanda en Chiper.
+> Diseñe una estrategia de distribución de carga GET/POST (por ejemplo 70/30, 60/40, 50/50) que represente un lunes de alta demanda en Cheapest.
 > ¿Qué distribución escogería para evaluar riesgo real y cuál para estresar el peor caso técnico?
 > Justifique por qué no necesariamente deben coincidir.
 > Incluya una gráfica comparativa de escenarios (barras o líneas) que muestre el efecto esperado de cada distribución sobre p99, throughput y error %.
@@ -287,7 +291,7 @@ Para este laboratorio, reporte:
 > [!IMPORTANT]
 > **Pregunta 5:**
 > ¿Qué significa exactamente "dejar de escalar eficientemente" en términos medibles para este laboratorio?
-> Defina un criterio y represéntelo en una gráfica con sus resultados y explique en qué punto la curva evidencia que el sistema deja de escalar eficientemente en Chiper.
+> Defina un criterio y represéntelo en una gráfica con sus resultados y explique en qué punto la curva evidencia que el sistema deja de escalar eficientemente en Cheapest.
 
 ## 7. Entregables
 
@@ -338,7 +342,7 @@ Incluya un analisis de 1 a 2 paginas que responda:
 5. El patron de degradacion fue gradual o abrupto.
 6. Cual fue el cuello de botella principal (aplicacion, red, API Gateway, RDS u otro).
 7. Dada la evidencia recolectada, que estrategia de escalamiento en ECS recomiendan (horizontal, vertical o mixta) y por que.
-8. Que cambios de arquitectura proponen para reducir el acoplamiento con RDS y que trade-offs introducen. Investigue que tácticas (diferentes de una base de datos por servicio) puede usar y justifique basado en el contexto de Chiper
+8. Que cambios de arquitectura proponen para reducir el acoplamiento con RDS y que trade-offs introducen. Investigue que tácticas (diferentes de una base de datos por servicio) puede usar y justifique basado en el contexto de Cheapest
 9. Si tuvieran que priorizar una inversion de infraestructura para el siguiente pico de 5000 req/min, cual componente reforzarían primero y como justifican la decision con las medidas de respuesta.
 
 

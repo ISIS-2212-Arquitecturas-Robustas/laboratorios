@@ -2,7 +2,7 @@
 
 ## Objetivos
 
-- Crear un Application Load Balancer (ALB) en AWS para exponer la API de Chiper.
+- Crear un Application Load Balancer (ALB) en AWS para exponer la API de Cheapest.
 - Conectar varias instancias EC2 de la aplicacion al balanceador mediante un Target Group.
 - Validar que el trafico se distribuya correctamente entre instancias.
 
@@ -32,12 +32,12 @@ Puede seguir este tutorial usando CloudShell o la consola visual de AWS. Si pref
 
 En este tutorial se asume una arquitectura minima:
 
-- `chiper-app-1` (EC2 con backend)
-- `chiper-app-2` (EC2 con backend)
-- `chiper-app-3` (EC2 con backend)
-- `chiper-alb` (Application Load Balancer)
+- `Cheapest-app-1` (EC2 con backend)
+- `Cheapest-app-2` (EC2 con backend)
+- `Cheapest-app-3` (EC2 con backend)
+- `Cheapest-alb` (Application Load Balancer)
 
-> Si ya tiene una sola instancia (`chiper-app`), cree `chiper-app-2` y `chiper-app-3` para completar el balanceo con 3 targets.
+> Si ya tiene una sola instancia (`Cheapest-app`), cree `Cheapest-app-2` y `Cheapest-app-3` para completar el balanceo con 3 targets.
 
 ### 1. Abrir AWS CloudShell
 
@@ -70,7 +70,7 @@ Guarde:
 Este grupo permitira trafico HTTP publico al balanceador.
 
 ```bash
-aws ec2 create-security-group  --group-name chiper-alb-http  --description "HTTP publico para ALB de Chiper"  --vpc-id <VPC_ID>
+aws ec2 create-security-group  --group-name Cheapest-alb-http  --description "HTTP publico para ALB de Cheapest"  --vpc-id <VPC_ID>
 ```
 
 Salida esperada:
@@ -91,10 +91,10 @@ aws ec2 authorize-security-group-ingress  --group-id <SG_ALB_ID>  --protocol tcp
 
 Las instancias no deberian recibir trafico publico directo al puerto 3000 cuando se usa ALB. Lo recomendado es permitir el puerto 3000 solo desde el Security Group del ALB.
 
-Primero identifique el Security Group de app (ejemplo: `chiper-http`):
+Primero identifique el Security Group de app (ejemplo: `Cheapest-http`):
 
 ```bash
-aws ec2 describe-security-groups --filters Name=group-name,Values=chiper-http --query "SecurityGroups[*].GroupId" --output text
+aws ec2 describe-security-groups --filters Name=group-name,Values=Cheapest-http --query "SecurityGroups[*].GroupId" --output text
 ```
 
 Agregue regla para permitir trafico desde el SG del ALB al puerto 3000:
@@ -106,7 +106,7 @@ aws ec2 authorize-security-group-ingress  --group-id <SG_APP_ID>  --protocol tcp
 ### 5. Crear Target Group
 
 ```bash
-aws elbv2 create-target-group  --name chiper-tg  --protocol HTTP  --port 3000  --target-type instance  --vpc-id <VPC_ID>  --health-check-protocol HTTP  --health-check-path /health  --health-check-port traffic-port
+aws elbv2 create-target-group  --name Cheapest-tg  --protocol HTTP  --port 3000  --target-type instance  --vpc-id <VPC_ID>  --health-check-protocol HTTP  --health-check-path /health  --health-check-port traffic-port
 ```
 
 Guarde el `TargetGroupArn`.
@@ -116,7 +116,7 @@ Guarde el `TargetGroupArn`.
 Obtenga IDs de las instancias de app:
 
 ```bash
-aws ec2 describe-instances  --filters "Name=tag:Name,Values=chiper-app-1,chiper-app-2,chiper-app-3,chiper-app" "Name=instance-state-name,Values=running"  --query "Reservations[*].Instances[*].InstanceId"  --output text
+aws ec2 describe-instances  --filters "Name=tag:Name,Values=Cheapest-app-1,Cheapest-app-2,Cheapest-app-3,Cheapest-app" "Name=instance-state-name,Values=running"  --query "Reservations[*].Instances[*].InstanceId"  --output text
 ```
 
 Registre instancias en el Target Group:
@@ -130,7 +130,7 @@ aws elbv2 register-targets  --target-group-arn <TARGET_GROUP_ARN>  --targets Id=
 ### 7. Crear Application Load Balancer
 
 ```bash
-aws elbv2 create-load-balancer  --name chiper-alb  --type application  --scheme internet-facing  --subnets <SUBNET_1> <SUBNET_2>  --security-groups <SG_ALB_ID>
+aws elbv2 create-load-balancer  --name Cheapest-alb  --type application  --scheme internet-facing  --subnets <SUBNET_1> <SUBNET_2>  --security-groups <SG_ALB_ID>
 ```
 
 Guarde:
@@ -171,9 +171,9 @@ Al finalizar, tendra:
 
 | Recurso | Nombre sugerido | Funcion |
 |---|---|---|
-| Security Group ALB | `chiper-alb-http` | Permite trafico HTTP publico al ALB |
-| Target Group | `chiper-tg` | Agrupa instancias de app en puerto 3000 |
-| Load Balancer | `chiper-alb` | Distribuye trafico HTTP hacia instancias saludables |
+| Security Group ALB | `Cheapest-alb-http` | Permite trafico HTTP publico al ALB |
+| Target Group | `Cheapest-tg` | Agrupa instancias de app en puerto 3000 |
+| Load Balancer | `Cheapest-alb` | Distribuye trafico HTTP hacia instancias saludables |
 
 Con esto, su sistema deja de depender de una sola instancia expuesta publicamente y queda listo para pruebas de carga mas realistas.
 

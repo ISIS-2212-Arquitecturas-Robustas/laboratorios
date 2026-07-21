@@ -1,4 +1,4 @@
-# Configurar API Gateway para microservicios de Chiper
+# Configurar API Gateway para microservicios de Cheapest
 
 ## Objetivos
 
@@ -33,7 +33,7 @@ Si prefiere interfaz grafica, puede apoyarse en:
 | Parámetro | Valor sugerido |
 | --- | --- |
 | Tipo API | HTTP API |
-| Nombre API | `chiper-api` |
+| Nombre API | `Cheapest-api` |
 | Stage | `dev` |
 | Endpoint backend | `http://<IP_PUBLICA_TAREA_ECS>:<PUERTO_CONTENEDOR>` |
 
@@ -43,7 +43,7 @@ Si prefiere interfaz grafica, puede apoyarse en:
 ### 1. Crear API HTTP
 
 ```bash
-aws apigatewayv2 create-api  --name chiper-api  --protocol-type HTTP
+aws apigatewayv2 create-api  --name Cheapest-api  --protocol-type HTTP
 ```
 
 Guarde:
@@ -118,7 +118,7 @@ curl -X POST "https://<API_ID>.execute-api.<REGION>.amazonaws.com/dev/logistics/
 ```
 
 > [!NOTE]
-> Los endpoints de escritura (POST) de Chiper referencian entidades existentes por UUID (tienda, moneda, producto). Antes de poder probar un POST exitoso necesita datos base cargados en la RDS (vea el script `npm run db:seed` del repositorio, o cree primero los recursos padres via API). Si no tiene datos base, el POST fallara con un error de base de datos (no de conectividad) — eso igual confirma que la ruta y la integracion de API Gateway estan bien configuradas.
+> Los endpoints de escritura (POST) de Cheapest referencian entidades existentes por UUID (tienda, moneda, producto). Antes de poder probar un POST exitoso necesita datos base cargados en la RDS (vea el script `npm run db:seed` del repositorio, o cree primero los recursos padres via API). Si no tiene datos base, el POST fallara con un error de base de datos (no de conectividad) — eso igual confirma que la ruta y la integracion de API Gateway estan bien configuradas.
 
 ## Resultado final
 
@@ -126,7 +126,7 @@ Al terminar debe tener:
 
 | Recurso | Nombre sugerido | Resultado |
 | --- | --- | --- |
-| HTTP API | `chiper-api` | Creada |
+| HTTP API | `Cheapest-api` | Creada |
 | Rutas de negocio | `ANY /<prefijo>/{proxy+}` por servicio | Integradas |
 | Rutas de health | `GET /<prefijo>/health` por servicio | Integradas |
 | Stage | `dev` | Desplegado |

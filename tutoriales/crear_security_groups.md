@@ -21,7 +21,7 @@ La VPC que vamos a crear en el tutorial está definida en la siguiente tabla
 
 | Parámetro    | Valor                          |
 | ------------ | ------------------------------ |
-| Nombre       | `chiper-ssh`                   |
+| Nombre       | `Cheapest-ssh`                   |
 | Descripción  | Acceso SSH a instancias        |
 | Inbound rule | SSH (22) desde `Anywhere-IPv4` |
 ### 1. Abrir AWS CloudShell
@@ -116,7 +116,7 @@ Debe aparecer algo similar a:
             "VpcId": "vpc-0add8539168166c0f",
             "SecurityGroupArn": "arn:aws:ec2:us-east-1:449642781982:security-group/sg-06e0bebff7c164598",
             "OwnerId": "449642781982",
-            "GroupName": "chiper-ssh",
+            "GroupName": "Cheapest-ssh",
             "Description": "Acceso SSH a instancias",
             "IpPermissions": [
                 {
@@ -145,7 +145,7 @@ El Security Group creado tiene la siguiente configuración:
 
 |Parámetro|Valor|
 |---|---|
-|Nombre|`chiper-ssh`|
+|Nombre|`Cheapest-ssh`|
 |Descripción|Acceso SSH a instancias|
 |Inbound rule|SSH (22) desde `0.0.0.0/0`|
 En la AWS console

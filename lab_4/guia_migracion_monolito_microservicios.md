@@ -1,7 +1,7 @@
 # Guía de Migración: De Monolito a Microservicios
 
 
-Este documento describe el proceso de migración de **chiper-api** (monolito NestJS) a el proyecto en la rama **microservices** (arquitectura de microservicios con NestJS monorepo).
+Este documento describe el proceso de migración de **Cheapest-api** (monolito NestJS) a el proyecto en la rama **microservices** (arquitectura de microservicios con NestJS monorepo).
 
 La API gestiona tres dominios de negocio:
 - **Logística**: catálogo de productos, pedidos, despachos, promociones
@@ -13,7 +13,7 @@ La API gestiona tres dominios de negocio:
 ## 1. Arquitectura original: Monolito
 
 ```
-chiper-api/
+Cheapest-api/
 └── src/
     ├── datasources/          # Configuración central de base de datos
     ├── logistica/            # Módulo de logística
@@ -67,7 +67,7 @@ export class ItemInventarioService {
 ## 2. Arquitectura objetivo: Microservicios
 
 ```
-chiper-api-microservices/
+Cheapest-api-microservices/
 ├── apps/
 │   ├── logistica/            # Aplicación 1 — puerto 3001
 │   │   ├── src/
@@ -411,6 +411,6 @@ Los endpoints son **idénticos** en ambas versiones; solo cambia el puerto donde
 
 1. **Monorepo en lugar de repos separados**: facilita compartir librerías (`libs/shared/`) y mantener consistencia de versiones entre servicios.
 
-2. **Base de datos compartida**: se eligió una BD compartida en lugar de una BD por servicio pensando en que Chiper cuenta con datos reales y valiosos que tendrán que migrarse de forma gradual.
+2. **Base de datos compartida**: se eligió una BD compartida en lugar de una BD por servicio pensando en que Cheapest cuenta con datos reales y valiosos que tendrán que migrarse de forma gradual.
 
 3. **Librerías en `libs/`**: toda la lógica de negocio vive en librerías, no en las apps. Las apps son solo puntos de entrada (`main.ts` + `app.module.ts`), lo que facilita reutilizar la lógica si se agregan nuevas apps.

@@ -55,7 +55,7 @@ Se usará la siguiente información de ejemplo:
 
 ```text
 Región: us-east-1
-Nombre del clúster: chiper-cluster
+Nombre del clúster: Cheapest-cluster
 Familia de la tarea: inventario-task
 Nombre del servicio: inventario-service
 Nombre del contenedor: inventario-container
@@ -79,7 +79,7 @@ Antes de crear el servicio, verifique o cree el security group que usaran las ta
 Ahora cree el clúster de ECS:
 
 ```bash
-aws ecs create-cluster --cluster-name chiper-cluster --region us-east-1
+aws ecs create-cluster --cluster-name Cheapest-cluster --region us-east-1
 ```
 
 Este comando crea el clúster lógico donde se ejecutará el servicio.
@@ -103,9 +103,9 @@ Cree un archivo llamado `task-definition.json` con el siguiente contenido:
       "essential": true,
       "environment": [
         { "name": "PORT", "value": "3000" },
-        { "name": "DB_HOST", "value": "chiper-rds.xxxxx.us-east-1.rds.amazonaws.com" },
+        { "name": "DB_HOST", "value": "Cheapest-rds.xxxxx.us-east-1.rds.amazonaws.com" },
         { "name": "DB_PORT", "value": "5432" },
-        { "name": "DB_NAME", "value": "chiper" },
+        { "name": "DB_NAME", "value": "Cheapest" },
         { "name": "DB_USER", "value": "postgres" },
         { "name": "DB_PASSWORD", "value": "postgres" }
       ],
@@ -156,14 +156,14 @@ Este comando registra la definición en ECS para que luego pueda ser usada por u
 Ahora cree el servicio dentro del clúster:
 
 ```bash
-aws ecs create-service  --cluster chiper-cluster  --service-name inventario-service  --task-definition inventario-task  --desired-count 1  --launch-type FARGATE  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxx],securityGroups=[sg-xxxxxxxx],assignPublicIp=ENABLED}"  --region us-east-1
+aws ecs create-service  --cluster Cheapest-cluster  --service-name inventario-service  --task-definition inventario-task  --desired-count 1  --launch-type FARGATE  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxx],securityGroups=[sg-xxxxxxxx],assignPublicIp=ENABLED}"  --region us-east-1
 ```
 
 ### Explicación
 
 Este comando crea un servicio que:
 
-- usa el clúster `chiper-cluster`
+- usa el clúster `Cheapest-cluster`
 - ejecuta la task definition `inventario-task`
 - mantiene **1 tarea activa**
 - usa **Fargate**
@@ -177,7 +177,7 @@ AWS documenta que las tareas Fargate usan red `awsvpc`, por lo que requieren con
 Para verificar que el servicio fue creado, ejecute:
 
 ```bash
-aws ecs list-services --cluster chiper-cluster --region us-east-1
+aws ecs list-services --cluster Cheapest-cluster --region us-east-1
 ```
 
 Este comando muestra los servicios registrados en el clúster. Si todo salió bien, verá el ARN del servicio recién creado.
@@ -187,7 +187,7 @@ Este comando muestra los servicios registrados en el clúster. Si todo salió bi
 Para ver el estado detallado del servicio, ejecute:
 
 ```bash
-aws ecs describe-services --cluster chiper-cluster --services inventario-service --region us-east-1
+aws ecs describe-services --cluster Cheapest-cluster --services inventario-service --region us-east-1
 ```
 
 Este comando permite revisar el estado del servicio, la cantidad deseada de tareas y la cantidad que realmente está corriendo. Le sirve para confirmar que ECS ya intentó lanzar el contenedor.
@@ -197,7 +197,7 @@ Este comando permite revisar el estado del servicio, la cantidad deseada de tare
 Para ver las tareas creadas por el servicio, ejecute:
 
 ```bash
-aws ecs list-tasks --cluster chiper-cluster --service-name inventario-service --region us-east-1
+aws ecs list-tasks --cluster Cheapest-cluster --service-name inventario-service --region us-east-1
 ```
 
 
@@ -208,7 +208,7 @@ Este comando muestra las tareas asociadas al servicio. Si la tarea arrancó corr
 Copie el ARN de la tarea devuelto en el paso anterior y úselo aquí:
 
 ```bash
-aws ecs describe-tasks --cluster chiper-cluster --tasks <task-arn> --region us-east-1
+aws ecs describe-tasks --cluster Cheapest-cluster --tasks <task-arn> --region us-east-1
 ```
 
 Este comando le permite revisar si la tarea está en estado `RUNNING`, si falló al iniciar, o si fue detenida por algún problema de red, permisos o arranque del contenedor.
@@ -230,13 +230,13 @@ Si la tarea recibió IP pública, aquí podrá verla. Eso le permitirá probar e
 Si desea eliminar el servicio, ejecute primero:
 
 ```bash
-aws ecs update-service --cluster chiper-cluster --service inventario-service --desired-count 0 --region us-east-1
+aws ecs update-service --cluster Cheapest-cluster --service inventario-service --desired-count 0 --region us-east-1
 ```
 
 Luego:
 
 ```bash
-aws ecs delete-service --cluster chiper-cluster --service inventario-service --force --region us-east-1
+aws ecs delete-service --cluster Cheapest-cluster --service inventario-service --force --region us-east-1
 ```
 
 Si desea desregistrar la task definition, puede hacerlo con la revisión específica, por ejemplo:
@@ -248,5 +248,5 @@ aws ecs deregister-task-definition --task-definition inventario-task:1 --region 
 Y si desea eliminar el clúster:
 
 ```bash
-aws ecs delete-cluster --cluster chiper-cluster --region us-east-1
+aws ecs delete-cluster --cluster Cheapest-cluster --region us-east-1
 ```

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Chiper Lab 8 — EDA: EventBridge + SQS + DynamoDB sobre la infraestructura del Lab 4/7.
+  Cheapest Lab 8 — EDA: EventBridge + SQS + DynamoDB sobre la infraestructura del Lab 4/7.
   Despliega ECS (Fargate) para los tres microservicios, RDS PostgreSQL, API Gateway,
   EventBridge custom bus, SQS queue, DLQ y tabla DynamoDB para el read model CQRS.
 
@@ -23,7 +23,7 @@ Parameters:
     Default: postgres
   DBName:
     Type: String
-    Default: chiper
+    Default: Cheapest
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC donde se desplegara la infraestructura
@@ -41,7 +41,7 @@ Resources:
   EcsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: SG para tareas ECS, ALBs y VPC Link de Chiper Lab 8
+      GroupDescription: SG para tareas ECS, ALBs y VPC Link de Cheapest Lab 8
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -58,12 +58,12 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: chiper-lab8-ecs-sg
+          Value: Cheapest-lab8-ecs-sg
 
   RdsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: SG para RDS PostgreSQL de Chiper Lab 8
+      GroupDescription: SG para RDS PostgreSQL de Cheapest Lab 8
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -72,14 +72,14 @@ Resources:
           SourceSecurityGroupId: !Ref EcsSecurityGroup
       Tags:
         - Key: Name
-          Value: chiper-lab8-rds-sg
+          Value: Cheapest-lab8-rds-sg
 
   # ─── RDS PostgreSQL ──────────────────────────────────────────────────────────
 
   RdsSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnet group for Chiper Lab 8 RDS
+      DBSubnetGroupDescription: Subnet group for Cheapest Lab 8 RDS
       SubnetIds:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
@@ -88,7 +88,7 @@ Resources:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     Properties:
-      DBInstanceIdentifier: chiper-lab8-postgres
+      DBInstanceIdentifier: Cheapest-lab8-postgres
       DBInstanceClass: db.t3.micro
       Engine: postgres
       EngineVersion: '15'
@@ -104,23 +104,23 @@ Resources:
 
   # ─── EventBridge ─────────────────────────────────────────────────────────────
 
-  ChiperEventBus:
+  CheapestEventBus:
     Type: AWS::Events::EventBus
     Properties:
-      Name: chiper-bus
+      Name: Cheapest-bus
 
   # ─── SQS ─────────────────────────────────────────────────────────────────────
 
   VentaCreadaDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: chiper-venta-creada-dlq
+      QueueName: Cheapest-venta-creada-dlq
       MessageRetentionPeriod: 1209600  # 14 días
 
   VentaCreadaQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: chiper-venta-creada
+      QueueName: Cheapest-venta-creada
       VisibilityTimeout: 30
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt VentaCreadaDLQ.Arn
@@ -141,18 +141,18 @@ Resources:
             Resource: !GetAtt VentaCreadaQueue.Arn
             Condition:
               ArnEquals:
-                aws:SourceArn: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/chiper-bus/chiper-venta-creada-rule
+                aws:SourceArn: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/Cheapest-bus/Cheapest-venta-creada-rule
 
   # ─── EventBridge Rule: VentaCreada → SQS ────────────────────────────────────
 
   VentaCreadaRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: chiper-venta-creada-rule
-      EventBusName: !Ref ChiperEventBus
+      Name: Cheapest-venta-creada-rule
+      EventBusName: !Ref CheapestEventBus
       EventPattern:
         source:
-          - chiper.ventas
+          - Cheapest.ventas
         detail-type:
           - VentaCreada
       State: ENABLED
@@ -165,7 +165,7 @@ Resources:
   ResumenTiendaTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: chiper-resumen-tienda
+      TableName: Cheapest-resumen-tienda
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: tiendaId
@@ -192,26 +192,26 @@ Resources:
   EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: chiper-lab8-cluster
+      ClusterName: Cheapest-lab8-cluster
 
   # ─── CloudWatch Log Groups ───────────────────────────────────────────────────
 
   LogGroupLogistica:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /ecs/chiper-lab8-logistica
+      LogGroupName: /ecs/Cheapest-lab8-logistica
       RetentionInDays: 3
 
   LogGroupInventario:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /ecs/chiper-lab8-inventario
+      LogGroupName: /ecs/Cheapest-lab8-inventario
       RetentionInDays: 3
 
   LogGroupVentas:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /ecs/chiper-lab8-ventas
+      LogGroupName: /ecs/Cheapest-lab8-ventas
       RetentionInDays: 3
 
   # ─── ECS Task Definitions ────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ Resources:
   TaskDefLogistica:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: chiper-lab8-logistica
+      Family: Cheapest-lab8-logistica
       Cpu: '512'
       Memory: '1024'
       NetworkMode: awsvpc
@@ -248,18 +248,18 @@ Resources:
             - Name: AWS_REGION
               Value: !Ref AWS::Region
             - Name: EVENTBRIDGE_BUS_NAME
-              Value: chiper-bus
+              Value: Cheapest-bus
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: /ecs/chiper-lab8-logistica
+              awslogs-group: /ecs/Cheapest-lab8-logistica
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
 
   TaskDefInventario:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: chiper-lab8-inventario
+      Family: Cheapest-lab8-inventario
       Cpu: '512'
       Memory: '1024'
       NetworkMode: awsvpc
@@ -292,18 +292,18 @@ Resources:
             - Name: SQS_VENTA_CREADA_URL
               Value: !Ref VentaCreadaQueue
             - Name: DYNAMO_TABLE_RESUMEN
-              Value: chiper-resumen-tienda
+              Value: Cheapest-resumen-tienda
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: /ecs/chiper-lab8-inventario
+              awslogs-group: /ecs/Cheapest-lab8-inventario
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
 
   TaskDefVentas:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: chiper-lab8-ventas
+      Family: Cheapest-lab8-ventas
       Cpu: '512'
       Memory: '1024'
       NetworkMode: awsvpc
@@ -340,13 +340,13 @@ Resources:
             - Name: AWS_REGION
               Value: !Ref AWS::Region
             - Name: EVENTBRIDGE_BUS_NAME
-              Value: chiper-bus
+              Value: Cheapest-bus
             - Name: DYNAMO_TABLE_RESUMEN
-              Value: chiper-resumen-tienda
+              Value: Cheapest-resumen-tienda
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: /ecs/chiper-lab8-ventas
+              awslogs-group: /ecs/Cheapest-lab8-ventas
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
 
@@ -355,7 +355,7 @@ Resources:
   LogisticaALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: chiper-lab8-logistica-alb
+      Name: Cheapest-lab8-logistica-alb
       Scheme: internet-facing
       Subnets:
         - !Ref PublicSubnet1
@@ -366,7 +366,7 @@ Resources:
   LogisticaTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: chiper-lab8-logistica-tg
+      Name: Cheapest-lab8-logistica-tg
       Port: 3001
       Protocol: HTTP
       TargetType: ip
@@ -387,7 +387,7 @@ Resources:
   InventarioALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: chiper-lab8-inventario-alb
+      Name: Cheapest-lab8-inventario-alb
       Scheme: internet-facing
       Subnets:
         - !Ref PublicSubnet1
@@ -398,7 +398,7 @@ Resources:
   InventarioTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: chiper-lab8-inventario-tg
+      Name: Cheapest-lab8-inventario-tg
       Port: 3002
       Protocol: HTTP
       TargetType: ip
@@ -419,7 +419,7 @@ Resources:
   VentasALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: chiper-lab8-ventas-alb
+      Name: Cheapest-lab8-ventas-alb
       Scheme: internet-facing
       Subnets:
         - !Ref PublicSubnet1
@@ -430,7 +430,7 @@ Resources:
   VentasTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: chiper-lab8-ventas-tg
+      Name: Cheapest-lab8-ventas-tg
       Port: 3003
       Protocol: HTTP
       TargetType: ip
@@ -454,7 +454,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LogisticaListener
     Properties:
-      ServiceName: chiper-lab8-logistica
+      ServiceName: Cheapest-lab8-logistica
       Cluster: !Ref EcsCluster
       TaskDefinition: !Ref TaskDefLogistica
       DesiredCount: 1
@@ -475,7 +475,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: InventarioListener
     Properties:
-      ServiceName: chiper-lab8-inventario
+      ServiceName: Cheapest-lab8-inventario
       Cluster: !Ref EcsCluster
       TaskDefinition: !Ref TaskDefInventario
       DesiredCount: 1
@@ -496,7 +496,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: VentasListener
     Properties:
-      ServiceName: chiper-lab8-ventas
+      ServiceName: Cheapest-lab8-ventas
       Cluster: !Ref EcsCluster
       TaskDefinition: !Ref TaskDefVentas
       DesiredCount: 1
@@ -518,7 +518,7 @@ Resources:
   ApiGateway:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: chiper-lab8-api
+      Name: Cheapest-lab8-api
       ProtocolType: HTTP
 
   ApiGatewayStage:
@@ -652,7 +652,7 @@ Outputs:
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/lab
     Description: URL base del API Gateway para el laboratorio
   EventBusBusName:
-    Value: chiper-bus
+    Value: Cheapest-bus
     Description: Nombre del custom bus de EventBridge
   VentaCreadaQueueUrl:
     Value: !Ref VentaCreadaQueue
@@ -661,7 +661,7 @@ Outputs:
     Value: !Ref VentaCreadaDLQ
     Description: URL de la Dead Letter Queue
   ResumenTiendaTableName:
-    Value: chiper-resumen-tienda
+    Value: Cheapest-resumen-tienda
     Description: Nombre de la tabla DynamoDB del read model CQRS
   RdsEndpoint:
     Value: !GetAtt RdsInstance.Endpoint.Address

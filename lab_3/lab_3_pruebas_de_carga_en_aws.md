@@ -1,4 +1,4 @@
-# Lab 3 — Pruebas de Carga en AWS para el Monolito de Chiper
+# Lab 3 — Pruebas de Carga en AWS para el Monolito de Cheapest
 
 ## Etapas del laboratorio
 
@@ -15,7 +15,7 @@
 
 ## Objetivos
 
-- Ejecutar **pruebas de carga** sobre el backend monolítico de Chiper desplegado en AWS (EC2) detrás de un **Application Load Balancer (ALB)**.
+- Ejecutar **pruebas de carga** sobre el backend monolítico de Cheapest desplegado en AWS (EC2) detrás de un **Application Load Balancer (ALB)**.
 - Preparar la infraestructura en AWS (Security Groups, EC2 App/DB y ALB) necesaria para las pruebas.
 - Encontrar el **punto de inflexión** del sistema (máximo de usuarios/hilos antes de incumplir ASRs).
 - Analizar el comportamiento del monolito bajo carga: **latencia, throughput, errores** y posibles cuellos de botella.
@@ -37,7 +37,7 @@
 
 | Elemento             | Detalle                                                                                                                                         |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Título               | Prueba de carga al monolito de Chiper en AWS                                                                                                    |
+| Título               | Prueba de carga al monolito de Cheapest en AWS                                                                                                    |
 | Propósito            | Determinar el **punto de inflexión** de un endpoint **GET** (consulta compleja) y un endpoint **POST** (escritura pesada) definidos en el Lab 2 |
 | Resultados esperados | Identificar el número máximo de usuarios concurrentes en el que los **ASRs** se dejan de respetar                                               |
 | Infraestructura      | 4 instancias **EC2** (3 App + 1 DB) + 1 **ALB** + computador personal para ejecutar JMeter                                                      |
@@ -48,12 +48,12 @@
 | ID    | Descripción                                                                                                                                                                                                                                                           | Medidas de respuesta a satisfacer |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | ASR 1 | Como tendero, quiero consultar los productos que alguna vez he pedido, que actualmente estén en promoción y disponibles en el catálogo de mi zona, con una latencia p99 de **1000 ms** en operación normal (500 req/min).                                                       | Latencia p99 < 1000ms |
-| ASR 2 | Como director de operaciones de Chiper, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
+| ASR 2 | Como director de operaciones de Cheapest, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
 
 > [!IMPORTANT]
 > **Pregunta 1:**
 > REQ1 y REQ2 pueden entrar en tensión en picos de demanda.
-> En el contexto de Chiper, si una decisión de arquitectura mejora el p99 pero empeora el porcentaje de éxito, ¿qué criterio de priorización usaría y por qué?
+> En el contexto de Cheapest, si una decisión de arquitectura mejora el p99 pero empeora el porcentaje de éxito, ¿qué criterio de priorización usaría y por qué?
 > Responda considerando impacto al tendero e impacto al negocio.
 
 ### 1.3 Qué se va a probar
@@ -93,13 +93,13 @@ Se prueban dos escenarios (del Lab 2):
 
 **Objetivo:** separar App y DB en máquinas distintas y escalar el monolito con balanceo.
 
-- **EC2 chiper-db**: PostgreSQL
-- **EC2 chiper-app-1/2/3**: NestJS (monolito)
+- **EC2 Cheapest-db**: PostgreSQL
+- **EC2 Cheapest-app-1/2/3**: NestJS (monolito)
 - Cliente: su computador (JMeter se usa para generar carga)
 
 > [!IMPORTANT]
 > **Pregunta 3:**
-> Antes de desplegar, justifique por qué en Chiper tendría sentido separar App y DB en instancias distintas incluso si el costo y la complejidad operativa aumentan.
+> Antes de desplegar, justifique por qué en Cheapest tendría sentido separar App y DB en instancias distintas incluso si el costo y la complejidad operativa aumentan.
 > ¿Qué riesgos de arquitectura está mitigando y cuáles está introduciendo al mover un monolito local a una topología distribuida en AWS?
 > Represente su respuesta con una tabla comparativa donde se vean explícitamente los riesgos mitigados e introducidos.
 
@@ -162,6 +162,9 @@ Inicie el **Learning Lab** (esto habilita los créditos del curso). Usted debe v
 > [!WARNING]
 > Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Usted puede escoger cualquiera de las dos formas, sin embargo **es importante que sepa como usar la UI (consola de AWS) ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.** Se recomienda que use ambas formas de usar AWS al menos una vez y después escoja la que más le convenga.
 
+> [!NOTE]
+> **Warm-up en clase:** las secciones 4.2 y 4.3 (Security Groups + instancia `Cheapest-db`) están disponibles como una sesión práctica de 40 minutos para trabajar en clase: [`lab_3_warmup.md`](lab_3_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **4.4 Crear instancias EC2 para la App**.
+
 ### 4.2 Configuración de seguridad (Security Groups)
 
 > Nota: use nombres **sin tildes** y sin caracteres especiales.
@@ -173,7 +176,7 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 
 | Parámetro    | Valor                          |
 | ------------ | ------------------------------ |
-| Nombre       | `chiper-ssh`                   |
+| Nombre       | `Cheapest-ssh`                   |
 | Descripción  | Acceso SSH a instancias        |
 | Inbound rule | TCP 22 (SSH) desde `Anywhere-IPv4` |
 
@@ -181,7 +184,7 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 
 | Parámetro    | Valor                          |
 | ------------ | ------------------------------ |
-| Nombre       | `chiper-db`                    |
+| Nombre       | `Cheapest-db`                    |
 | Descripción  | Acceso a PostgreSQL            |
 | Inbound rule | TCP 5432 desde `Anywhere-IPv4` |
 
@@ -189,7 +192,7 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 
    > [!IMPORTANT]
    > **Pregunta 4:**
-   > Proponga un diseño mínimo de seguridad para Chiper que elimine la exposición pública de infraestructura que debería ser privada.
+   > Proponga un diseño mínimo de seguridad para Cheapest que elimine la exposición pública de infraestructura que debería ser privada.
    >
    > Debe incluir al menos:
    > - origen permitido de tráfico,
@@ -198,11 +201,11 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
    > Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
    > Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
 
-#### 4.2.3 Security Group 3 — HTTP API (Chiper)
+#### 4.2.3 Security Group 3 — HTTP API (Cheapest)
 
 | Parámetro    | Valor                          |
 | ------------ | ------------------------------ |
-| Nombre       | `chiper-http`                  |
+| Nombre       | `Cheapest-http`                  |
 | Descripción  | Acceso HTTP al monolito (API)  |
 | Inbound rule | TCP 3000 desde `Anywhere-IPv4` |
 
@@ -219,11 +222,11 @@ Cree una instancia EC2 con los parámetros:
 
 | Parámetro         | Valor                      |
 | ----------------- | -------------------------- |
-| Nombre            | `chiper-db`                |
+| Nombre            | `Cheapest-db`                |
 | AMI               | Ubuntu Server 24.04 LTS    |
 | Tipo de instancia | `t2.medium`                  |
 | IP pública        | Habilitar                  |
-| Security Groups   | `chiper-ssh` + `chiper-db` |
+| Security Groups   | `Cheapest-ssh` + `Cheapest-db` |
 | Almacenamiento    | 8 GB                       |
 
 #### 4.3.1 Conexión por SSH
@@ -234,9 +237,9 @@ Conéctese a la instancia:
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
 ```
 
-#### 4.3.2 Ejecutar la base de datos (chiper-db)
+#### 4.3.2 Ejecutar la base de datos (Cheapest-db)
 
-1. Conéctese por SSH a `chiper-db`.
+1. Conéctese por SSH a `Cheapest-db`.
 2. Verifique que Docker está instalado y corriendo ([Tutorial para instalar Docker](../tutoriales/instalar_docker_en_una_maquina_EC2.md)):
 
 ```bash
@@ -248,10 +251,10 @@ sudo service docker status
 
 ```bash
 # Opción A: crear y levantar (primera vez)
-sudo docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
+sudo docker run --name Cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=Cheapest  -p 5432:5432  -d postgres
 
 # Opción B: si ya existe, solo iniciar
-sudo docker start chiper-db
+sudo docker start Cheapest-db
 ```
 
 4. Verifique que está arriba:
@@ -262,17 +265,17 @@ sudo docker ps
 
 ![](./recursos/Pasted%20image%2020260311000750.png)
 
-### 4.4 Crear instancias EC2 para la App (Chiper Monolito)
+### 4.4 Crear instancias EC2 para la App (Cheapest Monolito)
 
 Cree **tres** instancias EC2, una por cada zona de disponibilidad. Distribuirlas en AZs distintas garantiza que una falla de zona no derribe todas las instancias al mismo tiempo, mejorando la disponibilidad del sistema.
 
-| Parámetro         | `chiper-app-1`               | `chiper-app-2`               | `chiper-app-3`               |
+| Parámetro         | `Cheapest-app-1`               | `Cheapest-app-2`               | `Cheapest-app-3`               |
 | ----------------- | ---------------------------- | ---------------------------- | ---------------------------- |
-| Nombre            | `chiper-app-1`               | `chiper-app-2`               | `chiper-app-3`               |
+| Nombre            | `Cheapest-app-1`               | `Cheapest-app-2`               | `Cheapest-app-3`               |
 | AMI               | Ubuntu Server 24.04 LTS      | Ubuntu Server 24.04 LTS      | Ubuntu Server 24.04 LTS      |
 | Tipo de instancia | `t2.medium`                  | `t2.medium`                  | `t2.medium`                  |
 | IP pública        | Habilitar                    | Habilitar                    | Habilitar                    |
-| Security Groups   | `chiper-ssh` + `chiper-http` | `chiper-ssh` + `chiper-http` | `chiper-ssh` + `chiper-http` |
+| Security Groups   | `Cheapest-ssh` + `Cheapest-http` | `Cheapest-ssh` + `Cheapest-http` | `Cheapest-ssh` + `Cheapest-http` |
 | Almacenamiento    | 8 GB                         | 8 GB                         | 8 GB                         |
 | AZ (Zona)         | `us-east-1a`                 | `us-east-1b`                 | `us-east-1c`                 |
 
@@ -315,7 +318,7 @@ npm -v
 Clone el repositorio del backend de su proyecto (reemplace la URL, y recuerde que estamos trabajando sobre la rama load_tests):
 
 ```bash
-git clone <URL_REPO_BACKEND_CHIPER>
+git clone <URL_REPO_BACKEND_Cheapest>
 cd <CARPETA_REPO>
 nvm install
 ```
@@ -328,7 +331,7 @@ npm install
 
 #### 4.4.4 Configuración de conexión a la base de datos
 
-Configure variables de entorno o archivo. La idea es que **HOST** apunte a la **IP privada** de `chiper-db` (misma VPC).
+Configure variables de entorno o archivo. La idea es que **HOST** apunte a la **IP privada** de `Cheapest-db` (misma VPC).
 
 
 Para configurarlo copie el archivo de ejemplo
@@ -342,13 +345,13 @@ Con el comando `cat .env` usted verá el contenido del archivo:
 ```bash
 DB_HOST=<IP_PRIVADA_DB>
 DB_PORT=5432
-DB_USER=chiper_user
-DB_PASSWORD=chiper_pwd
-DB_NAME=chiper_db
+DB_USER=Cheapest_user
+DB_PASSWORD=Cheapest_pwd
+DB_NAME=Cheapest_db
 PORT=3000
 ```
 
-Modifique las variables de conexión a la base de datos para que apunten a la IP privada de `chiper-db` (puerto 5432, usuario y contraseña según lo definido en el contenedor de PostgreSQL). La idea es que HOST apunte a la IP **privada** de chiper-db (misma VPC)
+Modifique las variables de conexión a la base de datos para que apunten a la IP privada de `Cheapest-db` (puerto 5432, usuario y contraseña según lo definido en el contenedor de PostgreSQL). La idea es que HOST apunte a la IP **privada** de Cheapest-db (misma VPC)
 
 Para modificar el archivo puede usar `nano` o `vim`:
 
@@ -360,7 +363,7 @@ nano .env
 > **Pregunta 5:**
 > Para el laboratorio usaremos la IP privada para conectar la aplicación a la base de datos. Compare el uso de IP privada vs IP pública para la conexión entre App y Base de Datos en este laboratorio.
 >
-> ¿Qué diferencias esperaría en seguridad, latencia, estabilidad y costo operativo para Chiper, y en qué casos podría justificarse usar cada opción?
+> ¿Qué diferencias esperaría en seguridad, latencia, estabilidad y costo operativo para Cheapest, y en qué casos podría justificarse usar cada opción?
 > Apoye la comparación con una tabla de trade-offs.
 
 #### 4.4.5 Ejecucuión y seed de datos (si aplica)
@@ -380,17 +383,17 @@ En su computador:
 
 1. Configure o verifique su balanceador:
    - [Tutorial para configurar Load Balancer](../tutoriales/configurar_load_balancer.md)
-2. Registre como targets las instancias `chiper-app-1`, `chiper-app-2` y `chiper-app-3`.
+2. Registre como targets las instancias `Cheapest-app-1`, `Cheapest-app-2` y `Cheapest-app-3`.
 3. Identifique el **DNS del ALB** (lo usará JMeter).
 
 ### 4.6 Iniciar servicios en las instancias
 
 Si las instancias quedaron detenidas, inícielas antes de ejecutar las pruebas:
 
-1. Inicie `chiper-db` y verifique el contenedor de PostgreSQL:
+1. Inicie `Cheapest-db` y verifique el contenedor de PostgreSQL:
 
 ```bash
-sudo docker start chiper-db
+sudo docker start Cheapest-db
 sudo docker ps
 ```
 
@@ -520,7 +523,7 @@ Incluya un análisis (1–2 páginas) que responda:
 3. ¿Qué cambios de arquitectura (estilos o tácticas) propondría para cumplir los ASRs?
 4. ¿El patrón de degradación fue gradual o abrupto? ¿Cuál fue el cuello de botella más probable?
 5. ¿Qué endpoint degradó primero y por qué ocurrió?
-6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicadas a Chiper**
+6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicadas a Cheapest**
 
 ## Nota final (créditos AWS)
 

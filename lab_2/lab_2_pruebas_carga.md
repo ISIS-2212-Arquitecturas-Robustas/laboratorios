@@ -1,4 +1,4 @@
-# Lab 2 — Pruebas de Carga al Monolito de Chiper
+# Lab 2 — Pruebas de Carga al Monolito de Cheapest
 
 ## Etapas del laboratorio
 
@@ -6,23 +6,23 @@
 | ------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | 1. Contexto experimental y ASRs | Definicion del experimento, criterios de exito y marco de evaluacion del monolito.     | Uso acotado para entender ASRs; el analisis de impacto debe ser propio.                     |
 | 2. Preparacion del entorno      | Levantamiento de base de datos, backend y verificacion inicial del entorno de pruebas. | Recomendado para resolver bloqueos tecnicos de instalacion y configuracion.                   |
-| 3. Diseño de pruebas            | Definicion de distribucion de datos, matriz de carga e hipotesis de degradacion.       | Puede ayudar a proponer diseños, pero se debe justificar con el contexto de Chiper. |
+| 3. Diseño de pruebas            | Definicion de distribucion de datos, matriz de carga e hipotesis de degradacion.       | Puede ayudar a proponer diseños, pero se debe justificar con el contexto de Cheapest. |
 | 4. Ejecución de pruebas         | Ejecución con JMeter y opcion de script en Python para cargas altas.                   | Recomendado en cargas altas para generar o ajustar scripts de prueba y analisis.              |
 | 5. Entregables y conclusiones   | Reporte de resultados, punto de inflexion y propuestas de mejora arquitectónica.       | No recomendado para redactar conclusiones sin evidencia del experimento.                      |
 
 ## Objetivos
 
-- Ejecutar **pruebas de carga locales** sobre el backend monolítico de Chiper.
+- Ejecutar **pruebas de carga locales** sobre el backend monolítico de Cheapest.
 - Encontrar el **punto de inflexión** del sistema (máximo de usuarios/hilos antes de incumplir un ASRs).
 - Analizar el comportamiento del monolito bajo carga: latencia, throughput, errores y cuellos de botella.
 - Proponer mejoras de arquitectura y tácticas para mejorar desempeño y disponibilidad.
 
 ## Descripción del Experimento
 
-| **Título del experimento**    | Prueba de carga al backend monolítico de Chiper                                                                                                                                                                                                                                      |
+| **Título del experimento**    | Prueba de carga al backend monolítico de Cheapest                                                                                                                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Propósito**                 | Determinar el punto de inflexión del sistema bajo carga concurrente de dos endpoints críticos <br><br>- Servicio GET de consulta con múltiples JOINs<br>- Servicio POST de escritura de una entidad extensa                                                                          |
-| **Sistema bajo prueba**       | Backend monolítico Chiper (NestJS + PostgreSQL)                                                                                                                                                                                                                                      |
+| **Sistema bajo prueba**       | Backend monolítico Cheapest (NestJS + PostgreSQL)                                                                                                                                                                                                                                      |
 | **Resultados esperados**      | - Obtener el punto de inflexión (número máximo de usuarios en que los requerimientos no funcionales, e.g., REQ1 y REQ2, se dejan de respetar) de los servicios REST del sistema. |
 | **Infraestructura requerida** | Local (Node.js + PostgreSQL en Docker opcional)<br><br>Cliente local pruebas (JMeter o script propio) |
 
@@ -31,14 +31,14 @@
 | ID    | Descripción                                                                                                                                                                                                                                                           | Medidas de respuesta a satisfacer |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | ASR 1 | Como tendero, quiero consultar los productos que alguna vez he pedido, que actualmente estén en promoción y disponibles en el catálogo de mi zona, con una latencia p99 de **1000 ms** en operación normal (500 req/min).                                                       | Latencia p99 < 1000ms |
-| ASR 2 | Como director de operaciones de Chiper, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
+| ASR 2 | Como director de operaciones de Cheapest, durante eventos con promociones en donde múltiples tiendas están comprando, quiero que al menos el **98% de los pedidos** sean creados exitosamente, aun cuando un alto número de tenderos realicen pedidos simultáneamente, se estiman (5000 req/min). | Error % ≤ 2%          |
 
 
 > **Criterio de punto de inflexión:** *basta con que se incumpla **al menos uno** de los dos ASRs.*
 
 
 
-Los dos endpoints evaluados en este laboratorio corresponden directamente a los ASRs definidos. Ambos forman parte del módulo `logistica` del backend monolítico de Chiper.
+Los dos endpoints evaluados en este laboratorio corresponden directamente a los ASRs definidos. Ambos forman parte del módulo `logistica` del backend monolítico de Cheapest.
 
 ---
 
@@ -114,7 +114,7 @@ GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-b
 
 > [!IMPORTANT]
 > **Pregunta 1:**
-> En el contexto de Chiper, el endpoint GET evaluado combina lectura histórica, promociones y disponibilidad por zona, mientras el POST confirma pedidos en eventos de alta demanda.
+> En el contexto de Cheapest, el endpoint GET evaluado combina lectura histórica, promociones y disponibilidad por zona, mientras el POST confirma pedidos en eventos de alta demanda.
 > Si solo pudiera optimizar **uno** antes de un pico comercial, ¿cuál priorizaría y por qué?
 >
 > Argumente su decisión en términos de:
@@ -123,6 +123,9 @@ GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-b
 > - tipo de carga,
 > - y costo/tiempo de implementación de mejoras.
 
+
+> [!NOTE]
+> **Warm-up en clase:** hay una sesión práctica de 40 minutos, sin necesidad de tener el ambiente de desarrollo instalado, en la que se diseña el `load-seed.yaml` y la matriz de pruebas: [`lab_2_warmup.md`](lab_2_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **Preparación del entorno** y usar el diseño que ya hizo.
 
 ## Diagrama de despliegue
 
@@ -152,7 +155,7 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 
 
 ## Preparación del entorno
-En el repo del backend (chiper-api) diríjase a la rama `load-tests`
+En el repo del backend (Cheapest-api) diríjase a la rama `load-tests`
 ### Levantar PostgreSQL con Docker (recomendado)
 
 ```bash
@@ -190,10 +193,10 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 
 > [!IMPORTANT]
 > **Pregunta 2:**
-> Diseñe una distribución de datos que haga realista el escenario de Chiper en hora pico (tiendas con comportamientos heterogéneos, zonas con distinta densidad de pedidos y promociones activas).
+> Diseñe una distribución de datos que haga realista el escenario de Cheapest en hora pico (tiendas con comportamientos heterogéneos, zonas con distinta densidad de pedidos y promociones activas).
 > ¿Qué sesgos introduciría una distribución uniforme y cómo podría llevar a conclusiones erróneas sobre el punto de inflexión?
 > Proponga al menos dos estrategias de distribución y explique qué hipótesis de arquitectura valida cada una.
-> Presente su propuesta con una comparación visual clara entre estrategias: incluya al menos dos gráficas equivalentes (una por estrategia) usando los mismos ejes y escala (por ejemplo, demanda por zona o pedidos por tienda), y señale explícitamente qué patrón en la gráfica explica por qué una estrategia representa mejor el contexto real de Chiper.
+> Presente su propuesta con una comparación visual clara entre estrategias: incluya al menos dos gráficas equivalentes (una por estrategia) usando los mismos ejes y escala (por ejemplo, demanda por zona o pedidos por tienda), y señale explícitamente qué patrón en la gráfica explica por qué una estrategia representa mejor el contexto real de Cheapest.
 
 Las pruebas en JMeter se definen con los siguientes parámetros
 #### Threads:
@@ -291,7 +294,7 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 > [!IMPORTANT]
 > **Pregunta 4:**
 > Investigue qué técnicas existen para lograr que agentes de IA generen código siguiendo de forma consistente patrones y reglas de desarrollo definidas por todo el equipo.
-> Con base en esa investigación, proponga una estrategia aplicable a Chiper que incluya instrucciones y plantillas aplicables para el desarrollo dentro del equipo
+> Con base en esa investigación, proponga una estrategia aplicable a Cheapest que incluya instrucciones y plantillas aplicables para el desarrollo dentro del equipo
 
 ## Entregables
 
@@ -311,7 +314,7 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 
 
 Responder con evidencia:
-1. Describa la distribución de los datos y la razón de los mismos para cada prueba basado en el contexto de Chiper
+1. Describa la distribución de los datos y la razón de los mismos para cada prueba basado en el contexto de Cheapest
 2. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
 3. Teniendo en cuenta los resultados registrados, ¿el diseño monolítico de arquitectura propuesto en este experimento beneficia el cumplimiento de los ASRs involucrados?
 4. En caso afirmativo, explique cómo se beneficiaron los ASRs. De lo contrario, explique qué modificaciones podría hacer a la arquitectura (estilos o tácticas) para cumplir con los ASRs.

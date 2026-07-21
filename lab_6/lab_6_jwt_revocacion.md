@@ -12,7 +12,7 @@
 
 ## Objetivos
 
-- Implementar autenticación basada en JWT en una arquitectura de microservicios de Chiper, usando Amazon Cognito como emisor.
+- Implementar autenticación basada en JWT en una arquitectura de microservicios de Cheapest, usando Amazon Cognito como emisor.
 - Mostrar el límite de JWT “stateless”: un access token comprometido no se puede invalidar instantáneamente sin chequeos stateful.
 - Aplicar una táctica de contención práctica: access tokens de vida corta (2–5 min) + revocación de refresh token / global sign-out.
 - Validar autorización por rol (RBAC) dentro de microservicios y diferenciar 401 vs 403.
@@ -35,14 +35,14 @@
 
 | Elemento | Detalle |
 | --- | --- |
-| Título | Secuestro de credenciales/tokens y contención por revocación rápida en Chiper |
+| Título | Secuestro de credenciales/tokens y contención por revocación rápida en Cheapest |
 | Propósito | Minimizar el impacto de un refresh token comprometido, midiendo ventana de exposición y tiempo de contención |
 | Resultados esperados | Tras revocar, el atacante no puede refrescar tokens; su acceso muere cuando expira el access token vigente |
 | Infraestructura | CloudFormation + API Gateway (HTTP API) + Cognito + ECS/Fargate + computador personal (curl/Postman) |
 
 ### 1.2 Contexto de negocio
 
-Chiper maneja información sensible y acciones de alto impacto (p. ej., pedidos, devoluciones y notas crédito). Un secuestro de credenciales (phishing, malware, filtración de tokens en herramientas) es un incidente realista que hace que el atacante no necesite romper el cifrado si no que le baste con obtener un token válido.
+Cheapest maneja información sensible y acciones de alto impacto (p. ej., pedidos, devoluciones y notas crédito). Un secuestro de credenciales (phishing, malware, filtración de tokens en herramientas) es un incidente realista que hace que el atacante no necesite romper el cifrado si no que le baste con obtener un token válido.
 
 Para refrescar conceptos:
 
@@ -55,7 +55,7 @@ Para refrescar conceptos:
 
 > [!IMPORTANT]
 > **Pregunta 1:**
-> Suponga que un atacante obtiene el refresh token de un usuario de Chiper.
+> Suponga que un atacante obtiene el refresh token de un usuario de Cheapest.
 > ¿Qué puede hacer el atacante con un refresh token válido aunque usted cambie la contraseña del usuario?
 > Responda en términos de “capacidad” y “ventana de tiempo”, no en definiciones.
 
@@ -70,7 +70,7 @@ Para refrescar conceptos:
 > [!IMPORTANT]
 > **Pregunta 2:**
 > Elija el tiempo de vida para access token y justifíquelo.
-> Debe incluir: (1) ventana de exposición (tiempo que un token es válido), (2) impacto en la experiencia de usuario y operación, (3) impacto en costo/latencia, (4) justificación basada en el contexto de negocio de Chiper.
+> Debe incluir: (1) ventana de exposición (tiempo que un token es válido), (2) impacto en la experiencia de usuario y operación, (3) impacto en costo/latencia, (4) justificación basada en el contexto de negocio de Cheapest.
 
 ## 2. Arquitectura
 
@@ -178,7 +178,7 @@ Desde la carpeta `lab_6/recursos/`:
 
 ```bash
 aws cloudformation deploy \
-  --stack-name chiper-lab6-jwt \
+  --stack-name Cheapest-lab6-jwt \
   --template-file cloudformation_template.yaml \
   --parameter-overrides \
     LogisticaImageUri=<URI_ECR_LOGISTICA> \
@@ -204,7 +204,7 @@ Los endpoints de health deben ser **públicos** para monitoreo:
 
 ## 5. Implementación mínima en microservicios
 
-> El código vive en la rama `cognito-auth` del repositorio `chiper-api`.
+> El código vive en la rama `cognito-auth` del repositorio `Cheapest-api`.
 
 ### 5.1 Arquitectura de la implementación
 
@@ -259,6 +259,9 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 > ¿Por qué es peligroso devolver 403 cuando el token está ausente o es inválido?
 > Relacione su respuesta con enumeración de endpoints y debugging operacional.
 
+> [!NOTE]
+> **Warm-up en clase:** la sección 6 (Parte 1 — Incidente: secuestro de token) está disponible como una sesión práctica para trabajar en clase, asumiendo que el stack de la sección 4 ya está desplegado: [`lab_6_warmup.md`](lab_6_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Contención: revocación rápida**.
+
 ## 6. Parte 1 — Incidente: secuestro de token
 
 Este ejercicio simula que un atacante obtiene un **refresh token** de un usuario.
@@ -312,5 +315,5 @@ Reporte:
 > Nota: al terminar, elimine el stack para evitar costos:
 >
 > ```bash
-> aws cloudformation delete-stack --stack-name chiper-lab6-jwt
+> aws cloudformation delete-stack --stack-name Cheapest-lab6-jwt
 > ```

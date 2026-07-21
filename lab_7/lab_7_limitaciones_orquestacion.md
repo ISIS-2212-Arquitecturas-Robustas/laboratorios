@@ -15,7 +15,7 @@
 - Identificar el punto de quiebre de un endpoint que orquesta múltiples microservicios síncronamente.
 - Cuantificar el efecto de **latencia compuesta** y **amplificación de carga (fan-out)** producidos por el patrón de orquestación síncrona por HTTP.
 - Comparar el comportamiento bajo carga del endpoint orquestado frente a los servicios individuales y evidenciar la diferencia entre la suma de p99 individuales y el p99 real del orquestador.
-- Reflexionar sobre las limitaciones estructurales del patrón de orquestación síncrona y su impacto en los ASRs de Chiper.
+- Reflexionar sobre las limitaciones estructurales del patrón de orquestación síncrona y su impacto en los ASRs de Cheapest.
 
 ## Índice
 
@@ -35,14 +35,14 @@
 
 | Elemento | Detalle |
 | --- | --- |
-| Título | Punto de quiebre del orquestador síncrono en la arquitectura de microservicios de Chiper |
+| Título | Punto de quiebre del orquestador síncrono en la arquitectura de microservicios de Cheapest |
 | Propósito | Evidenciar cómo el patrón de orquestación síncrona por HTTP viola los ASRs de latencia y error sin necesidad de inyectar fallos artificiales — la arquitectura lo produce sola bajo carga |
 | Resultados esperados | El endpoint orquestado viola ASR-1 a cargas donde los servicios individuales funcionan correctamente; al degradar un servicio dependiente, el error % del orquestador sube al 100% |
 | Infraestructura | API Gateway + ECS/Fargate + ECR + RDS + computador personal para JMeter |
 
 ### 1.2 Contexto de negocio
 
-Los tenderos de Chiper necesitan una vista consolidada del estado de su tienda para tomar decisiones de reabastecimiento: qué hay en catálogo (Logística), cuánto stock tienen (Inventario) y cuánto han vendido recientemente (Ventas). En un diseño de microservicios orientado a conexión, la forma más directa de entregar esta vista es que el servicio de Ventas llame síncronamente a Logística y a Inventario, consolide los datos y responda.
+Los tenderos de Cheapest necesitan una vista consolidada del estado de su tienda para tomar decisiones de reabastecimiento: qué hay en catálogo (Logística), cuánto stock tienen (Inventario) y cuánto han vendido recientemente (Ventas). En un diseño de microservicios orientado a conexión, la forma más directa de entregar esta vista es que el servicio de Ventas llame síncronamente a Logística y a Inventario, consolide los datos y responda.
 
 Este patrón —conocido como **orquestación síncrona**— parece simple y funciona bien a escala baja. El problema emerge bajo carga: la latencia del endpoint consolidado no es el promedio de los tiempos individuales sino su suma. A medida que los servicios dependientes se saturan, cada cola se acumula independientemente, haciendo que el p99 del orquestador se dispare mucho más rápido que el de cualquier servicio individual.
 
@@ -54,7 +54,7 @@ El endpoint nuevo `GET /ventas/resumen-operativo` implementa este patrón: llama
 | --- | --- | --- |
 | ASR-1 | Como tendero, quiero consultar el resumen operativo de mi tienda en un tiempo razonable para tomar decisiones de reabastecimiento. | p99 < 2000 ms durante operación normal (500 req/min) |
 | ASR-2 | Como COO, quiero mantener una baja tasa de error incluso durante eventos de alta demanda para no perder operaciones de tenderos. | Error % ≤ 10% durante pico (5000 req/min) |
-| ASR-3 | Como tendero, quiero que si uno de los servicios de Chiper está lento, mi consulta del resumen de tienda siga respondiendo sin fallar por completo. | Con 1 servicio dependiente degradado (desired count reducido a 1 tarea ECS), error % del endpoint orquestado ≤ 30% |
+| ASR-3 | Como tendero, quiero que si uno de los servicios de Cheapest está lento, mi consulta del resumen de tienda siga respondiendo sin fallar por completo. | Con 1 servicio dependiente degradado (desired count reducido a 1 tarea ECS), error % del endpoint orquestado ≤ 30% |
 
 > [!IMPORTANT]
 > **Pregunta 1:**
@@ -117,10 +117,13 @@ Aplicar la misma matriz de carga sobre `GET /ventas/resumen-operativo`. Comparar
 **Fase 3 — Servicio dependiente degradado**
 Reducir el `desired count` de Inventario a 1 tarea en ECS (sin apagarlo, sin inyectar fallos). Observar cómo esta reducción de capacidad impacta el error % del endpoint orquestado. Verificar si ASR-3 se cumple.
 
+> [!NOTE]
+> **Warm-up en clase:** las Preguntas 2 y 3 (esta y la de la sección 2.3) no dependen de datos medidos y están disponibles como una sesión práctica de 40 minutos para trabajar en clase antes de desplegar nada: [`lab_7_warmup.md`](lab_7_warmup.md). Si su profesor ya realizó esta sesión en clase, esas dos preguntas ya están resueltas.
+
 > [!IMPORTANT]
 > **Pregunta 2:**
 > ¿Por qué reducir el `desired count` de Inventario a 1 tarea (sin apagarlo) es un experimento más representativo de una situación real que apagar el servicio por completo?
-> Relacione su respuesta con el concepto de **saturación** en la fórmula de fan-out y con escenarios reales de Chiper .
+> Relacione su respuesta con el concepto de **saturación** en la fórmula de fan-out y con escenarios reales de Cheapest .
 
 ---
 
@@ -149,13 +152,13 @@ Este cambio no requiere nuevos contenedores ni nuevas rutas de red: el fan-out o
 | Escalamiento horizontal de ECS (servicios dependientes) | Reduce $\rho_i$ y mejora latencia individual, pero el fan-out sigue multiplicando la carga: escalar los servicios dependientes no elimina el compounding de p99. |
 | Timeouts más cortos en el orquestador | Reduce la latencia máxima pero aumenta el error %: cambiar el síntoma no corrige la causa. |
 | Retry en el orquestador | Amplifica el fan-out: con 1 reintento, $F = L \times N \times 2$. Empeora la saturación de los servicios dependientes. |
-| Cacheo de respuestas de servicios dependientes | Mitiga el fan-out para datos que toleran staleness, pero los datos de stock e inventario requieren consistencia reciente en Chiper. |
+| Cacheo de respuestas de servicios dependientes | Mitiga el fan-out para datos que toleran staleness, pero los datos de stock e inventario requieren consistencia reciente en Cheapest. |
 | Circuit breaker (sidecar, Lab 5) | Protege al orquestador de un servicio dependiente caído, pero no reduce la latencia compuesta cuando todos funcionan. Solo mueve el problema de latencia a graceful degradation. |
 
 > [!IMPORTANT]
 > **Pregunta 3:**
 > Proponga **una alternativa arquitectónica** al patrón de orquestación síncrona que permita entregar el resumen operativo a los tenderos con p99 < 500 ms, sin necesidad de que Ventas llame síncronamente a Logística e Inventario en el momento de la petición.
-> Analice los trade-offs de su propuesta en términos de consistencia de datos, complejidad operativa y costo de implementación para Chiper.
+> Analice los trade-offs de su propuesta en términos de consistencia de datos, complejidad operativa y costo de implementación para Cheapest.
 
 ---
 
@@ -178,7 +181,7 @@ Este cambio no requiere nuevos contenedores ni nuevas rutas de red: el fan-out o
 
 El despliegue de este laboratorio sigue **exactamente los mismos pasos del Lab 4** (ECR + RDS + ECS + API Gateway), con dos diferencias:
 
-1. **Código fuente**: use la rama `microservices-2` del repositorio `chiper-api`.
+1. **Código fuente**: use la rama `microservices-2` del repositorio `Cheapest-api`.
 2. **Tag de imágenes**: use `3.0.0` para distinguirlas de las versiones anteriores.
 
 Consulte el Lab 4 para el detalle completo de cada paso. A continuación se resume lo que cambia.
@@ -187,8 +190,8 @@ Consulte el Lab 4 para el detalle completo de cada paso. A continuación se resu
 
 ```bash
 # Desde el directorio del proyecto
-git clone <url-repositorio> chiper-api-ms2
-cd chiper-api-ms2
+git clone <url-repositorio> Cheapest-api-ms2
+cd Cheapest-api-ms2
 git checkout microservices-2
 ```
 
@@ -199,9 +202,9 @@ Los tres repositorios son los mismos del Lab 4. Use el tag `3.0.0`.
 
 | Servicio | Nombre repositorio | Tag imagen |
 | --- | --- | --- |
-| Logística | `chiper-logistica` | `3.0.0` |
-| Inventario | `chiper-inventario` | `3.0.0` |
-| Ventas | `chiper-ventas` | `3.0.0` |
+| Logística | `Cheapest-logistica` | `3.0.0` |
+| Inventario | `Cheapest-inventario` | `3.0.0` |
+| Ventas | `Cheapest-ventas` | `3.0.0` |
 
 
 Tutoriales de apoyo del Lab 4:
@@ -308,7 +311,7 @@ Reporte:
 > **Pregunta 5:**
 > Compare el patrón de degradación del endpoint orquestado (Fase 2) con el patrón de degradación de Ventas en el Lab 5 (baseline sin sidecar, con Inventario inyectado con `FAULT_DELAY_MS=5000`).
 > ¿Cuál de los dos escenarios llega al quiebre de ASR-1 primero y por qué?
-> ¿Qué implicación tiene esto para el diseño de alertas en un sistema de monitoreo real de Chiper?
+> ¿Qué implicación tiene esto para el diseño de alertas en un sistema de monitoreo real de Cheapest?
 
 ---
 
@@ -371,9 +374,9 @@ Incluya un análisis de 1 a 2 páginas que responda:
 2. ¿Cuál fue el factor de amplificación de carga (fan-out) observado en CloudWatch sobre Inventario y Logística? ¿Coincide con la fórmula $F = L \times N$?
 3. ¿El patrón de degradación fue gradual o abrupto? ¿Qué dice esto sobre la robustez del sistema ante variaciones de carga?
 4. En la Fase 3, ¿por qué reducir Inventario a 1 tarea provocó errores en el endpoint orquestado aunque Inventario no estuviera "caído"? Explique en términos de $\rho$ y tiempo de respuesta.
-5. ¿Qué alternativa arquitectónica propondría para entregar el resumen operativo a los tenderos con p99 < 500 ms? ¿Qué trade-offs introduce esa alternativa en el contexto de Chiper (consistencia, complejidad, costo)?
-6. Compare este laboratorio con el Lab 5: ¿qué es más peligroso para Chiper — un fallo explícito de un servicio (que dispara alertas inmediatas) o una degradación silenciosa por saturación de fan-out (que puede pasar desapercibida)? Justifique.
-7. Si el equipo de Chiper decidiera implementar las tácticas del Lab 5 (circuit breaker + graceful degradation) sobre el endpoint de este laboratorio, ¿resolvería el problema de compounding de latencia? ¿Qué problema sí resolvería y cuál quedaría abierto?
+5. ¿Qué alternativa arquitectónica propondría para entregar el resumen operativo a los tenderos con p99 < 500 ms? ¿Qué trade-offs introduce esa alternativa en el contexto de Cheapest (consistencia, complejidad, costo)?
+6. Compare este laboratorio con el Lab 5: ¿qué es más peligroso para Cheapest — un fallo explícito de un servicio (que dispara alertas inmediatas) o una degradación silenciosa por saturación de fan-out (que puede pasar desapercibida)? Justifique.
+7. Si el equipo de Cheapest decidiera implementar las tácticas del Lab 5 (circuit breaker + graceful degradation) sobre el endpoint de este laboratorio, ¿resolvería el problema de compounding de latencia? ¿Qué problema sí resolvería y cuál quedaría abierto?
 
 ---
 

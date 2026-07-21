@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Chiper Lab 6 — Aseguramiento de microservicios con JWT (Cognito).
+  Cheapest Lab 6 — Aseguramiento de microservicios con JWT (Cognito).
   Despliega VPC, RDS, ECS/Fargate (3 servicios), API Gateway HTTP y Cognito.
 
 # ---------------------------------------------------------------------------
@@ -11,7 +11,7 @@ Parameters:
 
   LogisticaImageUri:
     Type: String
-    Description: URI completo de la imagen ECR para el servicio Logistica (ej. 123456789.dkr.ecr.us-east-1.amazonaws.com/chiper-logistica:2.0.0)
+    Description: URI completo de la imagen ECR para el servicio Logistica (ej. 123456789.dkr.ecr.us-east-1.amazonaws.com/Cheapest-logistica:2.0.0)
 
   InventarioImageUri:
     Type: String
@@ -29,7 +29,7 @@ Parameters:
 
   DBName:
     Type: String
-    Default: chiper
+    Default: Cheapest
     Description: Nombre de la base de datos PostgreSQL
 
   DBUser:
@@ -84,7 +84,7 @@ Resources:
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: chiper-lab6-vpc
+          Value: Cheapest-lab6-vpc
 
   # Subnet pública A — usada por los ALBs (deben estar en al menos 2 AZs)
   PublicSubnetA:
@@ -96,7 +96,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: chiper-lab6-public-a
+          Value: Cheapest-lab6-public-a
 
   PublicSubnetB:
     Type: AWS::EC2::Subnet
@@ -107,7 +107,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: chiper-lab6-public-b
+          Value: Cheapest-lab6-public-b
 
   # Subnet privada A — usada por las tareas ECS y RDS (sin IP pública)
   PrivateSubnetA:
@@ -118,7 +118,7 @@ Resources:
       AvailabilityZone: !Select [0, !GetAZs '']
       Tags:
         - Key: Name
-          Value: chiper-lab6-private-a
+          Value: Cheapest-lab6-private-a
 
   PrivateSubnetB:
     Type: AWS::EC2::Subnet
@@ -128,7 +128,7 @@ Resources:
       AvailabilityZone: !Select [1, !GetAZs '']
       Tags:
         - Key: Name
-          Value: chiper-lab6-private-b
+          Value: Cheapest-lab6-private-b
 
   # Internet Gateway — permite que las subnets públicas salgan a internet
   InternetGateway:
@@ -182,7 +182,7 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: chiper-lab6-alb-sg
+          Value: Cheapest-lab6-alb-sg
 
   # Permite tráfico HTTP desde los ALBs hacia las tareas ECS
   ECSSecurityGroup:
@@ -197,7 +197,7 @@ Resources:
           SourceSecurityGroupId: !Ref ALBSecurityGroup
       Tags:
         - Key: Name
-          Value: chiper-lab6-ecs-sg
+          Value: Cheapest-lab6-ecs-sg
 
   # Comunicación interna entre servicios (Ventas → Inventario).
   # IMPORTANTE: no puede ir dentro de las SecurityGroupIngress inline de ECSSecurityGroup de
@@ -227,7 +227,7 @@ Resources:
           SourceSecurityGroupId: !Ref ECSSecurityGroup
       Tags:
         - Key: Name
-          Value: chiper-lab6-rds-sg
+          Value: Cheapest-lab6-rds-sg
 
   # =========================================================================
   # BASE DE DATOS: RDS PostgreSQL
@@ -236,17 +236,17 @@ Resources:
   RDSSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnets privadas para RDS de Chiper Lab 5
+      DBSubnetGroupDescription: Subnets privadas para RDS de Cheapest Lab 5
       SubnetIds:
         - !Ref PrivateSubnetA
         - !Ref PrivateSubnetB
 
   # Instancia RDS PostgreSQL — db.t3.micro es suficiente para el laboratorio
-  ChiperDB:
+  CheapestDB:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete  # Eliminar al hacer delete-stack (apropiado para lab)
     Properties:
-      DBInstanceIdentifier: chiper-lab6-db
+      DBInstanceIdentifier: Cheapest-lab6-db
       DBName: !Ref DBName
       Engine: postgres
       EngineVersion: '15'
@@ -267,14 +267,14 @@ Resources:
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: chiper-lab6-cluster
+      ClusterName: Cheapest-lab6-cluster
 
   # --- LOGÍSTICA ---
 
   LogisticaTaskDef:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: td-chiper-logistica
+      Family: td-Cheapest-logistica
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
@@ -289,7 +289,7 @@ Resources:
             - Name: PORT
               Value: '3001'
             - Name: DB_HOST
-              Value: !GetAtt ChiperDB.Endpoint.Address
+              Value: !GetAtt CheapestDB.Endpoint.Address
             - Name: DB_PORT
               Value: '5432'
             - Name: DB_USER
@@ -307,7 +307,7 @@ Resources:
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: /ecs/chiper-logistica
+              awslogs-group: /ecs/Cheapest-logistica
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
               awslogs-create-group: 'true'
@@ -315,7 +315,7 @@ Resources:
   LogisticaALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: chiper-lab6-logistica-alb
+      Name: Cheapest-lab6-logistica-alb
       Scheme: internet-facing
       Type: application
       Subnets:
@@ -327,7 +327,7 @@ Resources:
   LogisticaTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: chiper-lab6-logistica-tg
+      Name: Cheapest-lab6-logistica-tg
       Port: 3001
       Protocol: HTTP
       TargetType: ip
@@ -349,7 +349,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LogisticaListener
     Properties:
-      ServiceName: svc-chiper-logistica
+      ServiceName: svc-Cheapest-logistica
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref LogisticaTaskDef
       DesiredCount: 1
@@ -372,7 +372,7 @@ Resources:
   InventarioTaskDef:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: td-chiper-inventario
+      Family: td-Cheapest-inventario
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
@@ -387,7 +387,7 @@ Resources:
             - Name: PORT
               Value: '3002'
             - Name: DB_HOST
-              Value: !GetAtt ChiperDB.Endpoint.Address
+              Value: !GetAtt CheapestDB.Endpoint.Address
             - Name: DB_PORT
               Value: '5432'
             - Name: DB_USER
@@ -411,7 +411,7 @@ Resources:
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: /ecs/chiper-inventario
+              awslogs-group: /ecs/Cheapest-inventario
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
               awslogs-create-group: 'true'
@@ -419,7 +419,7 @@ Resources:
   InventarioALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: chiper-lab6-inventario-alb
+      Name: Cheapest-lab6-inventario-alb
       Scheme: internet-facing
       Type: application
       Subnets:
@@ -431,7 +431,7 @@ Resources:
   InventarioTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: chiper-lab6-inventario-tg
+      Name: Cheapest-lab6-inventario-tg
       Port: 3002
       Protocol: HTTP
       TargetType: ip
@@ -453,7 +453,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: InventarioListener
     Properties:
-      ServiceName: svc-chiper-inventario
+      ServiceName: svc-Cheapest-inventario
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref InventarioTaskDef
       DesiredCount: 1
@@ -476,7 +476,7 @@ Resources:
   VentasTaskDef:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: td-chiper-ventas
+      Family: td-Cheapest-ventas
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
@@ -491,7 +491,7 @@ Resources:
             - Name: PORT
               Value: '3003'
             - Name: DB_HOST
-              Value: !GetAtt ChiperDB.Endpoint.Address
+              Value: !GetAtt CheapestDB.Endpoint.Address
             - Name: DB_PORT
               Value: '5432'
             - Name: DB_USER
@@ -512,7 +512,7 @@ Resources:
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: /ecs/chiper-ventas
+              awslogs-group: /ecs/Cheapest-ventas
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
               awslogs-create-group: 'true'
@@ -520,7 +520,7 @@ Resources:
   VentasALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: chiper-lab6-ventas-alb
+      Name: Cheapest-lab6-ventas-alb
       Scheme: internet-facing
       Type: application
       Subnets:
@@ -532,7 +532,7 @@ Resources:
   VentasTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: chiper-lab6-ventas-tg
+      Name: Cheapest-lab6-ventas-tg
       Port: 3003
       Protocol: HTTP
       TargetType: ip
@@ -554,7 +554,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: VentasListener
     Properties:
-      ServiceName: svc-chiper-ventas
+      ServiceName: svc-Cheapest-ventas
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref VentasTaskDef
       DesiredCount: 1
@@ -576,10 +576,10 @@ Resources:
   # API GATEWAY HTTP: enruta /logistica/*, /inventario/*, /ventas/*
   # =========================================================================
 
-  ChiperHttpApi:
+  CheapestHttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: chiper-ms-api
+      Name: Cheapest-ms-api
       ProtocolType: HTTP
       CorsConfiguration:
         AllowOrigins:
@@ -600,7 +600,7 @@ Resources:
   CognitoUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: chiper-lab6-user-pool
+      UserPoolName: Cheapest-lab6-user-pool
       UsernameAttributes:
         - email
       AutoVerifiedAttributes:
@@ -624,7 +624,7 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       UserPoolId: !Ref CognitoUserPool
-      ClientName: chiper-lab6-app-client
+      ClientName: Cheapest-lab6-app-client
       GenerateSecret: false
       EnableTokenRevocation: true
       PreventUserExistenceErrors: ENABLED
@@ -647,8 +647,8 @@ Resources:
   JwtAuthorizer:
     Type: AWS::ApiGatewayV2::Authorizer
     Properties:
-      ApiId: !Ref ChiperHttpApi
-      Name: chiper-jwt-authorizer
+      ApiId: !Ref CheapestHttpApi
+      Name: Cheapest-jwt-authorizer
       AuthorizerType: JWT
       IdentitySource:
         - "$request.header.Authorization"
@@ -662,7 +662,7 @@ Resources:
   LogisticaIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
       IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/logistics/{proxy}'
@@ -671,7 +671,7 @@ Resources:
   InventarioIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
       IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/inventory/{proxy}'
@@ -680,7 +680,7 @@ Resources:
   VentasIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: ANY
       IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/{proxy}'
@@ -689,7 +689,7 @@ Resources:
   VentasRootIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: POST
       IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/ventas'
@@ -698,7 +698,7 @@ Resources:
   VentasRootRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'POST /ventas'
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
@@ -707,7 +707,7 @@ Resources:
   LogisticaRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'ANY /logistica/{proxy+}'
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
@@ -716,7 +716,7 @@ Resources:
   InventarioRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'ANY /inventario/{proxy+}'
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
@@ -725,7 +725,7 @@ Resources:
   VentasRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'ANY /ventas/{proxy+}'
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
@@ -736,7 +736,7 @@ Resources:
   LogisticaHealthIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: GET
       IntegrationUri: !Sub 'http://${LogisticaALB.DNSName}/health'
@@ -745,7 +745,7 @@ Resources:
   InventarioHealthIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: GET
       IntegrationUri: !Sub 'http://${InventarioALB.DNSName}/health'
@@ -754,7 +754,7 @@ Resources:
   VentasHealthIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       IntegrationType: HTTP_PROXY
       IntegrationMethod: GET
       IntegrationUri: !Sub 'http://${VentasALB.DNSName}/health'
@@ -763,21 +763,21 @@ Resources:
   LogisticaHealthRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'GET /logistica/health'
       Target: !Sub 'integrations/${LogisticaHealthIntegration}'
 
   InventarioHealthRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'GET /inventario/health'
       Target: !Sub 'integrations/${InventarioHealthIntegration}'
 
   VentasHealthRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       RouteKey: 'GET /ventas/health'
       Target: !Sub 'integrations/${VentasHealthIntegration}'
 
@@ -786,7 +786,7 @@ Resources:
   ApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
-      ApiId: !Ref ChiperHttpApi
+      ApiId: !Ref CheapestHttpApi
       StageName: lab
       AutoDeploy: true
       DefaultRouteSettings:
@@ -802,7 +802,7 @@ Outputs:
 
   ApiGatewayUrl:
     Description: URL base del API Gateway para el laboratorio
-    Value: !Sub 'https://${ChiperHttpApi}.execute-api.${AWS::Region}.amazonaws.com/lab'
+    Value: !Sub 'https://${CheapestHttpApi}.execute-api.${AWS::Region}.amazonaws.com/lab'
 
   CognitoUserPoolId:
     Description: ID del User Pool de Cognito para el laboratorio
@@ -818,7 +818,7 @@ Outputs:
 
   RDSEndpoint:
     Description: Endpoint de la base de datos RDS
-    Value: !GetAtt ChiperDB.Endpoint.Address
+    Value: !GetAtt CheapestDB.Endpoint.Address
 
   LogisticaALBDns:
     Description: DNS del ALB de Logistica

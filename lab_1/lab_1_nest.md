@@ -5,7 +5,7 @@
 | Etapa                              | Resumen                                                                           | Uso de IA generativa                                                                                   |
 | ---------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | 1. Introduccion y conceptos base   | Contexto de NestJS, arquitectura modular y componentes principales.               | Recomendado para aclarar conceptos y contrastar ejemplos; **validar con documentacion oficial.**       |
-| 2. Diseño arquitectonico de Chiper | Analisis de modularizacion y decisiones de arquitectura por capas para Chiper.    | Uso acotado: apoyar investigacion, pero la argumentacion debe ser propia del equipo.                   |
+| 2. Diseño arquitectonico de Cheapest | Analisis de modularizacion y decisiones de arquitectura por capas para Cheapest.    | Uso acotado: apoyar investigacion, pero la argumentacion debe ser propia del equipo.                   |
 | 3. Inyeccion de dependencias       | Comprension practica de providers, contenedor y reemplazo de implementaciones.    | Recomendado para generar ejemplos adicionales y pruebas de comprension.                                |
 | 4. Implementacion CRUD             | Construccion paso a paso de entidad, repositorio, servicio y controlador en Nest. | Recomendado para soporte de codigo (snippets, validaciones, pruebas), con revision manual obligatoria. |
 | 5. Entregables y evidencia         | Consolidacion de resultados y decisiones tomadas durante el laboratorio.          | No recomendado para redactar conclusiones finales sin analisis propio.                                 |
@@ -36,8 +36,8 @@
     - [¿Cómo funciona?](#cómo-funciona)
     - [Ejemplo concreto](#ejemplo-concreto)
     - [¿Por qué esto importa?](#por-qué-esto-importa)
-  - [5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Chiper](#5-creación-de-un-crud-en-nest-construyendo-un-crud-para-la-aplicación-de-chiper)
-    - [5.1 Vista de Información y Funcional de Chiper](#51-vista-de-información-y-funcional-de-chiper)
+  - [5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Cheapest](#5-creación-de-un-crud-en-nest-construyendo-un-crud-para-la-aplicación-de-Cheapest)
+    - [5.1 Vista de Información y Funcional de Cheapest](#51-vista-de-información-y-funcional-de-Cheapest)
     - [Instalación del ambiente de desarrollo](#instalación-del-ambiente-de-desarrollo)
       - [Requisitos previos](#requisitos-previos)
       - [Instalación del CLI de Nest](#instalación-del-cli-de-nest)
@@ -54,6 +54,9 @@
   - [Entregables](#entregables)
 
 ---
+
+> [!NOTE]
+> **Warm-up en clase:** hay una sesión práctica de 40 minutos, sin necesidad de tener el ambiente de desarrollo instalado, en la que se escribe (sin ejecutar) el código de la entidad y los DTOs de `Producto`: [`lab_1_warmup.md`](lab_1_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a "Paso 1 — Definir la entidad" dentro de la sección 5 y reutilizar ese código para el Entregable 2.1.
 
 ## 1. Introducción a Nest
 <img src="recursos/nest_logo.png" alt="Nest Logo" width="200"/>
@@ -99,7 +102,7 @@ Permiten definir límites claros dentro del sistema. Cuando estos límites está
 > - [Descomposición por capacidades de negocio](https://docs.aws.amazon.com/es_es/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-business-capability.html)
 > - [Descomposición por subdominios](https://docs.aws.amazon.com/es_es/prescriptive-guidance/latest/modernization-decomposing-monoliths/decompose-subdomain.html)
 >
-> ¿Si usted tuviera que realizar la descomposición de Chiper, teniendo en cuenta su contexto y madurez, qué patrón escogería?
+> ¿Si usted tuviera que realizar la descomposición de Cheapest, teniendo en cuenta su contexto y madurez, qué patrón escogería?
 ## 3. Arquitectura que seguiremos en el curso
 
 Como se mencionó anteriormente, utilizaremos una arquitectura por capas, estas capas vivirán dentro de cada módulo.
@@ -121,7 +124,7 @@ Una ventaja importante de Nest es que permite agregar, quitar o reemplazar provi
 
 > [!IMPORTANT]
 > **Pregunta 2:**
-> Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos SQL por una no SQL en el contexto de Chiper. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
+> Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos SQL por una no SQL en el contexto de Cheapest. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
 
 ## 4. Inyección de dependencias
 
@@ -164,7 +167,7 @@ export class UserService {
   constructor(private readonly emailService: EmailService) {}
 
   register(email: string): void {
-    this.emailService.send(email, 'Bienvenido a Chiper');
+    this.emailService.send(email, 'Bienvenido a Cheapest');
   }
 }
 ```
@@ -207,15 +210,15 @@ const moduleRef = await Test.createTestingModule({
 Se recomienda revisar la documentación oficial para profundizar en providers personalizados y scopes:
 [https://docs.nestjs.com/fundamentals/custom-providers](https://docs.nestjs.com/fundamentals/custom-providers)
 
-## 5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Chiper
+## 5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Cheapest
 
-Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicación Chiper. Está pensado como si lo fuéramos implementando desde cero, explicando las decisiones y cómo se conectan `Controller`, `Service`, `Repository`, `Entity` y un cliente externo mock (`TiendaClientMock`).
+Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicación Cheapest. Está pensado como si lo fuéramos implementando desde cero, explicando las decisiones y cómo se conectan `Controller`, `Service`, `Repository`, `Entity` y un cliente externo mock (`TiendaClientMock`).
 
-### 5.1 Vista de Información y Funcional de Chiper
-Antes de empezar con el código, es importante entender el modelamiento que se hizo de Chiper, a partir del enunciado se pudo comprender el dominio de la aplicación el cual nos permite entender que entidades tenemos que implementar y como se comporta la aplicación:
-- [Diagrama de Dominio](recursos/Modelo_Dominio_Chiper.pdf)
+### 5.1 Vista de Información y Funcional de Cheapest
+Antes de empezar con el código, es importante entender el modelamiento que se hizo de Cheapest, a partir del enunciado se pudo comprender el dominio de la aplicación el cual nos permite entender que entidades tenemos que implementar y como se comporta la aplicación:
+- [Diagrama de Dominio](recursos/Modelo_Dominio_Cheapest.pdf)
 
-A partir de este modelado, tenemos un entendimiento más profundo de como funciona Chiper, el siguiente paso es comprender la estructura funcional de Chiper. Es decir, cómo podemos organizar y dividir nuestra aplicación en unidades lógicas que tengan sentido entre si. Los diagramas de componentes y conectores nos permiten modelar estas estructuras, sin embargo para lograr esto vamos a separar el modelo de dominio en múltiples subdominios que tengan sentido entre si, recuerde que un subdominio es un conjunto de elementos del dominio que tienen sentido en conjunto. A partir de esta separación llegamos al siguiente diagrama en donde vemos cada subdominio identificado con un color
+A partir de este modelado, tenemos un entendimiento más profundo de como funciona Cheapest, el siguiente paso es comprender la estructura funcional de Cheapest. Es decir, cómo podemos organizar y dividir nuestra aplicación en unidades lógicas que tengan sentido entre si. Los diagramas de componentes y conectores nos permiten modelar estas estructuras, sin embargo para lograr esto vamos a separar el modelo de dominio en múltiples subdominios que tengan sentido entre si, recuerde que un subdominio es un conjunto de elementos del dominio que tienen sentido en conjunto. A partir de esta separación llegamos al siguiente diagrama en donde vemos cada subdominio identificado con un color
 - [Subdominios](recursos/Subdominios.pdf)
 
 Por último podemos identificar cada uno de estos subdominios como componentes, estos componentes definirán la estructura de nuestra aplicación Nest pues cada componente puede mapearse a un módulo.
@@ -256,7 +259,7 @@ nest --version
 #### Creación del proyecto
 
 ``` bash
-nest new chiper-backend
+nest new Cheapest-backend
 ```
 > _Se recomienda elegir npm como gestor de paquetes para evitar problemas de compatibilidad._
 
@@ -303,7 +306,7 @@ Para la instalación se recomienda instalar [Docker Desktop](https://docs.docker
 Se recomienda levantar una instancia PostgreSQL con Docker:
 
 ``` bash
-docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
+docker run --name Cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=Cheapest  -p 5432:5432  -d postgres
 ```
 
 > [!WARNING]
@@ -319,7 +322,7 @@ Probar en:
 http://localhost:3000
 ```
 
-Usted tiene en este momento las herramientas necesarias para levantar un proyecto desde cero, configurar la base de datos y ejecutar la aplicación. Para los siguientes pasos vamos a trabajar con un proyecto ya creado con esta configuración, el cual se encuentra en el [repositorio de chiper-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api), en la rama `main`.
+Usted tiene en este momento las herramientas necesarias para levantar un proyecto desde cero, configurar la base de datos y ejecutar la aplicación. Para los siguientes pasos vamos a trabajar con un proyecto ya creado con esta configuración, el cual se encuentra en el [repositorio de Cheapest-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/Cheapest-api), en la rama `main`.
 
 ### Paso 0 — Módulo de datasources
 
