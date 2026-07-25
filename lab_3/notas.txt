@@ -1,0 +1,14 @@
+Mejoras Laboratorios
+
+- Laboratorio 3
+
+ * Diagrama de despliegue. Añadir pequeña descripcion o caption de la imagen añadida. Por que la db tiene un icono diferente, si es utilizado diferente pero sigue siendo una instancia ec2. tambien incluir en una nota, las especificaciones de la maquina, tipo o recursos de la maquina
+ * Acceso a AWS academy, pondira los pasos intermedios, especificando el boton de start lab, esperar hasta el punto verde y advertir el no presionar el reset lab ya que se puede demorar bastante timepo al momento de resetear el ambiente 
+ * 4.2 poner los security groups los 3 antes del !Important, pareciera que el 3 es algo diferente
+ * 4.3 No se si sea mas sencillo para los estudiantes connectarse desde el UI de AWS sin necesidades de terminales externas
+ * 4.3 Se puede usar la imagen de aws-linux, ya viene con docker instalado, puede reducir tiempos de instalacion y de cosas que no estan relacionadas completamente con el objetivo del laboratorio
+ * 4.6 especificar cuando es necesario realizar este paso, unicamente cuando se detienen las instancias (para la db) o cuando se detiene el proceso en las node
+ * 5.3 el archivo load-tests.jmx no esta en el repositorio del backend y no hay un link a este, no es claro de que repositorio se esta hablando, yo pensaria que es desde el del backend
+ * 7. Especificar minimo de pruebas y que se espera. 
+ * Nota final. al ser el primer laboratorio con aws especificar como apagar o eliminar los recursos. o donde esta en el tutorial de creacion.
+ 

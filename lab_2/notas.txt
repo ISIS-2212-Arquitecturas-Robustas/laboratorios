@@ -1,0 +1,11 @@
+Mejoras Laboratorios
+
+- Laboratorio 2
+
+ * No se tiene un indice para navegacion facil
+ * Diagrama de despliegue. añadir un caption o pequeña descripcion del diagrama 
+ * Preparacion del entorno. explicar comandos de como cambiar de rama e incluir el link del laboratorio otra vez, puede que en el lab anterior no lo haga alguien. Ademas, explicar para que sirve el up en docker, especialmente que se requiere estar en el directorio base del repositorio para que se tenga el docker-compose.yml, ademas si no se va a utilziar la misma base de datos del laboratorio anterior, recomendaria limpiar el ambiente del lab pasado eliminando el contenedor levantado, si no se va a tener este error "Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint chiper-postgres (5d86a48a3d107d38bfa708e8f6a067bf9cf5210839d04ff07a5e176bd25d855e): Bind for 0.0.0.0:5432 failed: port is already allocated"
+ *Pruebas de carga. Se puede tener un tutorial de como instalar jmeter o link a la pagina oficial, siempre hay problemas en los laboratorios en la ejecucion del programa y el entender como funciona.
+ * Ejecucion de pruebas de carga alta. No es claro si es obligartorio realizar el script, si no lo es, entonces por que se utiliza Jmeter si se tiene problemas para realizar las pruebas?
+ * Entregables. Especificar minimo de pruebas, de lo que se menciona previamente, se puede entender que solo se deberian tener dos, una para operacion normal y otra para evento de promociones. Pero creo que se espera aumentar los hilos de forma controlada hasta encontrar el punto de inflexion donde no se cumple. Dejar claro lo esperado
+ 

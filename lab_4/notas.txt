@@ -1,0 +1,8 @@
+Mejoras Laboratorios
+
+- Laboratorio 4
+
+ * ASRs involucrados. Los asrs estan mal definidos, no siguen la estructura pedida en el curso.
+ * La replicacion horizontal de tareas y escalamiento independiente por servicio no se evidencia en el diagrama de despliegue.
+ * Tecnologias, aqui se pueden poner recursos o una llamada a utilizar ia para entender a detalle que hace cada servicio nuevo a utilizar en este laboratorio
+ * Especificar mejor lo esperado en la tabala de resultados, minimo de pruebas. La tabla es diferente a la presentada en el punto 5.2, se piden cosas diferentes entre el punto 5.2 y el punto 7.1 que es lo que se va a calificar realmente. si lo del 5.2 no se tiene en cuenta en los entregables entonces no es obligatorio?

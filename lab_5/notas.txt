@@ -1,0 +1,10 @@
+Mejoras laboratorios
+
+- Laboratorio 5
+
+ * 1.3. Los ASR no estan completos, la informacion esta en la otra columna pero no se cumple con la estructura de definicion vista en el curso
+ * Diagrama de despliegue. Añadir un caption o pequeña descripcion del diagrama 
+ * 3.Tecnologias. Dar recursos para entender que hace cada uno o incentivar a que usen ia para explicacion de cada servicio de AWS 
+ * Despues del despliegue hacer algo para que exploren y entiendan que fue lo que se desplego
+ * Hacer algo para poder identificar que es teoria y que es lo que toca hacer realmente en el laboratorio, a veces se puede confundir si se esta explicando algo sobre un ejemplo o es parte del laboratorio.
+ 

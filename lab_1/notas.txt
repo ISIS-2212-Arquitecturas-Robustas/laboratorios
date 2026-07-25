@@ -1,0 +1,24 @@
+Mejoras Laboratorios
+
+- Laboratorio 1 
+
+ * Capitulo 2. componentes principales de Nest, los 4 niveles mencionados en la lista son diferentes a los explicados posteriormente,
+ * Capitulo 2.4 Modulos, no es claro si el Important se debe responder personalmente o solo reflexionar 
+ * Capitulo 3. Seria bueno añadir un caption al diagrama, puede que no se entienda muy bien solo con la imagen
+ * Capitulo 3. misma duda sobre si se debe incluir las respuestas en el reporte 
+ * Capitulo 4. Pondira una explicacion un poco mas descriptiva de que es la inyeccion de dependencias y sus beneficios, no solo como funciona en el framework
+ * Capitulo 4.3 no se ha explicado como se evidencia un modulo en nest, cuando se genera y ya se esta hablando de listar los providers, esto deberia estar un poco mas claro, cuando se genera el modulo que archivos o que elementos se crean 
+ * Capitulo 5. por que no se incluyen los diagramas directamente en el md, a los estudiantes les molesta usualmente navegar fuera del tutorial. Incluiria tanto la imagen como tal como el link si quieren mayor resolucion
+ * Capitulo 5. Seria bueno dar una introduccion a que es type orm o un prompt a buscar mas informacion sobre esto
+ * Capitulo 5. titulo Arquitectura breve ?? 
+ * Capitulo 5. Hay varios conceptos no explicados, como validationpipe, Entity,
+ * Capitulo 5. Hay muchos mas elementos creados que puede ser relevante mencioinar ya que probablemente los estudiantes nunca han trabajado con node o npm puede ser beneficiosos explicar la carpeta node_modules, package.json o incluso los tsconfig, tambien seria bueno explicar o tener un comentario para que es cada dependencia instalada, no solo instalar por instalar
+ * Capitulo 5. Se puede explicar un poco los parametros del comando de docker, esto para que quede claro cules son estos parametros cuando se vaya a conectar con la aplicacion. tambien incluir forma facil de verificar que esta corriendo correctamente "docker ps"
+ * Capitulo 5. No es claro si es necesario realizar el clone del repositorio, o si es suficiente con lo que ya hemos hecho, entiendo que no se queda en el mismo punto, sino que ya se tienen cosas en el repositorio. Daria un espacio para decir que cosas extra tiene ese repositorio, se empieza a hablar del modulo de datasources sin dar contexto alguno sobre esto
+ *Capitulo 5. Paso 0. Pondria la ruta completa a cualquier cosa que se menciona por primera vez /CHIPER-API/src/datasources
+ *Capitulo 5. Recordar hacer un npm install ya que se va a trabajar con un nuevo repositorio, no se tiene las librerias instaladas localmente 
+ * Capotulo 5. Es dificil entender donde se encuentra los archivos de los que se esta hablando y como esta estructurado el repositorio. me tarde en entender que cada paquete es un sub dominio y dentro de estos estaba lo especificado. Ya que estamos en github pondira la ruta completa y un link a los archivos de los que se esta hablando
+ *Entregables 2. Estandarizaria utilizar un repositorio, explicando inicialmente tambien como hacer un fork al repositorio con el fin de estandarizar y facilitar la calificacion el proceso de descargar el codigo y descomprimir se vuelve tedioso para los monitores
+ * Entregables 2.1. En el diagrama adjuntado el componente producto no esta dentreo del subdominio de logistica, esta dentro de ventas, esto me parece una inconsistencia
+ * Diagrama. Se utilzian nombres diferentes en algunas cosas diferencias entre codigo y diseño, deberian llamarse igual
+ * Entregables. Yo daria un poco mas de conexion entre las capas explicadas en el diagrama y como esto se traslada al codigo
