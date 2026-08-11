@@ -730,10 +730,10 @@ El estudiante debe entregar un documento en PDF que incluya:
 
 1. Respuestas argumentadas a las preguntas del laboratorio
 
-**Nota:** Debe responder con profundidad arquitectónica, no definiciones superficiales.
+**Nota:** Argumente sus respuestas, vaya más allá de lo superficial.
 
 
-2. Implementación funcional de los siguientes componentes, con el código fuente adjunto como un **archivo comprimido (.zip)** junto con el PDF. No se debe entregar un enlace a un repositorio.
+2. Implementación funcional de los siguientes componentes, con el código fuente adjunto como un **archivo comprimido (.zip)** junto con el PDF. No se debe entregar un enlace a repositorio en este laboratorio.
 
    **2.1 CRUD de Producto (módulo de Logística)**
 
@@ -759,3 +759,6 @@ El estudiante debe entregar un documento en PDF que incluya:
    - `CatalogoService` debe inyectar `TiendaService` en lugar de `TiendaClientMock`.
    - La verificación de existencia de la tienda al crear un catálogo debe realizarse a través del servicio real.
 
+> [!IMPORTANT]
+> **¿A dónde se suben los entregables?**
+> A la Actividad correspondiente en el aula de Bloque Neón de su sección.
