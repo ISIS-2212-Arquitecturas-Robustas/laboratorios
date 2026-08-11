@@ -731,7 +731,7 @@ El estudiante debe entregar un documento en PDF que incluya:
 **Nota:** Debe responder con profundidad arquitectónica, no definiciones superficiales.
 
 
-2. Implementación funcional de los siguientes componentes, con el código fuente adjunto o enlace al repositorio:
+2. Implementación funcional de los siguientes componentes, con el código fuente adjunto como un **archivo comprimido (.zip)** junto con el PDF. No se debe entregar un enlace a un repositorio.
 
    **2.1 CRUD de Producto (módulo de Logística)**
 

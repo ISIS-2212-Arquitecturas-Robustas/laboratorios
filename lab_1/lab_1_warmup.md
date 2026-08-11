@@ -59,7 +59,7 @@ El diagrama de dominio completo está en [`recursos/Modelo_Dominio_Cheapest.pdf`
 
 ## Tarea 
 
-En un editor de texto (no necesitan un proyecto Nest corriendo), escriban el código de los siguientes archivos siguiendo **exactamente el mismo patrón** que `Catalogo`:
+En un IDE con soporte de TypeScript instalado (por ejemplo VS Code con las dependencias del proyecto instaladas, para tener resaltado de errores y autocompletado — no es necesario correr la aplicación ni la base de datos), escriban el código de los siguientes archivos siguiendo **exactamente el mismo patrón** que `Catalogo`:
 
 1. **`producto.entity.ts`** — entidad `Producto` con TypeORM: `id` (uuid), `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, `createdAt`, `updatedAt`, y la relación inversa `@ManyToMany` hacia `Catalogo`.
 2. **`create-producto.dto.ts`** — DTO de creación con `class-validator` (`@IsString`, `@IsNumber`, `@MaxLength`, etc. según el tipo de cada campo).
@@ -70,4 +70,4 @@ En un editor de texto (no necesitan un proyecto Nest corriendo), escriban el có
 
 ## Cierre de la sesión
 
-Cada equipo debe terminar con los 4 archivos escritos (aunque sea en un documento de texto, sin compilar). Este código se integra tal cual como parte del **Entregable 2.1 (CRUD de Producto)** del Lab 1 — no hay que rehacerlo después.
+Cada equipo debe terminar con los 4 archivos escritos en el IDE, sin errores de compilación de TypeScript (no es necesario ejecutar la aplicación). Este código se integra tal cual como parte del **Entregable 2.1 (CRUD de Producto)** del Lab 1 — no hay que rehacerlo después.
