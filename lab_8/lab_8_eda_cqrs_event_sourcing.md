@@ -357,16 +357,16 @@ El patrón que resuelve este riesgo —el **Outbox**— garantiza at-least-once:
 ### 4.1 Prerequisitos
 
 Este lab parte del stack del **Lab 7** (ECS + RDS + API Gateway). Asegúrese de tener:
-- Las imágenes de los tres servicios publicadas en ECR desde la rama `Cheapest-eda`
+- Las imágenes de los tres servicios publicadas en ECR desde la rama `cheapest-eda`
 - El stack del Lab 7 desplegado (o el de Lab 4 como base)
 
 Use el tag `4.0.0` para las imágenes de esta rama:
 
 | Servicio | Repositorio ECR | Tag |
 | --- | --- | --- |
-| Logística | `Cheapest-logistica` | `4.0.0` |
-| Inventario | `Cheapest-inventario` | `4.0.0` |
-| Ventas | `Cheapest-ventas` | `4.0.0` |
+| Logística | `cheapest-logistica` | `4.0.0` |
+| Inventario | `cheapest-inventario` | `4.0.0` |
+| Ventas | `cheapest-ventas` | `4.0.0` |
 
 ### 4.2 Desplegar el stack
 
@@ -449,7 +449,7 @@ La **versión monotónica** garantiza el orden de los eventos. Reproduciendo los
 
 ### 5.2 Implementación
 
-> El código vive en la rama `Cheapest-eda` del repositorio `Cheapest-api`.
+> El código vive en la rama `cheapest-eda` del repositorio `Cheapest-api`.
 > La entidad `EventoPedido` ya está definida. Los repositorios tienen métodos con `throw new Error('Not implemented')` que deben completarse.
 
 #### Tarea 1.1 - Completar `EventoPedidoRepository`

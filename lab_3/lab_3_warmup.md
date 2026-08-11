@@ -76,10 +76,10 @@ sudo service docker status
 
 ```bash
 # Opción A: crear y levantar (primera vez)
-sudo docker run --name Cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=Cheapest  -p 5432:5432  -d postgres
+sudo docker run --name cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=cheapest  -p 5432:5432  -d postgres
 
 # Opción B: si ya existe, solo iniciar
-sudo docker start Cheapest-db
+sudo docker start cheapest-db
 ```
 
 4. Verifique que está arriba:

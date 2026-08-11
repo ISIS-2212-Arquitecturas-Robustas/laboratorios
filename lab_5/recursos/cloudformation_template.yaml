@@ -11,7 +11,7 @@ Parameters:
 
   LogisticaImageUri:
     Type: String
-    Description: URI completo de la imagen ECR para el servicio Logistica (ej. 123456789.dkr.ecr.us-east-1.amazonaws.com/Cheapest-logistica:2.0.0)
+    Description: URI completo de la imagen ECR para el servicio Logistica (ej. 123456789.dkr.ecr.us-east-1.amazonaws.com/cheapest-logistica:2.0.0)
 
   InventarioImageUri:
     Type: String
@@ -388,6 +388,14 @@ Resources:
             # RECOVERY_TIME_MS: tiempo desde el arranque hasta la auto-recuperación
             - Name: RECOVERY_TIME_MS
               Value: !Ref RecoveryTimeMs
+            # Inventario también valida existencia de producto contra Logística
+            # (LogisticaProductosClient) antes de crear un item_inventario. Mismo caso que
+            # Ventas: sin esta variable cae a 'http://localhost:3001' y falla con
+            # "Logistica service is unavailable".
+            - Name: LOGISTICA_BASE_URL
+              Value: !Sub 'http://${LogisticaALB.DNSName}'
+            - Name: LOGISTICA_TIMEOUT_MS
+              Value: '5000'
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -487,6 +495,14 @@ Resources:
             # Esto es lo que permite que retry/circuit breaker se apliquen sin tocar el código de Ventas.
             - Name: INVENTARIO_BASE_URL
               Value: 'http://localhost:10000'
+            # Ventas también valida existencia de producto contra Logística (LogisticaProductosClient).
+            # Logística corre en un ECS Service DISTINTO (no comparte red con Ventas), así que debe
+            # apuntar al ALB de Logística; sin esta variable, el cliente cae a su default
+            # 'http://localhost:3001', que no resuelve a nada dentro del task de Ventas.
+            - Name: LOGISTICA_BASE_URL
+              Value: !Sub 'http://${LogisticaALB.DNSName}'
+            - Name: LOGISTICA_TIMEOUT_MS
+              Value: '5000'
           LogConfiguration:
             LogDriver: awslogs
             Options:

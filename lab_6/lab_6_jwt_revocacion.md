@@ -150,12 +150,6 @@ JWT es “stateless”: una vez emitido, un access token firmado seguirá siendo
 - TTL más corto: mejor contención, pero más renovaciones y más sensibilidad a fallos del flujo de refresh.
 - TTL más largo: menos fricción, pero peor seguridad (más minutos de acceso tras robo).
 
-
-> [!IMPORTANT]
-> **Pregunta 3:**
-> Si solo puede implementar una cosa por semana: (A) JWT authorizer en API Gateway o (B) validación JWT + RBAC en cada microservicio.
-> ¿Cuál elige y por qué? Debe argumentar con superficie de ataque y radio de impacto.
-
 ## 3. Tecnologías
 
 | Categoría | Tecnologías |
@@ -201,6 +195,40 @@ Los endpoints de health deben ser **públicos** para monitoreo:
 - `GET <ApiGatewayUrl>/logistica/health`
 - `GET <ApiGatewayUrl>/inventario/health`
 - `GET <ApiGatewayUrl>/ventas/health`
+
+### 4.3 Cargar datos base
+
+Igual que en el Lab 5, la RDS de este stack se crea con `PubliclyAccessible: false`. Hágala temporalmente pública y abra el puerto 5432 **solo para su IP**, corra el seed desde su máquina apuntando a la RDS real, y luego revierta ambos cambios.
+
+```bash
+# 1. Anote su IP pública actual
+MY_IP=$(curl -s https://checkip.amazonaws.com)
+echo $MY_IP
+
+# 2. Identifique el Security Group de RDS del stack (tag Name: Cheapest-lab6-rds-sg)
+SG_RDS_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=Cheapest-lab6-rds-sg --query "SecurityGroups[0].GroupId" --output text)
+
+# 3. Haga la instancia temporalmente pública
+aws rds modify-db-instance --db-instance-identifier Cheapest-lab6-db --publicly-accessible --apply-immediately
+
+# 4. Espere a que el cambio se aplique (puede tardar 1-2 minutos)
+aws rds describe-db-instances --db-instance-identifier Cheapest-lab6-db --query "DBInstances[0].PubliclyAccessible"
+
+# 5. Abra el puerto 5432 SOLO para su IP
+aws ec2 authorize-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --port 5432 --cidr ${MY_IP}/32
+
+# 6. Corra el backend en local (rama cognito-auth) apuntando a la RDS real y sembrando datos
+git checkout cognito-auth
+npm install
+DB_HOST=<RDS_ENDPOINT_DEL_STACK> DB_PORT=5432 DB_USER=postgres DB_PASSWORD=<SU_CONTRASEÑA> DB_NAME=Cheapest npm run db:seed
+```
+
+Al terminar, **revierta ambos cambios** para no dejar la base expuesta:
+
+```bash
+aws rds modify-db-instance --db-instance-identifier Cheapest-lab6-db --no-publicly-accessible --apply-immediately
+aws ec2 revoke-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --port 5432 --cidr ${MY_IP}/32
+```
 
 ## 5. Implementación mínima en microservicios
 
@@ -255,7 +283,7 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 
 
 > [!IMPORTANT]
-> **Pregunta 4:**
+> **Pregunta 3:**
 > ¿Por qué es peligroso devolver 403 cuando el token está ausente o es inválido?
 > Relacione su respuesta con enumeración de endpoints y debugging operacional.
 
@@ -278,9 +306,8 @@ Endpoint protegido para el experimento:
 - `POST <ApiGatewayUrl>/ventas`
 
 > [!IMPORTANT]
-> **Pregunta 5:**
+> **Pregunta 4:**
 > Si el refresh token ya fue robado, ¿qué cambia (y qué NO cambia) si el usuario hace logout en el front-end?
-> Responda con un diagrama de flujo simple del refresh.
 
 ## 7. Parte 2 — Contención: revocación rápida
 
@@ -310,7 +337,7 @@ Reporte:
    - Fallo del refresh tras revocar (error devuelto por Cognito).
    - Request fallida después de expirar el access token (401).
 3. **Cálculo** de ventana máxima de exposición y justificación del TTL.
-4. Respuestas a las preguntas 1–5.
+4. Respuestas a las preguntas 1–4.
 
 > Nota: al terminar, elimine el stack para evitar costos:
 >

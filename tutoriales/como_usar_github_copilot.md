@@ -74,3 +74,59 @@ En el chat, con el comando **@** puede mencionar archivos o incluso funciones o 
 Con el comando **/** puede acceder a comandos rápidos para realizar acciones específicas, como generar pruebas, refactorizar código o revisar errores. Estos comandos permiten interactuar de forma más eficiente con el modelo, puede leer la descripción de cada comando para entender su función y aplicarlos según la necesidad.
 
 <img src="./recursos/Pasted image 20260317223715.png" width=400/>
+
+## 9. Copilot Agents
+
+Además del modo **Agent** dentro del chat de VS Code (sección 6), GitHub Copilot ofrece una **ventana de Agentes** dedicada, pensada para ejecutar tareas de forma más autónoma y sobre uno o varios repositorios/carpetas de trabajo.
+
+Para abrirla, use el botón **Open in Agents** ubicado en la parte superior derecha de VS Code (atajo `Shift+Cmd+A` en Mac o `Ctrl+Alt+A` en Windows).
+
+<img src="./recursos/copilot_como_abrir_agents.png" width=600/>
+
+Esto abre una ventana independiente con una vista general de sus sesiones de agentes:
+
+<img src="./recursos/copilot_vista_general_agents.png" width=700/>
+
+En esta vista encuentra:
+
+- **Sessions**: el historial de sesiones de agentes que ha ejecutado, similar a las sesiones del chat pero orientadas a tareas completas en lugar de conversaciones puntuales.
+- **Selector de carpeta/repositorio** (`chiper-api` en el ejemplo): permite elegir sobre qué proyecto trabajará el agente.
+- **Selector de modelo** (`Copilot` en el ejemplo): igual que en el chat, puede elegir qué modelo usará el agente para ejecutar la tarea.
+- **Modo Agent / Auto**: define si el agente pide confirmación en cada paso (`Interactive`) o ejecuta de forma más autónoma.
+- **New Worktree**: permite que el agente trabaje sobre un *worktree* aislado de Git, evitando modificar directamente su rama de trabajo actual hasta que usted revise los cambios.
+- **Panel de Changes/Files** (derecha): muestra en tiempo real los archivos que el agente ha modificado, permitiéndole revisar el diff antes de aceptarlo.
+
+Esta ventana es útil cuando quiere delegar tareas más largas o complejas (por ejemplo, "agrega pruebas unitarias a todos los controladores" o "corrige este bug e implementa la migración correspondiente") y revisar los cambios como si fuera un pull request, en lugar de ir aprobando cada sugerencia dentro del editor.
+
+### Customizations
+
+En el panel izquierdo de la ventana de Agentes encontrará la sección **Customizations**, que le permite personalizar el comportamiento de Copilot para su proyecto:
+
+<img src="./recursos/copilot_customizations.png" width=250/>
+
+- **Overview**: resumen general de la configuración del agente para el repositorio actual.
+- **Agents**: permite definir agentes personalizados con instrucciones y alcance específico (por ejemplo, un agente especializado en revisar seguridad o en escribir pruebas).
+- **Skills**: capacidades reutilizables que el agente puede invocar para tareas concretas.
+- **Instructions**: instrucciones persistentes que se aplican a todas las sesiones del agente sobre el proyecto (similar a un `CLAUDE.md` o `.github/copilot-instructions.md`), útil para fijar convenciones de código, estilo o restricciones del equipo.
+- **Hooks**: comandos que se ejecutan automáticamente en respuesta a eventos del agente (por ejemplo, correr el linter después de cada cambio).
+- **MCP Servers**: servidores del [Model Context Protocol](https://modelcontextprotocol.io/) conectados, que le dan al agente acceso a herramientas o datos externos (bases de datos, APIs, documentación, etc.).
+- **Plugins**: extensiones adicionales que amplían las capacidades del agente.
+- **Tools**: lista de herramientas disponibles para el agente (lectura/escritura de archivos, ejecución de comandos, búsqueda en el código, etc.), y le permite habilitar o deshabilitar cuáles puede usar.
+
+Configurar estas secciones, especialmente **Instructions**, es una buena práctica cuando se trabaja en equipo, ya que asegura que todos los agentes sigan las mismas convenciones del proyecto sin tener que repetirlas en cada prompt.
+
+## 10. Diseñar prompts efectivos (Prompt Engineering)
+
+Un prompt bien estructurado multiplica el valor que se puede obtener de la IA, ya sea en el chat, en modo Agent o en la ventana de Agentes. A continuación se presentan cinco principios para escribir mejores prompts:
+
+1. **Claridad y especificidad**: evite instrucciones vagas. En lugar de pedir *"Refactor this"*, especifique el lenguaje, el objetivo y el criterio de éxito, por ejemplo: *"Refactoriza este código Python para mejorar legibilidad y separar responsabilidades en funciones distintas."*
+
+2. **Estructura guiada**: divida la solicitud en pasos claros, siguiendo el orden **contexto → intención → limitaciones → tarea**. Una estructura útil es asignarle un rol al modelo: *"You are [rol]... Your main goal is... You cannot... Instructions"*.
+
+3. **Incluir ejemplos**: cuando sea posible, muestre un ejemplo de *antes/después* del código esperado, o mencione casos parecidos que ya se hayan resuelto en el proyecto. Esto ayuda al modelo a alinear su respuesta con el estilo y las convenciones existentes.
+
+4. **Incluir restricciones**: mencione explícitamente qué NO se debe hacer (por ejemplo, "no modifiques los tests existentes") y defina los límites técnicos del sistema (versión de lenguaje, librerías permitidas, arquitectura a respetar).
+
+5. **Iteración y retroalimentación**: rara vez el primer prompt produce el resultado ideal. Ajuste el prompt según la respuesta obtenida, dando retroalimentación puntual, por ejemplo: *"Eso no era lo que quería, enfócate solo en modularidad."*
+
+Aplicar estos principios es especialmente importante al usar la ventana de Agentes (sección 9), ya que el agente ejecutará tareas de forma más autónoma y con menos supervisión paso a paso, por lo que un prompt claro y bien delimitado reduce la necesidad de correcciones posteriores.

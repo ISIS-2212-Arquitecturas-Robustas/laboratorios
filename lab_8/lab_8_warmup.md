@@ -2,7 +2,7 @@
 
 ## Contexto
 
-El código vive en la rama `Cheapest-eda` del repositorio `Cheapest-api`. La entidad `EventoPedido` ya está definida. Algunos métodos tienen `throw new Error('Not implemented')` que deben completarse; otros ya están implementados y solo hay que revisarlos.
+El código vive en la rama `cheapest-eda` del repositorio `Cheapest-api`. La entidad `EventoPedido` ya está definida. Algunos métodos tienen `throw new Error('Not implemented')` que deben completarse; otros ya están implementados y solo hay que revisarlos.
 
 ## Tarea 
 

@@ -152,7 +152,7 @@ Resources:
       EventBusName: !Ref CheapestEventBus
       EventPattern:
         source:
-          - Cheapest.ventas
+          - cheapest.ventas
         detail-type:
           - VentaCreada
       State: ENABLED

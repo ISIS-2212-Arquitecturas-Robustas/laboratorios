@@ -54,7 +54,6 @@ Este escenario es conocido en la industria como **retry storm** y es uno de los 
 > **Pregunta 1:**
 > En Cheapest, ¿qué decisión de producto y operación debería tomarse primero cuando aparece un retry storm: proteger disponibilidad percibida (respuestas degradadas) o proteger consistencia estricta (rechazar operaciones)?
 > Argumente su respuesta considerando impacto en tenderos, riesgo financiero y costo de reconciliación posterior.
-> Acompañe la respuesta con un diagrama de decisión (árbol o flujo) que muestre criterios y consecuencias por camino.
 
 Un aspecto crítico de este escenario, y que este lab reproduce explícitamente, es que el fallo es **transitorio**: los sistemas de orquestación modernos como ECS detectan tareas poco saludables mediante health checks y las reinician automáticamente. En la práctica, un servicio degradado por un pico de memoria, un pool de conexiones agotado o un spike de CPU puede recuperarse por sí solo en cuestión de segundos o minutos. El servicio de Inventario en este laboratorio simula exactamente eso: se degrada al arrancar y se recupera automáticamente tras `RECOVERY_TIME_MS` milisegundos. Esto hace que el estado **HALF-OPEN** del circuit breaker no sea solo teórico: cuando Inventario se recupera, el circuit breaker lo detecta y vuelve al estado CLOSED, restaurando el flujo normal sin intervención humana.
 
@@ -80,7 +79,7 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 > [!IMPORTANT]
 > **Pregunta 2:**
 > Si fuera el líder encargado de ejecutar este plan en Cheapest seguiría este orden teniendo en cuenta el riesgo de estos cambios? Describa un plan de migración que mitigue los riesgos asociados.
-> Incluya un diagrama de fases (timeline) con hitos, riesgo principal por fase y criterio de salida.
+> El plan de migración debe incluir: etapas, tiempo estimado por etapa y las tareas a realizar en cada una.
 
 ## 2. Arquitectura
 
@@ -114,7 +113,6 @@ Note que el el sidecar se despliega como un contenedor adicional dentro de la mi
 > **Pregunta 3:**
 > Retry, circuit breaker y rate limiting pueden entrar en conflicto si se calibran mal.
 > Proponga un conjunto coherente de parámetros iniciales para Cheapest (timeouts, retries, umbral de apertura, reset timeout, rate y burst) y justifique cómo evitaría inestabilidad sistémica.
-> Presente además una gráfica temporal esperada (latencia/error/requests a Inventario) antes y después de aplicar la calibración propuesta.
 
 ### 2.4 Patrones de disponibilidad
 
@@ -251,6 +249,9 @@ El template incluye:
 | `API Gateway`      | HTTP API con rutas `/logistica/*`, `/inventario/*`, `/ventas/*` y stage `lab` |
 
 > [!NOTE]
+> Los prefijos de ruta de este laboratorio son **`logistica`/`inventario`**, a diferencia de `logistics`/`inventory usados en el Lab 4. El API Gateway traduce correctamente hacia los prefijos reales del backend (`/logistics/*`, `/inventory/*`); si prueba manualmente con los prefijos en inglés obtendrá 404.
+
+> [!NOTE]
 > **Warm-up en clase:** las secciones 4 a 6 completas (desplegar CloudFormation, calibrar el sidecar Envoy y reproducir el fallo en cascada baseline) están disponibles como una sesión práctica extendida para trabajar en clase: [`lab_5_warmup.md`](lab_5_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Aplicar tácticas de resiliencia**, ya que el baseline y la configuración del sidecar quedaron listos.
 
 ### 4.3 Preparar parámetros
@@ -259,10 +260,10 @@ Antes de desplegar, publique las imágenes Docker en ECR y anote los URIs. En es
 
 | Servicio          | Repositorio sugerido     | Tag     | Dockerfile                          |
 | ----------------- | ------------------------ | ------- | ----------------------------------- |
-| Logística         | `Cheapest-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
-| Inventario        | `Cheapest-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
-| Ventas            | `Cheapest-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
-| Ventas sidecar    | `Cheapest-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
+| Logística         | `cheapest-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
+| Inventario        | `cheapest-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
+| Ventas            | `cheapest-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
+| Ventas sidecar    | `cheapest-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
 
 Tutorial de apoyo:
 - [Subir imágenes Docker a Amazon ECR](../tutoriales/subir_imagenes%20_a_ecr.md)
@@ -296,6 +297,42 @@ GET https://<API_ID>.execute-api.<REGION>.amazonaws.com/lab/ventas/health
 ```
 
 Los tres deben retornar HTTP 200 antes de continuar.
+
+### 4.6 Cargar datos base
+
+A diferencia del Lab 4, la RDS de este stack se crea con `PubliclyAccessible: false`, por lo que no es alcanzable desde su laptop por defecto. Igual que en el tutorial de RDS del Lab 4, hágala temporalmente pública y abra el puerto 5432 **solo para su IP**, corra el seed desde su máquina apuntando a la RDS real, y luego revierta ambos cambios.
+
+```bash
+# 1. Anote su IP pública actual
+MY_IP=$(curl -s https://checkip.amazonaws.com)
+echo $MY_IP
+
+# 2. Identifique el Security Group de RDS del stack (tag Name: Cheapest-lab5-rds-sg)
+SG_RDS_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=Cheapest-lab5-rds-sg --query "SecurityGroups[0].GroupId" --output text)
+
+# 3. Haga la instancia temporalmente pública
+aws rds modify-db-instance --db-instance-identifier Cheapest-lab5-db --publicly-accessible --apply-immediately
+
+# 4. Espere a que el cambio se aplique (puede tardar 1-2 minutos)
+aws rds describe-db-instances --db-instance-identifier Cheapest-lab5-db --query "DBInstances[0].PubliclyAccessible"
+
+# 5. Abra el puerto 5432 SOLO para su IP
+aws ec2 authorize-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --port 5432 --cidr ${MY_IP}/32
+
+# 6. Corra el backend en local (rama availability) apuntando a la RDS real y sembrando datos
+git checkout availability
+npm install
+DB_HOST=<RDS_ENDPOINT_DEL_STACK> DB_PORT=5432 DB_USER=postgres DB_PASSWORD=<SU_CONTRASEÑA> DB_NAME=Cheapest npm run db:seed
+```
+
+Al terminar, **revierta ambos cambios** para no dejar la base expuesta:
+
+```bash
+aws rds modify-db-instance --db-instance-identifier Cheapest-lab5-db --no-publicly-accessible --apply-immediately
+aws ec2 revoke-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --port 5432 --cidr ${MY_IP}/32
+```
+
+Con los datos sembrados, ya puede ejecutar las pruebas de las secciones 6 y 8 usando los IDs fijos de `seed.sql` (ver Lab 2/Lab 3 para ejemplos de esos IDs) o los que genere el seed para su tienda.
 
 ## 5. Configuración del sidecar y ajuste de código
 
@@ -368,14 +405,14 @@ Los seis puntos a completar son:
 
 ```bash
 # Construir la imagen del sidecar
-docker build -t Cheapest-ventas-sidecar:local apps/ventas/sidecar/
+docker build -t cheapest-ventas-sidecar:local apps/ventas/sidecar/
 
 # Lanzar el sidecar apuntando a un inventario local (para verificar que el YAML es válido)
 docker run --rm \
   -e INVENTARIO_UPSTREAM_HOST=host.docker.internal \
   -e INVENTARIO_UPSTREAM_PORT=3002 \
   -p 10000:10000 -p 9901:9901 \
-  Cheapest-ventas-sidecar:local
+  cheapest-ventas-sidecar:local
 
 # En otra terminal: verificar que Envoy está listo
 curl http://localhost:9901/ready
@@ -589,7 +626,6 @@ Con las tres tácticas activas simultáneamente (sidecar completo + rate limitin
 > **Pregunta 4:**
 > Si las tres tácticas cumplen ASRs en este laboratorio, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala?
 > Responda identificando al menos dos clases de fallos que estas tácticas no resuelven por sí solas y qué capacidad adicional haría falta.
-> Incluya un diagrama de arquitectura objetivo (estado actual vs capacidades faltantes) para mostrar dónde se cerrarían esos riesgos residuales.
 
 Complete la tabla comparativa (ver entregables).
 
@@ -646,7 +682,7 @@ Para ver el problema, ejecute el siguiente flujo con el código de la rama **ant
    Luego verificar stock: bajó en 2 cuando debería haber bajado en 1.
 
 > [!IMPORTANT]
-> **Pregunta 9:**
+> **Pregunta 5:**
 > Describa con precisión el estado de inconsistencia que se produce en cada escenario:
 > 1. Ventas registradas durante degradación: ¿qué diferencia hay entre lo que dice `ventas` en PostgreSQL y lo que dice `item_inventario.cantidad`?
 > 2. Retry sin idempotencia: ¿qué invariante de negocio se viola? ¿Cómo lo detectaría operacionalmente en Cheapest?

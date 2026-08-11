@@ -251,10 +251,10 @@ sudo service docker status
 
 ```bash
 # Opción A: crear y levantar (primera vez)
-sudo docker run --name Cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=Cheapest  -p 5432:5432  -d postgres
+sudo docker run --name cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=cheapest  -p 5432:5432  -d postgres
 
 # Opción B: si ya existe, solo iniciar
-sudo docker start Cheapest-db
+sudo docker start cheapest-db
 ```
 
 4. Verifique que está arriba:
@@ -340,18 +340,21 @@ Para configurarlo copie el archivo de ejemplo
 cp .env.example .env
 ```
 
-Con el comando `cat .env` usted verá el contenido del archivo:
+Con el comando `cat .env` usted verá el contenido del archivo (los valores reales de `.env.example` del repo):
 
 ```bash
-DB_HOST=<IP_PRIVADA_DB>
+NODE_ENV=production
+APP_PORT=3000
+
+DB_TYPE=postgres
+DB_HOST=localhost
 DB_PORT=5432
-DB_USER=Cheapest_user
-DB_PASSWORD=Cheapest_pwd
-DB_NAME=Cheapest_db
-PORT=3000
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_NAME=cheapest
 ```
 
-Modifique las variables de conexión a la base de datos para que apunten a la IP privada de `Cheapest-db` (puerto 5432, usuario y contraseña según lo definido en el contenedor de PostgreSQL). La idea es que HOST apunte a la IP **privada** de Cheapest-db (misma VPC)
+Modifique **únicamente** `DB_HOST` para que apunte a la **IP privada** de `Cheapest-db` (misma VPC). El usuario, la contraseña y el nombre de la base (`postgres`/`postgres`/`cheapest`) ya coinciden con lo definido en el contenedor de PostgreSQL del paso 4.3.2.
 
 Para modificar el archivo puede usar `nano` o `vim`:
 
@@ -372,7 +375,10 @@ nano .env
 npm run start
 ```
 
-> El Lab 3 asume que el backend ya tiene datos suficientes para ejecutar las pruebas del Lab 2 (consulta con JOINs y escritura de entidad grande).
+> El Lab 3 asume que el backend ya tiene datos suficientes para ejecutar las pruebas del Lab 2 (consulta con JOINs y escritura de entidad grande). Al arrancar, la aplicación ejecuta el seeder (`load-seed.yaml`) contra la base de datos.
+
+> [!WARNING]
+> **Arranque la primera instancia de app y espere a que responda en `/health` antes de arrancar las otras dos.** El seeder corre al inicio de cada instancia: si las tres arrancan a la vez contra una base vacía, las tres intentarán poblarla al mismo tiempo (datos duplicados o errores de arranque). Con la base ya poblada, las demás instancias detectan los datos existentes y no insertan nada.
 
 #### 4.4.6 Verificación rápida desde el navegador
 
@@ -393,7 +399,7 @@ Si las instancias quedaron detenidas, inícielas antes de ejecutar las pruebas:
 1. Inicie `Cheapest-db` y verifique el contenedor de PostgreSQL:
 
 ```bash
-sudo docker start Cheapest-db
+sudo docker start cheapest-db
 sudo docker ps
 ```
 
@@ -443,7 +449,7 @@ Ejecute al menos **8 ejecuciones** para *Operación normal* y *Estrés fuerte*. 
 
 ### 5.3 Ejecutar con JMeter
 
-1. Descargue del repositorio el archivo `load-tests.jmx` (incluye las pruebas **GET** y **POST**).
+1. Use el archivo [`load_test.jmx`](../lab_2/recursos/load_test.jmx) del Lab 2 (incluye las pruebas **GET** y **POST**).
 2. Actualice en el plan:
    - `Server Name or IP` = `DNS_ALB`
    - `Port` = `80`
@@ -468,16 +474,18 @@ Saque conclusiones respecto a los siguientes parámetros registrados:
 
 ### 6.1 Umbrales por ASR
 
-- **REQ1 (Latencia):** `p99 < 2000 ms`
-- **REQ2 (Disponibilidad):** `Error % ≤ 10%`
+Use las medidas de respuesta definidas en los ASRs (sección 1.2):
+
+- **ASR 1 (Latencia):** `p99 < 1000 ms`
+- **ASR 2 (Disponibilidad):** `Error % ≤ 2%`
 
 ### 6.2 Definir punto de inflexión
 
 Para cada endpoint:
 
 - Es el **mayor** número de threads donde **todavía** se cumple cada uno de los ASRs:
-  - p99 < 2000 ms
-  - Error % ≤ 10%
+  - p99 < 1000 ms
+  - Error % ≤ 2%
 
 Luego reporte el primer punto (threads) donde dejan de cumplirse.
 ## 7. Entregables

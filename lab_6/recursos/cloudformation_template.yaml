@@ -408,6 +408,10 @@ Resources:
               Value: !Ref CognitoUserPool
             - Name: COGNITO_CLIENT_ID
               Value: !Ref CognitoUserPoolClient
+            - Name: LOGISTICA_BASE_URL
+              Value: !Sub 'http://${LogisticaALB.DNSName}'
+            - Name: LOGISTICA_TIMEOUT_MS
+              Value: '5000'
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -509,6 +513,10 @@ Resources:
               Value: !Ref CognitoUserPool
             - Name: COGNITO_CLIENT_ID
               Value: !Ref CognitoUserPoolClient
+            - Name: LOGISTICA_BASE_URL
+              Value: !Sub 'http://${LogisticaALB.DNSName}'
+            - Name: LOGISTICA_TIMEOUT_MS
+              Value: '5000'
           LogConfiguration:
             LogDriver: awslogs
             Options:

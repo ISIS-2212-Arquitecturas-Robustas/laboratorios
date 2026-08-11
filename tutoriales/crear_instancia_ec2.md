@@ -87,7 +87,7 @@ Guarde estos IDs.
 Las AMIs son identificadores de imágenes de sistemas operativos. Estos cambian constantemente, por lo que se busca la más reciente utilizando el siguiente comando:
 
 ``` bash
-aws ec2 describe-images --owners 099720109477 --filters "Name=name,Values=ubuntu/images/*/ubuntu-*-24.04-*" "Name=state,Values=available" --query "Images | sort_by(@,&CreationDate)[-1].ImageId" --output text
+aws ec2 describe-images --owners 099720109477 --filters "Name=name,Values=ubuntu/images/*/ubuntu-*-24.04-*" "Name=architecture,Values=x86_64" "Name=state,Values=available" --query "Images | sort_by(@,&CreationDate)[-1].ImageId" --output text
 ```
 
 Ejemplo de salida:
@@ -96,7 +96,7 @@ Ejemplo de salida:
 ami-123abc456
 ```
 
-Note que este comando usa expresiones regulares para traer la versión que haga match con la última imagen de ubuntu 24.04. (El id que aparece en owners es el de Canonical, organización que mantiene las imágenes oficiales de Ubuntu en AWS)
+Note que este comando usa expresiones regulares para traer la versión que haga match con la última imagen de ubuntu 24.04. (El id que aparece en owners es el de Canonical, organización que mantiene las imágenes oficiales de Ubuntu en AWS). El filtro `architecture,Values=x86_64` es importante: sin él, el comando puede devolver una imagen `arm64`, que no es compatible con instancias `t2.medium` (x86_64) y hace fallar el `run-instances` con un error de arquitectura.
 
 Guarde el **ImageId**.
 

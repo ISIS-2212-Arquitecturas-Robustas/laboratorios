@@ -35,14 +35,14 @@ AWS documenta que el cliente Docker debe autenticarse con ECR usando un token te
 
 ## 4. Escenario del laboratorio
 
-En este ejemplo se subirá la imagen del servicio llamado `inventario-service` en el repositorio `Cheapest-inventario` con el tag `0.0.1`
+En este ejemplo se subirá la imagen del servicio llamado `inventario-service` en el repositorio `cheapest-inventario` con el tag `0.0.1`
 
 Se asumirán los siguientes valores de configuración:
 
 ```bash
 REGION=us-east-1
 ACCOUNT_ID=123456789012
-REPO_NAME=Cheapest-inventario 
+REPO_NAME=cheapest-inventario 
 IMAGE_TAG=0.0.1
 ```
 
@@ -53,10 +53,10 @@ Recuerde cambiar estos valores por sus valores reales
 Primero se crea un repositorio privado en ECR. AWS permite hacerlo desde consola o por CLI.
 
 ```bash
-aws ecr create-repository --repository-name Cheapest-inventario --region us-east-1
+aws ecr create-repository --repository-name cheapest-inventario --region us-east-1
 ```
 
-Este comando crea un repositorio privado llamado `Cheapest-inventario` dentro de ECR en la región indicada. Ese repositorio será el destino donde se almacenará la imagen Docker.
+Este comando crea un repositorio privado llamado `cheapest-inventario` dentro de ECR en la región indicada. Ese repositorio será el destino donde se almacenará la imagen Docker.
 
 Usted verá el URI del repositorio, este se ve de la siguiente forma `449642781982.dkr.ecr.us-east-1.amazonaws.com`
 
@@ -106,7 +106,7 @@ Para los otros servicios, reemplace `inventario` por `logistica` o `ventas` tant
 Si quiere construir y etiquetar en un solo paso, puede hacerlo así:
 
 ```bash
-docker buildx build --platform linux/amd64 -f apps/inventario/Dockerfile -t 123456789012.dkr.ecr.us-east-1.amazonaws.com/Cheapest-inventario:0.0.1 --load .
+docker buildx build --platform linux/amd64 -f apps/inventario/Dockerfile -t 123456789012.dkr.ecr.us-east-1.amazonaws.com/cheapest-inventario:0.0.1 --load .
 ```
 
 ## 8. Paso 4: etiquetar la imagen con la URI de ECR
@@ -120,7 +120,7 @@ Para subir la imagen a ECR, debe etiquetarla con la URI completa del repositorio
 Ejemplo:
 
 ```bash
-docker tag inventario-service:0.0.1 123456789012.dkr.ecr.us-east-1.amazonaws.com/Cheapest-inventario:0.0.1
+docker tag inventario-service:0.0.1 123456789012.dkr.ecr.us-east-1.amazonaws.com/cheapest-inventario:0.0.1
 ```
 
 Aquí está creando una nueva referencia para la misma imagen local, pero ahora con el nombre exacto que ECR espera para poder recibirla.
@@ -130,7 +130,7 @@ Aquí está creando una nueva referencia para la misma imagen local, pero ahora 
 Una vez autenticado Docker y correctamente etiquetada la imagen, haga el push:
 
 ```bash
-docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/Cheapest-inventario:0.0.1
+docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/cheapest-inventario:0.0.1
 ```
 
 Este comando publica la imagen en el repositorio privado de Amazon ECR. Cuando termine, la imagen quedará disponible para ser usada por ECS u otros servicios compatibles.
@@ -142,7 +142,7 @@ AWS indica que ECR soporta imágenes Docker, imágenes OCI y otros artefactos co
 Puede verificarlo desde la consola de AWS o por la terminal.
 
 ```bash
-aws ecr describe-images --repository-name Cheapest-inventario --region us-east-1
+aws ecr describe-images --repository-name cheapest-inventario --region us-east-1
 ```
 
 Este comando lista las imágenes que existen dentro del repositorio y permite confirmar que el push fue exitoso.
@@ -156,7 +156,7 @@ A partir de este momento usted podrá seguir el [tutorial para levantar instanci
 Cuando vaya a crear una task definition de ECS, en el campo `image` del contenedor debe poner la URI exacta de la imagen publicada:
 
 ```text
-123456789012.dkr.ecr.us-east-1.amazonaws.com/Cheapest-inventario:0.0.1
+123456789012.dkr.ecr.us-east-1.amazonaws.com/cheapest-inventario:0.0.1
 ```
 
 AWS establece que la task definition especifica la imagen que ECS debe ejecutar.

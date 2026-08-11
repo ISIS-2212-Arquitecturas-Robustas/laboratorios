@@ -155,7 +155,11 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 
 
 ## Preparación del entorno
-En el repo del backend (Cheapest-api) diríjase a la rama `load-tests`
+En el repo del backend (Cheapest-api) diríjase a la rama `load_tests`
+
+```bash
+git checkout load_tests
+```
 ### Levantar PostgreSQL con Docker (recomendado)
 
 ```bash
@@ -181,7 +185,7 @@ Hay dos escenarios de carga importantes para este laboratorio (tomados de los AS
 - **Operación normal:** 500 req/min (≈ 8.3 req/s).
 - **Evento de promociones (pico):** 5000 req/min (≈ 83.3 req/s).
 
-El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts` puede configurar el número de entidades modificando `load-seed.yaml`
+El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts` puede configurar el número de entidades, el número de tiendas y zonas, y la distribución modificando `src/datasources/load-seed.yaml`
 
 > [!WARNING]
 > Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
@@ -189,7 +193,7 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 > ```bash
 > docker compose down -v postgres
 > ```
-> De igual forma en el archivo `seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas.
+> De igual forma en el archivo `src/datasources/seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas. Por ejemplo: `tiendaId = bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`, `zona = Zona Norte`, `monedaId = cccccccc-cccc-4ccc-8ccc-cccccccccccc` y `productoId = aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`.
 
 > [!IMPORTANT]
 > **Pregunta 2:**

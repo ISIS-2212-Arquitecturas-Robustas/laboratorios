@@ -31,10 +31,10 @@ Antes de desplegar, publique las imágenes Docker en ECR y anote los URIs. En es
 
 | Servicio          | Repositorio sugerido     | Tag     | Dockerfile                          |
 | ----------------- | ------------------------ | ------- | ----------------------------------- |
-| Logística         | `Cheapest-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
-| Inventario        | `Cheapest-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
-| Ventas            | `Cheapest-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
-| Ventas sidecar    | `Cheapest-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
+| Logística         | `cheapest-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
+| Inventario        | `cheapest-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
+| Ventas            | `cheapest-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
+| Ventas sidecar    | `cheapest-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
 
 Tutorial de apoyo:
 - [Subir imágenes Docker a Amazon ECR](../tutoriales/subir_imagenes%20_a_ecr.md)
@@ -135,14 +135,14 @@ Los seis puntos a completar son:
 
 ```bash
 # Construir la imagen del sidecar
-docker build -t Cheapest-ventas-sidecar:local apps/ventas/sidecar/
+docker build -t cheapest-ventas-sidecar:local apps/ventas/sidecar/
 
 # Lanzar el sidecar apuntando a un inventario local (para verificar que el YAML es válido)
 docker run --rm \
   -e INVENTARIO_UPSTREAM_HOST=host.docker.internal \
   -e INVENTARIO_UPSTREAM_PORT=3002 \
   -p 10000:10000 -p 9901:9901 \
-  Cheapest-ventas-sidecar:local
+  cheapest-ventas-sidecar:local
 
 # En otra terminal: verificar que Envoy está listo
 curl http://localhost:9901/ready

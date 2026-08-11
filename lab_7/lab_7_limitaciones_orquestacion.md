@@ -202,9 +202,9 @@ Los tres repositorios son los mismos del Lab 4. Use el tag `3.0.0`.
 
 | Servicio | Nombre repositorio | Tag imagen |
 | --- | --- | --- |
-| Logística | `Cheapest-logistica` | `3.0.0` |
-| Inventario | `Cheapest-inventario` | `3.0.0` |
-| Ventas | `Cheapest-ventas` | `3.0.0` |
+| Logística | `cheapest-logistica` | `3.0.0` |
+| Inventario | `cheapest-inventario` | `3.0.0` |
+| Ventas | `cheapest-ventas` | `3.0.0` |
 
 
 Tutoriales de apoyo del Lab 4:

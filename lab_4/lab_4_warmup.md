@@ -12,9 +12,9 @@ Debe crear un repositorio por servicio.
 
 | Servicio   | Nombre sugerido del repositorio | Nombre de la imagen | Tag imagen |
 | ---------- | --------------------------- | ---------- | ---------- |
-| Logistica  | `Cheapest-logistica`          | `logistica-service`          | `1.0.0`    |
-| Inventario | `Cheapest-inventario`         | `inventario-service`         | `1.0.0`    |
-| Ventas     | `Cheapest-ventas`             | `ventas-service`             | `1.0.0`    |
+| Logistica  | `cheapest-logistica`          | `logistica-service`          | `1.0.0`    |
+| Inventario | `cheapest-inventario`         | `inventario-service`         | `1.0.0`    |
+| Ventas     | `cheapest-ventas`             | `ventas-service`             | `1.0.0`    |
 
 Para cada servicio debe: construir una imagen, etiquetar con el URI del repositorio y publicar en ECR.
 

@@ -1,7 +1,7 @@
 # Guía de Migración: De Monolito a Microservicios
 
 
-Este documento describe el proceso de migración de **Cheapest-api** (monolito NestJS) a el proyecto en la rama **microservices** (arquitectura de microservicios con NestJS monorepo).
+Este documento describe el proceso de migración de **Cheapest-api** (monolito NestJS) al proyecto en la rama **microservicios** (arquitectura de microservicios con NestJS monorepo).
 
 La API gestiona tres dominios de negocio:
 - **Logística**: catálogo de productos, pedidos, despachos, promociones

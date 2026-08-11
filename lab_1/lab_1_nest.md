@@ -223,7 +223,7 @@ A partir de este modelado, tenemos un entendimiento más profundo de como funcio
 
 Por último podemos identificar cada uno de estos subdominios como componentes, estos componentes definirán la estructura de nuestra aplicación Nest pues cada componente puede mapearse a un módulo.
 
-![](componentes.png)
+![](recursos/componentes.png)
 
 Con esta organización en mente, vamos a crear el CRUD de Catálogo perteneciente al módulo de Logística. El objetivo es construir un CRUD REST para `Catalogo` con validación, verificación de existencia en un servicio externo (mock) y persistencia via TypeORM.
 
@@ -306,7 +306,7 @@ Para la instalación se recomienda instalar [Docker Desktop](https://docs.docker
 Se recomienda levantar una instancia PostgreSQL con Docker:
 
 ``` bash
-docker run --name Cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=Cheapest  -p 5432:5432  -d postgres
+docker run --name cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=cheapest  -p 5432:5432  -d postgres
 ```
 
 > [!WARNING]
@@ -338,14 +338,15 @@ El diseño de este módulo sigue el principio de encapsulación, asegurando que 
 
 ### Paso 1 — Definir la entidad
 
-La entidad `Catalogo` modela la tabla `catalogos` con campos: `id`, `tiendaId`, `vigenciaDesde`, `vigenciaHasta`, `zona`, timestamps y relación one-to-many con `CatalogoProducto`.  
+La entidad `Catalogo` modela la tabla `catalogos` con campos: `id`, `tiendaId`, `vigenciaDesde`, `vigenciaHasta`, `zona`, timestamps y relación many-to-many con `Producto`.  
 
 ``` typescript 
 import {
   Column,
   CreateDateColumn,
   Entity,
-  OneToMany,
+  JoinTable,
+  ManyToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
