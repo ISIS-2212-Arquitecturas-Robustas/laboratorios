@@ -726,18 +726,13 @@ export class LogisticaModule {}
 
 ## Entregables
 
-El estudiante debe entregar un documento en PDF que incluya:
-
-1. Respuestas argumentadas a las preguntas del laboratorio
-
-**Nota:** Argumente sus respuestas, vaya más allá de lo superficial.
-
+1. El estudiante debe entregar un documento en PDF que incluya las respuestas argumentadas a las preguntas del laboratorio, debe ir más allá de lo superficial.
 
 2. Implementación funcional de los siguientes componentes, con el código fuente adjunto como un **archivo comprimido (.zip)** junto con el PDF. No se debe entregar un enlace a repositorio en este laboratorio.
 
    **2.1 CRUD de Producto (módulo de Logística)**
 
-   Tomando como base el diagrama de dominio y el diagrama de componentes, implementar un CRUD completo para la entidad `Producto` dentro del módulo de logística (`LogisticaModule`). Debe seguir la misma arquitectura del CRUD de `Catalogo`:
+   Tomando como base el diagrama de dominio y el diagrama de componentes de Cheapest, implementar un CRUD completo para la entidad `Producto` dentro del módulo de logística (`LogisticaModule`). Debe seguir la misma arquitectura del CRUD de `Catalogo`:
    - Entidad `Producto` mapeada con TypeORM.
    - `ProductoRepository` con operaciones CRUD y filtros relevantes.
    - `ProductoService` con validaciones y manejo de excepciones.
