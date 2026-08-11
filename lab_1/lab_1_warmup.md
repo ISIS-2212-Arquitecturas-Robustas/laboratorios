@@ -1,6 +1,6 @@
 # Warm-up en clase — Lab 1: Fundamentos de Nest
 
-> Esta es una actividad previa al laboratorio. El enunciado completo del Lab 1 está en [`lab_1_nest.md`](lab_1_nest.md).
+> Esta es una actividad *opcional* previa al laboratorio. El enunciado completo del Lab 1 está en [`lab_1_nest.md`](lab_1_nest.md).
 
 ## Contexto
 
