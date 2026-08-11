@@ -211,6 +211,8 @@ Se recomienda revisar la documentación oficial para profundizar en providers pe
 
 Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicación Cheapest. Está pensado como si lo fuéramos implementando desde cero, explicando las decisiones y cómo se conectan `Controller`, `Service`, `Repository`, `Entity` y un cliente externo mock (`TiendaClientMock`).
 
+> Puede consultar el [enunciado completo de Cheapest](../enunciado-cheapest.md) para más contexto de negocio sobre la aplicación.
+
 ### 5.1 Vista de Información y Funcional de Cheapest
 Antes de empezar con el código, es importante entender el modelamiento que se hizo de Cheapest, a partir del enunciado se pudo comprender el dominio de la aplicación el cual nos permite entender que entidades tenemos que implementar y como se comporta la aplicación:
 - [Diagrama de Dominio](recursos/Modelo_Dominio_Cheapest.pdf)
