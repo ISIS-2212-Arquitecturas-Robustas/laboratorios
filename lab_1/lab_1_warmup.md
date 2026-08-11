@@ -1,5 +1,7 @@
 # Warm-up en clase — Lab 1: Fundamentos de Nest
 
+> Esta es una actividad previa al laboratorio. El enunciado completo del Lab 1 está en [`lab_1_nest.md`](lab_1_nest.md).
+
 ## Contexto
 
 Cheapest ya tiene un CRUD completo implementado para la entidad `Catalogo`, con arquitectura por capas (`Entity` → `Repository` → `Service` → `Controller`). Este es el patrón exacto que usarán en el resto del curso.
