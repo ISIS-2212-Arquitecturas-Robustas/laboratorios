@@ -55,9 +55,6 @@
 
 ---
 
-> [!NOTE]
-> **Warm-up en clase:** hay una sesión práctica de 40 minutos, sin necesidad de tener el ambiente de desarrollo instalado, en la que se escribe (sin ejecutar) el código de la entidad y los DTOs de `Producto`: [`lab_1_warmup.md`](lab_1_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a "Paso 1 — Definir la entidad" dentro de la sección 5 y reutilizar ese código para el Entregable 2.1.
-
 ## 1. Introducción a Nest
 <img src="recursos/nest_logo.png" alt="Nest Logo" width="200"/>
 
