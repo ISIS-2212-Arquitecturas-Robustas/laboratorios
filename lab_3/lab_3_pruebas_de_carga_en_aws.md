@@ -74,6 +74,19 @@ Se prueban dos escenarios (del Lab 2):
 
 ![Diagrama de componentes y pruebas de carga](./recursos/diagrama_componentes.png)
 
+*Diagrama del despliegue objetivo: el ALB recibe el tráfico generado por JMeter (desde su computador) y lo distribuye entre las tres instancias EC2 de aplicación (`Cheapest-app-1/2/3`), las cuales se conectan por IP privada a la instancia EC2 de base de datos (`Cheapest-db`).*
+
+> [!NOTE]
+> El ícono usado para `Cheapest-db` es distinto al de las instancias de app **solo como convención visual** para diferenciar su rol (base de datos vs. aplicación). En términos de infraestructura, `Cheapest-db` **sigue siendo una instancia EC2** igual que las de app, solo que ejecuta un contenedor de PostgreSQL en lugar del monolito NestJS.
+>
+> Tipo de instancia y recursos usados por cada máquina del diagrama (consistente con la sección 4):
+>
+> | Instancia | Tipo | vCPU | RAM | Almacenamiento |
+> | --- | --- | --- | --- | --- |
+> | `Cheapest-db` | `t2.medium` | 2 | 4 GiB | 8 GB |
+> | `Cheapest-app-1` | `t2.medium` | 2 | 4 GiB | 8 GB |
+> | `Cheapest-app-2` | `t2.medium` | 2 | 4 GiB | 8 GB |
+> | `Cheapest-app-3` | `t2.medium` | 2 | 4 GiB | 8 GB |
 
 ### 2.2 Estilos de arquitectura asociados (y efectos)
 
@@ -159,6 +172,14 @@ Cuando ingrese a la plataforma de AWS Academy podrá observar la sección “Mó
 Inicie el **Learning Lab** (esto habilita los créditos del curso). Usted debe ver algo así
 ![](recursos/Pasted%20image%2020260310214359.png)
 
+Para iniciar el ambiente de AWS siga estos pasos:
+
+1. Presione el botón **"Start Lab"**.
+2. Espere hasta que el indicador de estado cambie a **punto verde**; esto indica que el ambiente ya está listo y puede acceder a la consola de AWS (abriendo el enlace **"AWS"** que aparece junto al indicador).
+
+> [!WARNING]
+> **No presione "Reset Lab"** salvo que sea estrictamente necesario (por ejemplo, si el ambiente quedó en un estado irrecuperable). El reseteo del ambiente puede demorar **bastante tiempo** en completarse y durante ese lapso no podrá acceder a los recursos de AWS.
+
 > [!WARNING]
 > Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Usted puede escoger cualquiera de las dos formas, sin embargo **es importante que sepa como usar la UI (consola de AWS) ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.** Se recomienda que use ambas formas de usar AWS al menos una vez y después escoja la que más le convenga.
 
@@ -214,6 +235,17 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 Usted debe ver algo así
 ![](recursos/Pasted%20image%2020260310223827.png)
 
+> [!IMPORTANT]
+> **Pregunta 4:**
+> Proponga un diseño mínimo de seguridad para Cheapest que elimine la exposición pública de infraestructura que debería ser privada.
+>
+> Debe incluir al menos:
+> - origen permitido de tráfico,
+> - estrategia de segmentación de red
+>
+> Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
+> Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
+
 ### 4.3 Crear instancia EC2 para Base de Datos (PostgreSQL)
 
 - [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md)
@@ -229,9 +261,23 @@ Cree una instancia EC2 con los parámetros:
 | Security Groups   | `Cheapest-ssh` + `Cheapest-db` |
 | Almacenamiento    | 8 GB                       |
 
-#### 4.3.1 Conexión por SSH
+> [!NOTE]
+> Evalúe usar la AMI **Amazon Linux con Docker preinstalado** como alternativa a Ubuntu Server 24.04 LTS. Esto reduce el tiempo dedicado a instalar Docker manualmente (ver sección 4.3.2) y le permite enfocarse antes en las pruebas de carga. Si opta por esta AMI, tenga en cuenta que el usuario de conexión SSH suele ser `ec2-user` en lugar de `ubuntu`, y que los comandos de gestión de paquetes (`yum`/`dnf`) difieren de los de Ubuntu (`apt`).
 
-Conéctese a la instancia:
+#### 4.3.1 Conexión a la instancia
+
+**Opción A — EC2 Instance Connect (recomendada):**
+
+Desde la consola web de AWS puede conectarse directamente a la instancia sin necesidad de un terminal externo ni de gestionar archivos `.pem`:
+
+1. En la consola de EC2, seleccione la instancia `Cheapest-db`.
+2. Presione **Connect**.
+3. Elija la pestaña **EC2 Instance Connect** y presione **Connect**.
+4. Se abrirá una terminal en el navegador ya autenticada contra la instancia.
+
+**Opción B — SSH externo:**
+
+Conéctese a la instancia desde su terminal usando el archivo `.pem` de la llave asociada:
 
 ```bash
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
@@ -394,6 +440,13 @@ En su computador:
 
 ### 4.6 Iniciar servicios en las instancias
 
+> [!NOTE]
+> Este paso **solo aplica** en los siguientes casos:
+> - Para `Cheapest-db`: cuando la **instancia** fue detenida (stopped) y necesita reiniciar el contenedor de PostgreSQL.
+> - Para las instancias de app: cuando el **proceso de Node** fue detenido (no necesariamente cuando toda la instancia fue detenida). Si el proceso de Node sigue corriendo (por ejemplo, con `nvm use default` activo desde una sesión previa), no es necesario repetir el `npm run start:dev`.
+>
+> Si ninguna instancia o proceso fue detenido, puede omitir este paso y continuar directamente con la sección 4.7.
+
 Si las instancias quedaron detenidas, inícielas antes de ejecutar las pruebas:
 
 1. Inicie `Cheapest-db` y verifique el contenedor de PostgreSQL:
@@ -505,6 +558,13 @@ Use este formato (con **p95 y p99**):
 | 10 | 10 |  |  |  |  |
 | ... | ... |  |  |  |  |
 
+> [!IMPORTANT]
+> Cada tabla debe estar **completa** y respetar el mínimo de ejecuciones exigido por escenario, consistente con la matriz de la sección 5.2:
+> - **8 ejecuciones** como mínimo para *Operación normal* y *Estrés fuerte*.
+> - **4 ejecuciones** como mínimo para el resto de escenarios (Smoke test, Baja carga, Carga media, Alta carga, Muy alta carga, Estrés).
+>
+> De cada ejecución se espera reportar todas las columnas de la tabla (threads, ramp-up, p99, p95, throughput, error %) y **marcar explícitamente** el registro correspondiente al **punto de inflexión** (por ejemplo resaltando la fila o con una nota al pie).
+
 - Marque el registro del **punto de inflexión**.
 ### 7.2 Evidencias
 
@@ -537,3 +597,12 @@ Incluya un análisis (1–2 páginas) que responda:
 
 Cuando termine:
 - **Detenga o elimine** las instancias e infraestructura creada.
+
+Para hacerlo:
+
+1. **Instancias EC2** (`Cheapest-db`, `Cheapest-app-1/2/3`): en la consola de EC2, seleccione cada instancia, luego **Instance state → Stop instance** (para conservarlas y reanudar después) o **Terminate instance** (para eliminarlas definitivamente). El procedimiento detallado de gestión de instancias se documenta en el [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md).
+2. **Application Load Balancer (ALB)**: en la consola de EC2 → **Load Balancers**, seleccione el ALB creado y use **Actions → Delete**. Ver el [Tutorial para configurar Load Balancer](../tutoriales/configurar_load_balancer.md).
+3. **Security Groups** (`Cheapest-ssh`, `Cheapest-db`, `Cheapest-http`): solo pueden eliminarse una vez no estén asociados a ninguna instancia o ALB activo; en la consola de EC2 → **Security Groups**, selecciónelos y use **Actions → Delete security groups**.
+
+> [!NOTE]
+> Recuerde que los créditos de AWS Academy son limitados. Verifique que no queden instancias en estado `running` antes de cerrar la sesión del Learning Lab.

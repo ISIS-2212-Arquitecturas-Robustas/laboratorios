@@ -59,12 +59,20 @@ Un aspecto crítico de este escenario, y que este lab reproduce explícitamente,
 
 ### 1.3 ASRs involucrados
 
-| ID    | Descripción                                                                                                                                                                                           | Medidas de respuesta a satisfacer                                                                                                                            |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| ASR-1 | Como tendero, quiero poder confirmar un pedido incluso cuando el servicio de Inventario esté degradado. Un pedido con stock no confirmado es preferible a un error que me impida completar la compra. | Durante fallo total de Inventario, Ventas responde HTTP 200 con `status: pending_stock_confirmation` en p99 < 3000 ms                           |
-| ASR-2 | Como negocio, quiero que los reintentos automáticos ante fallos no amplifiquen la carga sobre servicios ya degradados, para evitar empeorar el incidente.                                             | El volumen de requests recibidos por Inventario con reintentos activos no debe superar 2x el volumen de la línea base sin reintentos            |
-| ASR-3 | Como negocio, quiero que el tráfico de confirmación de pedidos no se vea afectado por picos de tráfico de baja prioridad (ej. consultas de catálogo masivas).                                         | El rate limiter rechaza el tráfico excedente con HTTP 429 sin que el throughput de pedidos válidos caiga más de un 10% respecto a la línea base |
-| ASR-4 | Como negocio, quiero que toda venta registrada, incluso en modo degradado (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere. | Tras la recuperación de Inventario, toda venta con OutboxHttpCall en estado PENDING transita a DELIVERED en < 30 s; ningún `item_inventario.cantidad` refleja decrementos duplicados. |
+
+| ID    | Estímulo                                                                                     | Fuente del estímulo                                              | Entorno                                                                  | Artefacto                                                    | Respuesta                                                                                                  | Medida de respuesta                                                                                                                                    |
+| ----- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ASR-1 | El servicio de Inventario deja de responder correctamente (falla total / timeouts sostenidos). | Servicio de Inventario, del cual depende Ventas.                   | Operación normal, pico de tráfico de reabastecimiento (lunes en la mañana). | Servicio de Ventas (endpoint `POST /ventas`).                   | Ventas registra el pedido en modo degradado en lugar de propagar el error al tendero.                          | Durante fallo total de Inventario, Ventas responde HTTP 200 con `status: pending_stock_confirmation` en p99 < 3000 ms.                                   |
+| ASR-2 | Los clientes (o el sidecar) reintentan automáticamente las llamadas fallidas hacia Inventario. | Política de retry del sidecar Envoy ante errores 5xx de Inventario. | Inventario degradado, reintentos activos.                                   | Servicio de Inventario.                                          | Los reintentos no deben amplificar desproporcionadamente la carga recibida por Inventario.                      | El volumen de requests recibidos por Inventario con reintentos activos no debe superar 2x el volumen de la línea base sin reintentos.                    |
+| ASR-3 | Un pico de tráfico de baja prioridad (ej. consultas de catálogo masivas) llega al sistema.     | Clientes externos generando tráfico de baja prioridad.               | Operación normal, con tráfico mixto de alta y baja prioridad.               | API Gateway / servicio de Ventas (confirmación de pedidos).     | El rate limiter rechaza el tráfico excedente sin afectar la confirmación de pedidos.                            | El rate limiter rechaza el tráfico excedente con HTTP 429 sin que el throughput de pedidos válidos caiga más de un 10% respecto a la línea base.         |
+| ASR-4 | Inventario se recupera tras un período de caída durante el cual se registraron ventas en modo degradado. | Recuperación del servicio de Inventario.                             | Transición de modo degradado a modo normal.                                 | Mecanismo de Outbox (Ventas) + endpoint de idempotencia (Inventario). | Toda venta registrada en modo degradado entrega su decremento de stock exactamente una vez, sin duplicados.     | Tras la recuperación de Inventario, toda venta con OutboxHttpCall en estado PENDING transita a DELIVERED en < 30 s; ningún `item_inventario.cantidad` refleja decrementos duplicados. |
+
+Contexto de negocio de cada ASR (motivación, no parte de la especificación formal):
+
+- **ASR-1**: Como tendero, quiero poder confirmar un pedido incluso cuando el servicio de Inventario esté degradado. Un pedido con stock no confirmado es preferible a un error que me impida completar la compra.
+- **ASR-2**: Como negocio, quiero que los reintentos automáticos ante fallos no amplifiquen la carga sobre servicios ya degradados, para evitar empeorar el incidente.
+- **ASR-3**: Como negocio, quiero que el tráfico de confirmación de pedidos no se vea afectado por picos de tráfico de baja prioridad.
+- **ASR-4**: Como negocio, quiero que toda venta registrada, incluso en modo degradado (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere.
 
 ### 1.4 Qué se va a probar
 
@@ -87,7 +95,10 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 
 ![Diagrama de despliegue y pruebas de carga](./recursos/diagrama_componentes.png)
 
-Note que el el sidecar se despliega como un contenedor adicional dentro de la misma tarea ECS que Ventas, y el tráfico entre Ventas e Inventario pasa a través del proxy Envoy. Esto permite implementar las tácticas de resiliencia sin modificar el código de negocio de Ventas, y ajustar los parámetros de retry y circuit breaker sin necesidad de redesplegar la aplicación.
+*Figura 1. Vista de despliegue del laboratorio: API Gateway enruta hacia los servicios de Logística, Inventario y Ventas corriendo en ECS/Fargate; el sidecar Envoy corre como segundo contenedor dentro de la misma tarea de Ventas e intercepta el tráfico hacia Inventario; JMeter genera la carga de pruebas desde el computador del estudiante.*
+
+> [!NOTE]
+> Note que el sidecar se despliega como un contenedor adicional dentro de la misma tarea ECS que Ventas, y el tráfico entre Ventas e Inventario pasa a través del proxy Envoy. Esto permite implementar las tácticas de resiliencia sin modificar el código de negocio de Ventas, y ajustar los parámetros de retry y circuit breaker sin necesidad de redesplegar la aplicación.
 
 ### 2.2 Estilos de arquitectura asociados
 
@@ -210,18 +221,25 @@ En este laboratorio se introduce explícitamente una dependencia HTTP entre serv
 
 ## 3. Tecnologías
 
-| Categoría                          | Tecnologías                                        |
-| ---------------------------------- | -------------------------------------------------- |
-| Infraestructura como Código        | AWS CloudFormation                                 |
-| Gateway de entrada + Rate Limiting | Amazon API Gateway (throttling por stage)          |
-| Orquestación de contenedores       | Amazon ECS (Fargate)                               |
-| Registro de imágenes               | Amazon ECR                                         |
-| Base de datos relacional           | Amazon RDS (PostgreSQL)                            |
-| Framework backend                  | NestJS                                             |
-| Lenguaje                           | TypeScript                                         |
-| ORM                                | TypeORM                                            |
-| Proxy sidecar                       | Envoy Proxy                                       |
-| Pruebas de carga                   | Apache JMeter                                      |
+> [!NOTE]
+> No se espera que llegue con experiencia previa en todas estas tecnologías. La columna **Recurso para entender qué hace** apunta a documentación oficial u otra referencia introductoria; revísela antes de tocar el template o el sidecar. Adicionalmente, se recomienda usar un asistente de IA (Claude, ChatGPT, etc.) para explorar cada servicio de AWS: pregúntele qué problema resuelve, qué recursos crea "por debajo" y qué pasaría si no existiera esa pieza en la arquitectura. Esto ayuda a construir intuición más allá de copiar comandos.
+
+| Categoría                          | Tecnologías                                | Recurso para entender qué hace                                                                                     |
+| ----------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Infraestructura como Código        | AWS CloudFormation                            | [¿Qué es AWS CloudFormation?](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/Welcome.html)     |
+| Gateway de entrada + Rate Limiting | Amazon API Gateway (throttling por stage)     | [¿Qué es Amazon API Gateway?](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/welcome.html)       |
+| Orquestación de contenedores       | Amazon ECS (Fargate)                          | [¿Qué es Amazon ECS?](https://docs.aws.amazon.com/es_es/AmazonECS/latest/developerguide/Welcome.html) · [AWS Fargate](https://docs.aws.amazon.com/es_es/AmazonECS/latest/userguide/what-is-fargate.html) |
+| Registro de imágenes               | Amazon ECR                                    | [¿Qué es Amazon ECR?](https://docs.aws.amazon.com/es_es/AmazonECR/latest/userguide/what-is-ecr.html)                 |
+| Base de datos relacional           | Amazon RDS (PostgreSQL)                       | [¿Qué es Amazon RDS?](https://docs.aws.amazon.com/es_es/AmazonRDS/latest/UserGuide/Welcome.html)                     |
+| Observabilidad                     | Amazon CloudWatch                             | [¿Qué es Amazon CloudWatch?](https://docs.aws.amazon.com/es_es/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html) |
+| Framework backend                  | NestJS                                        | [Documentación de NestJS](https://docs.nestjs.com/)                                                                   |
+| Lenguaje                           | TypeScript                                    | [Handbook de TypeScript](https://www.typescriptlang.org/docs/handbook/intro.html)                                     |
+| ORM                                | TypeORM                                       | [Documentación de TypeORM](https://typeorm.io/)                                                                       |
+| Proxy sidecar                       | Envoy Proxy                                  | [¿Qué es Envoy?](https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy) · [Patrón Sidecar](https://learn.microsoft.com/es-es/azure/architecture/patterns/sidecar) |
+| Pruebas de carga                   | Apache JMeter                                 | [Guía de introducción a JMeter](https://jmeter.apache.org/usermanual/get-started.html)                                |
+
+> [!IMPORTANT]
+> **Sugerencia de prompt para IA:** *"Actúo como estudiante de arquitectura de software. Explícame qué hace [servicio de AWS], qué problema arquitectónico resuelve, qué recursos concretos crea cuando lo despliego con CloudFormation, y qué riesgos de disponibilidad o costo debería tener en cuenta al usarlo en un sistema de microservicios como el de este laboratorio."* Use esto como punto de partida, no como respuesta final: valide lo que la IA le diga contra la documentación oficial y contra lo que observe en su propio despliegue.
 
 ## 4. Preparación: IaaC con CloudFormation
 
@@ -333,6 +351,24 @@ aws ec2 revoke-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --por
 ```
 
 Con los datos sembrados, ya puede ejecutar las pruebas de las secciones 6 y 8 usando los IDs fijos de `seed.sql` (ver Lab 2/Lab 3 para ejemplos de esos IDs) o los que genere el seed para su tienda.
+
+### 4.7 Actividad — Explorar lo que se desplegó
+
+> [!IMPORTANT]
+> Antes de seguir a la configuración del sidecar, tómese unos minutos para explorar en la consola de AWS lo que CloudFormation acaba de crear. El objetivo es que el stack no sea una "caja negra": usted debe poder señalar, para cada recurso relevante, con qué parte del template se corresponde y qué rol cumple en la arquitectura.
+
+Realice los siguientes pasos:
+
+1. En **CloudFormation → Stack `Cheapest-lab5` → pestaña Resources**, recorra la lista completa de recursos creados. Por cada tipo de recurso (VPC, Subnets, Security Groups, Target Groups, ALBs, Task Definitions, ECS Services, RDS, API Gateway), identifique la sección correspondiente en `cloudformation_template.yaml`.
+2. En **ECS → Clusters**, entre al cluster del laboratorio y revise los tres servicios. Para cada uno, abra la pestaña **Tasks** y confirme que el estado es `RUNNING` y que los health checks pasan.
+3. En **EC2 → Load Balancers**, ubique los ALBs creados y revise sus **Target Groups**: confirme que los targets registrados están `healthy`.
+4. En **RDS → Databases**, ubique la instancia PostgreSQL y revise su Security Group: confirme que solo permite tráfico desde los security groups de los servicios (no desde `0.0.0.0/0`).
+5. En **API Gateway**, abra la API `Cheapest-ms-api` y revise las rutas configuradas (`/logistica/*`, `/inventario/*`, `/ventas/*`) y el stage `lab`.
+6. (Opcional, recomendado) Pídale a un asistente de IA que le ayude a interpretar algún recurso o configuración que no le quede clara — por ejemplo, pegue un fragmento del template o una captura de la consola y pregunte qué hace ese recurso específico y cómo se relaciona con los demás.
+
+> [!IMPORTANT]
+> **Pregunta 0 (post-despliegue):**
+> Elija dos recursos creados por el stack que no haya usado directamente en labs anteriores (por ejemplo, un Target Group, un rol IAM, o una ruta del API Gateway) y explique, en sus propias palabras, qué hacen y por qué son necesarios para que el laboratorio funcione. Acompañe su respuesta con una captura de pantalla de la consola de AWS por cada recurso elegido.
 
 ## 5. Configuración del sidecar y ajuste de código
 
@@ -500,7 +536,10 @@ Ejecute JMeter con carga sobre `POST /ventas`. El endpoint de Ventas hace una ll
 
 #### ¿Qué es CloudWatch y cómo ver métricas?
 
-**Amazon CloudWatch** es el servicio de observabilidad de AWS para ver métricas (series de tiempo), logs y alarmas. En este lab lo usará principalmente para observar **cuántas requests llegan a Inventario** y **cuántos errores 5xx** se producen durante cada prueba.
+> [!NOTE]
+> **Amazon CloudWatch** es el servicio de observabilidad de AWS para ver métricas (series de tiempo), logs y alarmas. En este lab lo usará principalmente para observar **cuántas requests llegan a Inventario** y **cuántos errores 5xx** se producen durante cada prueba.
+
+Los pasos siguientes sí debe ejecutarlos para cada ronda de pruebas:
 
 **Abrir CloudWatch (consola AWS):**
 
