@@ -1,5 +1,18 @@
 # Lab 2 — Pruebas de Carga al Monolito de Chiper
 
+## Índice
+- [Etapas del laboratorio](#etapas-del-laboratorio)
+- [Objetivos](#objetivos)
+- [Descripción del Experimento](#descripción-del-experimento)
+- [ASRs evaluados](#asrs-evaluados)
+- [Diagrama de despliegue](#diagrama-de-despliegue)
+- [Estilos de arquitectura](#estilos-de-arquitectura)
+- [Tecnologías asociadas](#tecnologías-asociadas)
+- [Preparación del entorno](#preparación-del-entorno)
+- [Diseño de la prueba de carga](#diseño-de-la-prueba-de-carga)
+- [Pruebas de carga](#pruebas-de-carga)
+- [Entregables](#entregables)
+
 ## Etapas del laboratorio
 
 | Etapa                           | Resumen                                                                                | Uso de IA generativa                                                                          |
@@ -128,6 +141,8 @@ GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-b
 
 <img src="recursos/Pasted image 20260304160111.png"/>
 
+*Figura 1. Despliegue de los componentes del backend monolítico de Chiper (API, base de datos) sobre un único nodo de ejecución local.*
+
 Note que todos los componentes están desplegados en un único nodo de ejecución, en este caso su máquina local, de igual forma note que la comunicación entre componentes sigue los mismos protocolos que seguiría si se ejecutaran en nodos distintos.
 
 ## Estilos de arquitectura
@@ -152,12 +167,32 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 
 
 ## Preparación del entorno
-En el repo del backend (chiper-api) diríjase a la rama `load-tests`
+En el repo del backend ([chiper-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api)) diríjase a la rama `load-tests`:
+
+```bash
+git checkout load-tests
+```
+
 ### Levantar PostgreSQL con Docker (recomendado)
+
+Ejecute el siguiente comando **desde el directorio base del repositorio** (donde se encuentra el archivo `docker-compose.yml`); si lo ejecuta desde otro directorio, Docker no encontrará el archivo y fallará. El flag `up` crea (si no existe) y levanta el contenedor definido en el `docker-compose.yml` para el servicio `postgres`, dejándolo corriendo en segundo plano (`-d`):
 
 ```bash
 docker compose up postgres -d
 ```
+
+> [!WARNING]
+> Si en un laboratorio anterior levantó una base de datos con el mismo nombre de contenedor (`chiper-postgres`) y no va a reutilizarla, es muy probable que el puerto `5432` siga ocupado y el comando anterior falle con un error similar a:
+> ```
+> Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint chiper-postgres (5d86a48a3d107d38bfa708e8f6a067bf9cf5210839d04ff07a5e176bd25d855e): Bind for 0.0.0.0:5432 failed: port is already allocated
+> ```
+> Antes de levantar el nuevo entorno, limpie el contenedor del laboratorio anterior:
+> ```bash
+> docker stop chiper-postgres
+> docker rm chiper-postgres
+> ```
+> o alternativamente detenga el `docker-compose` del laboratorio previo desde su propio directorio.
+
 ### Levantar el backend monolítico
 
 ```bash
@@ -235,9 +270,18 @@ A continuación, descargue Apache Jmeter en su máquina personal y realice las p
 Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST.
 
 El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene jMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos
+
+Si no tiene JMeter instalado, descárguelo desde la [página oficial de descarga](https://jmeter.apache.org/download_jmeter.cgi). Requisito previo: JMeter necesita una versión de **Java (JDK) 8 o superior** instalada y configurada en el `PATH` (verifique con `java -version`); una instalación de Java faltante o incorrecta es una causa frecuente de errores confusos al intentar arrancar JMeter. Pasos generales de instalación:
+- **Windows:** descargue el `.zip` (binario) desde la página oficial, descomprímalo en una carpeta de su preferencia y ejecute `bin\jmeter.bat`.
+- **macOS:** descargue el `.tgz` desde la página oficial (o instale con `brew install jmeter`), descomprímalo y ejecute `bin/jmeter.sh`. También puede requerir que Java esté instalado (`brew install openjdk`).
+- **Linux:** descargue el `.tgz`, descomprímalo (`tar -xzf apache-jmeter-x.x.tgz`) y ejecute `bin/jmeter.sh`. Asegúrese de tener el JDK instalado (por ejemplo `sudo apt install default-jdk`).
+
 #### Ejecución de pruebas de carga alta
 
-Para escenarios de alta carca > 450 JMeter empieza a tener limitaciones de performance, por lo que como **alternativa lo invitamos a que use copilot o el agente de IA de su preferencia para generar un script para la ejecución de pruebas**, este script debe tener las siguientes características:
+> [!NOTE]
+> JMeter se usa en este laboratorio para los escenarios de carga baja, media y de operación normal (hasta **450 threads**), ya que permite visualizar y aprender de forma gráfica los componentes de una prueba de carga (ese es su valor pedagógico). Para escenarios de **más de 450 threads**, JMeter deja de ser una herramienta confiable en este entorno, por lo que el uso de un script propio en Python **es obligatorio** (no una alternativa opcional) para esos escenarios.
+
+Para escenarios de alta carga > 450 threads, dado que JMeter empieza a tener limitaciones de performance, **debe usar copilot o el agente de IA de su preferencia para generar un script para la ejecución de pruebas**, este script debe tener las siguientes características:
 - Las peticiones deben ser http a los endpoints a los cuales se busca hacer la prueba
 - El script debe permitir configurar Ramp-Up y Threads para cada prueba
 - Para POST, usar un body JSON realista de “pedido grande” con > 20 ítems (productoId y cantidad)
@@ -303,11 +347,51 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 
 1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", las configuraciones de Jmeter.
 
-| Threads | Ramp-up | p99 (ms) | p95 (ms) | Throughput | Error % |
-| ------- | ------- | -------- | -------- | ---------- | ------- |
-| &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+> [!IMPORTANT]
+> No es suficiente con reportar únicamente los escenarios de operación normal y evento de promociones; se espera que documente el incremento progresivo de carga y las repeticiones indicadas en la [matriz mínima de pruebas](#matriz-mínima-de-pruebas-mínimo-recomendado), con el fin de ubicar con precisión el punto de inflexión. Como mínimo debe reportar **8 corridas** para los escenarios de **operación normal** y **estrés fuerte**, y al menos **4 corridas** para cada uno de los demás escenarios (smoke test, baja carga, carga media, alta carga, muy alta carga y estrés).
+
+| Test / Escenario     | Corrida | Threads | Ramp-up | p99 (ms) | p95 (ms) | Throughput | Error % |
+| --------------------- | ------- | ------- | ------- | -------- | -------- | ---------- | ------- |
+| Smoke test             | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Smoke test             | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Smoke test             | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Smoke test             | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Baja carga             | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Baja carga             | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Baja carga             | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Baja carga             | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Carga media            | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Carga media            | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Carga media            | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Carga media            | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 5       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 6       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 7       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Operación normal       | 8       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Alta carga             | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Alta carga             | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Alta carga             | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Alta carga             | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Muy alta carga         | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Muy alta carga         | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Muy alta carga         | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Muy alta carga         | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés                 | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés                 | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés                 | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés                 | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 5       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 6       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 7       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+| Estrés fuerte          | 8       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
 
 
 Responder con evidencia:

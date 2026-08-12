@@ -69,6 +69,10 @@ Nest como framework solo distingue 3 capas de responsabilidad, middlewares, cont
 2. Controller (capa de presentación)
 3. Service (capa de aplicación / negocio)
 4. Providers de infraestructura (repositorios, monitoreo, almacenamiento, colas)
+
+> [!NOTE]
+> Estos 4 niveles **no** son una capa adicional que agrega Nest, sino una decisión arquitectónica desde las 3 capas nativas del framework (Middleware, Controllers, Providers) que usaremos en este curso para bajar el acoplamiento. En las subsecciones 2.1–2.4 a continuación, `Service` y `Providers de infraestructura` (niveles 3 y 4) se explican juntos bajo el título **2.3 Providers**, ya que ambos son, desde la perspectiva de Nest, providers gestionados por el mismo contenedor de inyección de dependencias. Adicionalmente se agrega la subsección **2.4 Módulos**, que no es una capa de responsabilidad de negocio sino el mecanismo organizacional que agrupa Middleware, Controllers y Providers dentro de un mismo contexto funcional.
+
 ### 2.1 Middleware
 El middleware es la capa que ejecuta antes de que la petición llegue al controlador.
 Se utiliza para declarar la lógica que es transversal a toda o gran parte de la aplicación como:
@@ -107,6 +111,8 @@ Como se mencionó anteriormente, utilizaremos una arquitectura por capas, estas 
 Estructura general:
 
 ![](recursos/nest_arch.png)
+*Figura 1. Arquitectura por capas dentro de un módulo de Nest: el Middleware se ejecuta antes de llegar al Controller, este delega en el Service (lógica de negocio), y el Service utiliza Providers de infraestructura (Repository, Monitoring, Storage, Task Queue) para interactuar con sistemas externos.*
+
 Algunos ejemplos de providers de infraestructura:
 - Repository (persistencia en base de datos)
 - Monitoring (logs, métricas, trazas)
@@ -124,6 +130,8 @@ Una ventaja importante de Nest es que permite agregar, quitar o reemplazar provi
 > Con sus conocimientos en bases de datos, describa algún caso en donde pueda usar como táctica de arquitectura remplazar una base de datos SQL por una no SQL en el contexto de Chiper. ¿Qué atributos favorecería? ¿Cuáles desfavorecería?
 
 ## 4. Inyección de dependencias
+
+Cuando una clase crea sus propias dependencias con `new` (por ejemplo, `const emailService = new EmailService()` dentro de `UserService`), queda **fuertemente acoplada** a esa implementación concreta: si `EmailService` cambia su constructor, cambia su ubicación, o se quiere reemplazar por otra implementación, hay que modificar cada clase que la instancia directamente. Esto también dificulta el **testing**, porque no hay forma sencilla de sustituir `EmailService` por un doble de prueba (mock/stub) sin tocar el código de `UserService`. Y hace que el sistema sea **rígido**: cambiar de proveedor de email, de base de datos o de cualquier dependencia externa implica salir a buscar y editar cada lugar donde se hizo `new`. La **Inyección de Dependencias (DI)** es un patrón que resuelve este problema invirtiendo el control de la creación de objetos: en lugar de que una clase construya sus dependencias, estas le son "inyectadas" desde afuera (típicamente por el constructor), y un contenedor externo se encarga de construir y entregar esas dependencias. Nest implementa este patrón de forma nativa a través de su contenedor de inyección de dependencias.
 
 Nest utiliza el patrón de Inyección de Dependencias para gestionar la creación y el ciclo de vida de todos sus componentes. En lugar de que una clase cree sus propias dependencias con `new`, el contenedor de Nest se encarga de instanciarlas y entregarlas automáticamente.
 
@@ -207,6 +215,32 @@ const moduleRef = await Test.createTestingModule({
 Se recomienda revisar la documentación oficial para profundizar en providers personalizados y scopes:
 [https://docs.nestjs.com/fundamentals/custom-providers](https://docs.nestjs.com/fundamentals/custom-providers)
 
+### ¿Qué genera el CLI de Nest al crear un módulo?
+
+Antes de avanzar al Capítulo 5, es útil saber qué produce el CLI de Nest cuando se generan un módulo y un servicio con los comandos:
+
+```bash
+nest generate module logistica
+nest generate service logistica/catalogo
+```
+
+Esto crea (o modifica) la siguiente estructura dentro de `src/`:
+
+```
+src/
+ └── logistica/
+      ├── logistica.module.ts        # Declara el módulo: importa, provee y exporta sus componentes
+      ├── catalogo/
+      │    ├── catalogo.service.ts   # Clase marcada con @Injectable(), lógica de negocio
+      │    └── catalogo.service.spec.ts  # Test unitario base generado automáticamente
+```
+
+- **`logistica.module.ts`**: archivo generado con el decorador `@Module({...})`. Es el punto de entrada del subdominio; aquí se listan `controllers`, `providers` e `imports`/`exports` hacia otros módulos.
+- **`catalogo.service.ts`**: clase decorada con `@Injectable()`. Cuando se genera dentro de un módulo existente, el CLI la registra automáticamente en el arreglo `providers` de `logistica.module.ts`.
+- **`catalogo.service.spec.ts`**: archivo de pruebas unitarias con un test mínimo que verifica que el servicio se puede instanciar; sirve como punto de partida para agregar pruebas propias.
+
+El mismo patrón aplica para `nest generate controller` (genera `*.controller.ts` y `*.controller.spec.ts`, registrado en `controllers`) y `nest generate resource` (genera módulo, controller, service y DTOs base en un solo comando).
+
 ## 5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Chiper
 
 Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicación Chiper. Está pensado como si lo fuéramos implementando desde cero, explicando las decisiones y cómo se conectan `Controller`, `Service`, `Repository`, `Entity` y un cliente externo mock (`TiendaClientMock`).
@@ -220,17 +254,36 @@ A partir de este modelado, tenemos un entendimiento más profundo de como funcio
 
 Por último podemos identificar cada uno de estos subdominios como componentes, estos componentes definirán la estructura de nuestra aplicación Nest pues cada componente puede mapearse a un módulo.
 
-![](componentes.png)
+![](recursos/componentes.png)
+*Figura 2. Diagrama de componentes y conectores de Chiper. Cada componente (Inventario, Inteligencia de negocio, Ventas, Logística/pedidos/operaciones, Identificación y autenticación, Fiado) corresponde a un subdominio y se mapeará a un módulo de Nest.*
+
+> [!NOTE]
+> **Diagrama de dominio vs. diagrama de componentes:** en el [diagrama de subdominios](recursos/Subdominios.pdf), la entidad `Producto` aparece coloreada dentro del subdominio de **Ventas**. Sin embargo, en la implementación (y en el entregable 2.1) `Producto` se construye dentro del módulo de **Logística** (`LogisticaModule`), junto con `Catalogo`. Esta decisión se toma porque, en términos de comportamiento y ciclo de vida, `Producto` está más acoplado a la gestión de catálogo (qué productos existen, sus atributos, su disponibilidad) que a la lógica de venta en sí misma; `Venta` seguirá viviendo conceptualmente en el subdominio de Ventas. Tenga esto en cuenta al leer el diagrama de dominio: no todos los elementos se implementan en el subdominio con el que están coloreados, y donde exista esta discrepancia, priorice lo indicado en el enunciado del entregable sobre el color del diagrama.
+
+A continuación se resume cómo los elementos del modelado (dominio y componentes) se traducen a artefactos concretos en el código Nest:
+
+| Elemento del diagrama | Equivalente en código Nest | Capa |
+|---|---|---|
+| `Catálogo` (entidad de dominio) | `catalogo.entity.ts` (clase `Catalogo`) | Entity / Repository |
+| `Producto` (entidad de dominio) | `producto.entity.ts` (clase `Producto`) | Entity / Repository |
+| `Tienda` (entidad de dominio) | `tienda.entity.ts` (clase `Tienda`) | Entity / Repository |
+| Capacidad "Gestión de catálogos" | `CatalogoService` | Service |
+| Subdominio Logística, pedidos y operaciones | `LogisticaModule` | Module |
+| Subdominio Identificación y autenticación de usuario | `IdentificacionModule` | Module |
+| Conexión y configuración de base de datos | `datasources/` (`DatabaseModule`, `database.providers.ts`) | Providers de infraestructura |
 
 Con esta organización en mente, vamos a crear el CRUD de Catálogo perteneciente al módulo de Logística. El objetivo es construir un CRUD REST para `Catalogo` con validación, verificación de existencia en un servicio externo (mock) y persistencia via TypeORM.
 
-**Arquitectura breve:**
+**Capas del CRUD de Catálogo (resumen de responsabilidades por capa):**
 
 - `Controller`: recibe requests HTTP, aplica `ValidationPipe`, delega a `Service`.
 - `Service`: orquesta lógica (p. ej. valida existencia de tienda, maneja errores), usa `Repository` para persistencia.
 - `Repository`: encapsula acceso a la base de datos (TypeORM `Repository<Catalogo>`), expone métodos CRUD.
 - `Entity`: define la tabla `catalogos` y relaciones.
 - `Client` (mock): simula la verificación de la tienda remota.
+
+> [!NOTE]
+> **¿Qué es un DTO?** Un DTO (*Data Transfer Object*) es una clase simple cuyo único propósito es definir la forma de los datos que entran o salen de la aplicación (p. ej. el cuerpo de un `POST`), sin contener lógica de negocio. En Nest, los DTOs se combinan con `class-validator` para declarar, con decoradores, qué reglas debe cumplir cada campo (`@IsUUID()`, `@IsString()`, etc.). Se usan DTOs en lugar de exponer directamente las `Entity` para no acoplar el contrato HTTP a la estructura de la base de datos y para poder validar la entrada antes de que llegue a la lógica de negocio. Verá DTOs concretos como `CreateCatalogoDto` más adelante, en el Paso 4.
 
 ### Instalación del ambiente de desarrollo
 Antes de iniciar el laboratorio es necesario preparar el entorno de trabajo.
@@ -263,22 +316,34 @@ nest new chiper-backend
 Estructura inicial generada:
 
 ```
-src/
- ├── app.controller.ts
- ├── app.service.ts
- ├── app.module.ts
- └── main.ts
+cheapest-backend/
+ ├── src/
+ │    ├── app.controller.ts
+ │    ├── app.service.ts
+ │    ├── app.module.ts
+ │    └── main.ts
+ ├── node_modules/
+ ├── package.json
+ ├── tsconfig.json
+ └── tsconfig.build.json
 ```
+
+Además de `src/`, el CLI genera varios archivos y carpetas a nivel de proyecto que vale la pena conocer:
+
+- **`node_modules/`**: carpeta con todas las librerías instaladas localmente (Nest, TypeORM, etc). No se sube al repositorio (está en `.gitignore`); se regenera con `npm install`.
+- **`package.json`**: manifiesto del proyecto. Lista las dependencias (`dependencies`/`devDependencies`) y los scripts disponibles, como `npm run start:dev` (levanta la app con recarga automática) o `npm run test`.
+- **`tsconfig.json`**: configuración del compilador de TypeScript (versión de ECMAScript de salida, decoradores experimentales habilitados, etc). Nest depende de decoradores (`@Module`, `@Injectable`, `@Entity`...), por lo que esta configuración es necesaria para que compilen.
+- **`tsconfig.build.json`**: extiende `tsconfig.json` con ajustes específicos para la compilación de producción (por ejemplo, excluye archivos `*.spec.ts`).
 
 #### Instalación de dependencias necesarias
 
 Para este laboratorio se utilizará:
 
-- TypeORM: ORM para manejar la persistencia con PostgreSQL.
-- PostgreSQL: Cliente de base de datos relacional.
-- class-validator: Para validación de DTOs.
-- class-transformer: Para transformar objetos (ej. parsear strings a fechas).
-- uuid: Manejo de identificadores UUID.
+- **TypeORM**: ORM (*Object-Relational Mapper*) para manejar la persistencia con PostgreSQL. Ver la nota sobre TypeORM en el Paso 1.
+- **PostgreSQL (`pg`)**: driver/cliente de Node.js para conectarse a una base de datos PostgreSQL; TypeORM lo usa internamente para ejecutar las queries.
+- **class-validator**: permite anotar propiedades de una clase (un DTO) con decoradores de validación (`@IsUUID()`, `@IsString()`, `@MaxLength()`, etc.), reglas que luego `ValidationPipe` evalúa automáticamente en cada request.
+- **class-transformer**: transforma objetos planos (por ejemplo, el JSON recibido en un request) en instancias de una clase, y viceversa (ej. parsear un string de fecha en un objeto `Date`). `ValidationPipe` lo usa internamente cuando se configura con `{ transform: true }`.
+- **uuid**: librería para generar y validar identificadores UUID.
 
 Instalar:
 
@@ -306,6 +371,24 @@ Se recomienda levantar una instancia PostgreSQL con Docker:
 docker run --name chiper-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_DB=chiper  -p 5432:5432  -d postgres
 ```
 
+Explicación de cada parámetro:
+
+| Flag | Valor | Descripción |
+|---|---|---|
+| `--name` | `chiper-db` | Nombre del contenedor, para referenciarlo fácilmente en comandos posteriores (`docker stop chiper-db`, etc). |
+| `-e POSTGRES_PASSWORD` | `postgres` | Variable de entorno que define la contraseña del usuario `postgres` dentro del contenedor. |
+| `-e POSTGRES_DB` | `chiper` | Variable de entorno que hace que la imagen cree automáticamente una base de datos llamada `chiper` al iniciar. |
+| `-p 5432:5432` | `host:contenedor` | Expone el puerto 5432 del contenedor (donde escucha Postgres) en el puerto 5432 de la máquina host, para poder conectarse desde `localhost`. |
+| `-d` | — | Ejecuta el contenedor en segundo plano (*detached*), sin bloquear la terminal. |
+
+Para verificar que el contenedor quedó corriendo correctamente:
+
+``` bash
+docker ps
+```
+
+Debería aparecer una fila con el contenedor `chiper-db` y estado `Up`.
+
 > [!WARNING]
 > Docker es la forma más sencilla y estandar de levantar la base de datos para este laboratorio, por lo que el equipo del curso no dará soporte a problemas relacionados con la instalación o configuración de PostgreSQL fuera de Docker.
 
@@ -319,7 +402,40 @@ Probar en:
 http://localhost:3000
 ```
 
-Usted tiene en este momento las herramientas necesarias para levantar un proyecto desde cero, configurar la base de datos y ejecutar la aplicación. Para los siguientes pasos vamos a trabajar con un proyecto ya creado con esta configuración, el cual se encuentra en el [repositorio de chiper-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api), en la rama `main`.
+Usted tiene en este momento las herramientas necesarias para levantar un proyecto desde cero, configurar la base de datos y ejecutar la aplicación. Para los siguientes pasos **no seguimos trabajando sobre el proyecto `cheapest-backend` que acabamos de crear**; en su lugar vamos a trabajar con un proyecto ya creado con esta configuración, el cual se encuentra en el [repositorio de cheapest-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/cheapest-api), en la rama `main`.
+
+> [!IMPORTANT]
+> Debe hacer un **fork** de este repositorio a su cuenta de GitHub (ver la sección [Estandarización del repositorio de entrega](#estandarización-del-repositorio-de-entrega) en Entregables) y luego clonar **su fork**, no el repositorio original:
+>
+> ```bash
+> git clone https://github.com/<su-usuario>/chiper-api.git
+> cd chiper-api
+> git checkout main
+> npm install
+> ```
+>
+> El paso `npm install` es indispensable: la carpeta `node_modules/` no se sube al repositorio, así que el proyecto no correrá hasta instalar las dependencias declaradas en `package.json`.
+
+Estructura de carpetas del repositorio (dentro de `src/`), donde cada carpeta de primer nivel corresponde a un subdominio/módulo:
+
+```
+src/
+ ├── datasources/        # Configuración y providers de conexión a la base de datos (TypeORM/DataSource)
+ ├── logistica/           # Subdominio de Logística, pedidos y operaciones (Catálogo, Producto)
+ │    ├── controllers/
+ │    ├── services/
+ │    ├── repositories/
+ │    │    └── entities/
+ │    ├── dtos/
+ │    └── clients/        # Clientes (o mocks) hacia servicios externos, ej. TiendaClientMock
+ ├── identificacion/      # Subdominio de identificación y autenticación de usuario (Tienda)
+ │    ├── controllers/
+ │    ├── services/
+ │    ├── repositories/
+ │    └── dtos/
+ ├── app.module.ts        # Módulo raíz, importa LogisticaModule e IdentificacionModule
+ └── main.ts               # Punto de entrada; arranca la aplicación Nest
+```
 
 ### Paso 0 — Módulo de datasources
 
@@ -327,13 +443,21 @@ El módulo `datasources` es una parte fundamental de la aplicación, ya que se e
 
 #### Componentes principales:
 
-1. **`database.module.ts`**: Este archivo define el módulo de base de datos y exporta los providers necesarios para que otros módulos puedan utilizarlos.
-2. **`database.providers.ts`**: Contiene los providers que configuran la conexión a la base de datos utilizando TypeORM. Aquí se definen las entidades y las configuraciones específicas de la base de datos.
-3. **`database-seeder.service.ts`**: Este servicio es responsable de inicializar datos en la base de datos, útil para propósitos de desarrollo o pruebas.
+1. **`src/datasources/database.module.ts`**: Este archivo define el módulo de base de datos y exporta los providers necesarios para que otros módulos puedan utilizarlos. ([ver en GitHub](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api/blob/main/src/datasources/database.module.ts))
+2. **`src/datasources/database.providers.ts`**: Contiene los providers que configuran la conexión a la base de datos utilizando TypeORM. Aquí se definen las entidades y las configuraciones específicas de la base de datos. ([ver en GitHub](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api/blob/main/src/datasources/database.providers.ts))
+3. **`src/datasources/database-seeder.service.ts`**: Este servicio es responsable de inicializar datos en la base de datos, útil para propósitos de desarrollo o pruebas. ([ver en GitHub](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api/blob/main/src/datasources/database-seeder.service.ts))
+
+> [!NOTE]
+> Si alguno de estos enlaces no coincide exactamente con la ruta del archivo en el repositorio (por renombramientos posteriores), navegue el repositorio desde la raíz siguiendo la carpeta `src/datasources/`.
 
 El diseño de este módulo sigue el principio de encapsulación, asegurando que los detalles de la conexión a la base de datos estén aislados y sean fácilmente reemplazables o configurables sin afectar el resto de la aplicación.
 
 ### Paso 1 — Definir la entidad
+
+> [!NOTE]
+> **¿Qué es TypeORM?** Un ORM (*Object-Relational Mapper*) es una librería que traduce entre el modelo de objetos de un lenguaje de programación (clases de TypeScript) y el modelo relacional de una base de datos (tablas, filas, columnas), evitando escribir SQL a mano para las operaciones más comunes. TypeORM es el ORM que usaremos: permite mapear una clase TypeScript a una tabla usando el decorador `@Entity()`, sus propiedades a columnas con `@Column()`, y sus relaciones (`@OneToMany`, `@ManyToMany`, etc.) a llaves foráneas o tablas intermedias. Esto agiliza el desarrollo y reduce errores de sincronización entre el modelo de datos y el código, a cambio de una capa de abstracción adicional. Documentación oficial: [https://typeorm.io](https://typeorm.io).
+>
+> **¿Qué es una `Entity`?** En el contexto de un ORM, una entidad es una clase que representa una tabla de la base de datos: cada instancia de la clase corresponde a una fila, y cada propiedad decorada corresponde a una columna. En TypeORM se declara con el decorador `@Entity('nombre_tabla')`.
 
 La entidad `Catalogo` modela la tabla `catalogos` con campos: `id`, `tiendaId`, `vigenciaDesde`, `vigenciaHasta`, `zona`, timestamps y relación one-to-many con `CatalogoProducto`.  
 
@@ -564,8 +688,12 @@ export class CatalogoService {
 > Imagine que `ServicioCalculoPromociones` mantiene información temporal del request (por ejemplo, reglas dinámicas por país y tipo de tienda).
 > - ¿Qué scope (singleton, request, transient) recomendaría para cada uno de estos providers? Justifique su respuesta.
 > - ¿Qué impacto real tendría esto en memoria y rendimiento bajo alta carga? Suponga que en alta carga se reciben 1000 pedidos por segundo, cual sería la complejidad espacial (Notación Big O) de cada uno de estos scopes en este escenario?
+>
 
 ### Paso 4 — Controller (rutas HTTP)
+
+> [!NOTE]
+> **¿Qué es `ValidationPipe`?** Un *Pipe* en Nest es una clase que se ejecuta justo antes de que un argumento llegue a un handler del controller, y puede transformar el dato o validar que cumpla ciertas reglas (lanzando una excepción si no las cumple). `ValidationPipe` es un pipe integrado en Nest que toma un DTO (con decoradores de `class-validator`) y verifica automáticamente que el payload recibido (`@Body`, `@Query`, etc.) cumpla esas reglas; con la opción `{ transform: true }` además convierte el objeto plano recibido en una instancia real de la clase DTO (usando `class-transformer`), incluyendo conversión de tipos (ej. strings de query params a números o fechas).
 
 El `CatalogoController` expone rutas RESTful:
 - `POST /logistics/catalogos` → `create(dto: CreateCatalogoDto)`
@@ -723,6 +851,19 @@ export class LogisticaModule {}
 
 ## Entregables
 
+### Estandarización del repositorio de entrega
+
+Para simplificar la calificación (y evitar entregas por zip/PDF con código adjunto, que son difíciles de ejecutar y no permiten ver el historial de cambios), el flujo de entrega estándar de este curso es el siguiente:
+
+1. Haga un **fork** del repositorio base [`chiper-api`](https://github.com/ISIS-2212-Arquitecturas-Robustas/chiper-api) a su cuenta personal (o la de su grupo) de GitHub: desde la página del repositorio en GitHub, use el botón **Fork** en la esquina superior derecha.
+2. Clone su fork localmente (no el repositorio original) y trabaje sobre él, haciendo commits a medida que avanza:
+   ```bash
+   git clone https://github.com/<su-usuario>/chiper-api.git
+   ```
+3. Como entregable, comparta el **enlace a su repositorio** (su fork) en el reporte, junto con la rama donde quedó el trabajo final.
+
+Esto permite a monitores y docentes clonar y ejecutar el proyecto directamente, revisar el historial de commits, y es coherente con el flujo de trabajo profesional real con Git.
+
 El estudiante debe entregar un documento en PDF que incluya:
 
 1. Respuestas argumentadas a las preguntas del laboratorio
@@ -730,9 +871,12 @@ El estudiante debe entregar un documento en PDF que incluya:
 **Nota:** Debe responder con profundidad arquitectónica, no definiciones superficiales.
 
 
-2. Implementación funcional de los siguientes componentes, con el código fuente adjunto o enlace al repositorio:
+2. Implementación funcional de los siguientes componentes, con el código fuente adjunto o enlace al repositorio (su fork, ver sección anterior):
 
    **2.1 CRUD de Producto (módulo de Logística)**
+
+   > [!NOTE]
+   > En el [diagrama de subdominios](recursos/Subdominios.pdf), `Producto` aparece coloreado dentro del subdominio de **Ventas**. Sin embargo, para este entregable la decisión de arquitectura tomada es implementarlo dentro del módulo de **Logística** (`LogisticaModule`), ya que su gestión (catálogo, atributos, disponibilidad) está más ligada a Logística que a Ventas. Siga esta indicación aunque difiera del color del diagrama; ver también la nota en la sección [5.1](#51-vista-de-información-y-funcional-de-chiper).
 
    Tomando como base el diagrama de dominio y el diagrama de componentes, implementar un CRUD completo para la entidad `Producto` dentro del módulo de logística (`LogisticaModule`). Debe seguir la misma arquitectura del CRUD de `Catalogo`:
    - Entidad `Producto` mapeada con TypeORM.

@@ -41,16 +41,18 @@
 
 ### 1.2 ASRs involucrados
 
-| ID | Descripcion | Metricas a satisfacer |
-| --- | --- | --- |
-| REQ1 | Como tendero, quiero confirmar un pedido dentro del umbral de tiempo definido por el curso. | p99 < 2000 ms |
-| REQ2 | Como negocio, quiero mantener una alta proporcion de respuestas exitosas incluso en eventos de alta demanda. | Error % <= 10% |
-| REQ3 | Como tendero, quiero que la aplicacion funcione correctamente incluso durante picos de carga de 5000 req/min. | Durante 5000 req/min en ejecucion simultanea GET + POST, sostener throughput total >= 83.3 req/s y Error % <= 10%. |
+
+| ID | Fuente del estímulo | Estímulo | Artefacto | Entorno/Contexto | Respuesta | Medida de la respuesta |
+| --- | --- | --- | --- | --- | --- | --- |
+| REQ1 | Tendero (usuario final) mediante la aplicación | Solicitud de confirmación de un pedido (endpoint POST) | Microservicio de Ventas (y servicios dependientes) | Operación normal / pico de carga, ejecución concurrente con otros endpoints | El sistema procesa y responde la confirmación del pedido | p99 < 2000 ms |
+| REQ2 | Tráfico agregado de tenderos/clientes durante un evento de alta demanda | Ráfaga de solicitudes concurrentes GET + POST | API Gateway y microservicios expuestos | Evento de alta demanda (pico de carga simultanea) | El sistema responde exitosamente a la mayoría de solicitudes en vez de fallar | Error % <= 10% |
+| REQ3 | Tráfico agregado de tenderos/clientes en un pico comercial (ej. promociones) | Carga simultanea GET + POST sostenida en 5000 req/min | Arquitectura de microservicios completa (API Gateway, ECS/Fargate, RDS) | Pico de carga de 5000 req/min, ejecución simultanea GET + POST | El sistema sostiene el throughput agregado sin degradarse por debajo del umbral | Throughput total >= 83.3 req/s y Error % <= 10% durante la ejecución simultanea |
 
 > [!IMPORTANT]
 > **Pregunta 1:**
-> REQ1, REQ2 y REQ3 pueden degradarse de forma diferente por servicio.
+> REQ1, REQ2 y REQ3 (ya estructurados como escenarios de calidad arriba) pueden degradarse de forma diferente por servicio.
 > Defina un criterio matemático simple (por ejemplo, ganancia marginal de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Chiper.
+> La respuesta debe apoyarse en los ASRs correctamente estructurados (estímulo, fuente, entorno, artefacto, respuesta, medida de respuesta); un ASR mal definido invalida el análisis pedido.
 
 ### 1.3 Qué se va a probar
 
@@ -70,6 +72,9 @@ Se prueban dos escenarios funcionales, pero ahora en paralelo:
 ### 2.1 Diagrama de despliegue
 
 ![Diagrama de despliegue y pruebas de carga](./recursos/diagrama_componentes.png)
+
+> [!NOTE]
+> El diagrama representa la topología general del despliegue (API Gateway, servicios ECS/Fargate, RDS), pero **no** muestra explícitamente múltiples tareas por servicio ni un `desired count` distinto por microservicio. Las tácticas de "Replicación horizontal de tareas ECS" y "Escalamiento independiente por microservicio" (sección 2.3) se evidencian en la **configuración de ECS (sección 4.3)**, no en el diagrama. No asuma que el diagrama por sí solo demuestra esas tácticas.
 
 ### 2.2 Estilos de arquitectura asociados
 
@@ -93,16 +98,19 @@ Se prueban dos escenarios funcionales, pero ahora en paralelo:
 > Presente su respuesta con un diagrama de diagnóstico (hipótesis -> métricas -> evidencia -> decisión) y al menos una gráfica comparativa de soporte.
 ## 3. Tecnologías
 
-| Categoría | Tecnologías |
-| --- | --- |
-| Gateway de entrada | Amazon API Gateway |
-| Orquestación de contenedores | Amazon ECS (Fargate) |
-| Registro de imágenes | Amazon ECR |
-| Base de datos relacional | Amazon RDS (PostgreSQL) |
-| Framework backend | NestJS |
-| Lenguaje | TypeScript |
-| ORM | TypeORM |
-| Pruebas de carga | Apache JMeter |
+| Categoría | Tecnologías | Recurso de referencia |
+| --- | --- | --- |
+| Gateway de entrada | Amazon API Gateway | [Documentación oficial API Gateway](https://docs.aws.amazon.com/apigateway/) |
+| Orquestación de contenedores | Amazon ECS (Fargate) | [Documentación oficial Amazon ECS](https://docs.aws.amazon.com/ecs/) |
+| Registro de imágenes | Amazon ECR | [Documentación oficial Amazon ECR](https://docs.aws.amazon.com/ecr/) |
+| Base de datos relacional | Amazon RDS (PostgreSQL) | [Documentación oficial Amazon RDS](https://docs.aws.amazon.com/rds/) |
+| Framework backend | NestJS | [Documentación oficial NestJS](https://docs.nestjs.com/) |
+| Lenguaje | TypeScript | [Documentación oficial TypeScript](https://www.typescriptlang.org/docs/) |
+| ORM | TypeORM | [Documentación oficial TypeORM](https://typeorm.io/) |
+| Pruebas de carga | Apache JMeter | [Documentación oficial Apache JMeter](https://jmeter.apache.org/usermanual/index.html) |
+
+> [!NOTE]
+> Si alguna tecnología es nueva para usted (especialmente API Gateway, ECS/Fargate y ECR), se recomienda usar IA generativa antes de iniciar la sección 4 (Despliegue) para explorar en detalle qué hace cada servicio y cómo encaja en la arquitectura de microservicios propuesta (por ejemplo: "¿qué rol cumple ECR frente a ECS y en qué momento del despliegue se usa cada uno?").
 
 ## 4. Despliegue (AWS)
 
@@ -202,20 +210,21 @@ Distribuya la carga entre GET y POST segun su diseno de experimento (ejemplo 60/
 
 ### 5.2 Matriz mínima de pruebas
 
-Ejecute al menos 8 repeticiones para operacion normal y estres fuerte. Para el resto, al menos 4:
-
-| Test | Ramp-Up | Threads totales | Loops | Carga concurrente total (req/s) |
-| --- | --- | --- | --- | --- |
-| Smoke test | 5s | 10 | 1 | 1 |
-| Baja carga | 10s | 40 | 1 | 3 |
-| Carga media | 20s | 200 | 1 | 5 |
-| Operación normal | 50s | 900 | 1 | 9 |
-| Alta carga | 75s | 3000 | N/A | 20 |
-| Muy alta carga | 100s | 6000 | N/A | 30 |
-| Estrés | 150s | 12000 | N/A | 50 |
-| Estrés fuerte | 200s | 24000 | N/A | 90 |
+| Test | Ramp-Up | Threads totales | Loops | Carga concurrente total (req/s) | Repeticiones mínimas |
+| --- | --- | --- | --- | --- | ---: |
+| Smoke test | 5s | 10 | 1 | 1 | 4 |
+| Baja carga | 10s | 40 | 1 | 3 | 4 |
+| Carga media | 20s | 200 | 1 | 5 | 4 |
+| Operación normal | 50s | 900 | 1 | 9 | 8 |
+| Alta carga | 75s | 3000 | N/A | 20 | 4 |
+| Muy alta carga | 100s | 6000 | N/A | 30 | 4 |
+| Estrés | 150s | 12000 | N/A | 50 | 4 |
+| Estrés fuerte | 200s | 24000 | N/A | 90 | 8 |
 
 > Recomendacion: configure dos Thread Groups (GET y POST) y ejecutelos al tiempo en el mismo plan de prueba.
+
+> [!IMPORTANT]
+> El mínimo de repeticiones indicado en la columna "Repeticiones mínimas" **es obligatorio y forma parte de la calificación**. La tabla de entregables (sección 7.1) es una extensión directa de esta matriz: cada fila de 5.2 debe tener tantas filas de resultados en 7.1 como repeticiones mínimas se hayan definido aquí. Entregar la tabla de 7.1 sin haber ejecutado el mínimo de repeticiones de cada Test se considera una matriz de pruebas incompleta.
 
 > [!IMPORTANT]
 > **Pregunta 4:**
@@ -280,15 +289,17 @@ Entregue dos tablas principales (una por endpoint):
 - Tabla A: Resultados GET (en escenario simultaneo)
 - Tabla B: Resultados POST (en escenario simultaneo)
 
-Formato sugerido:
+Formato sugerido (extensión directa de la matriz de la sección 5.2: mismas columnas `Test`, `Ramp-Up` y `Threads totales`, agregando una fila por cada repetición mínima exigida y las métricas medidas):
 
-| # threads/users | Ramp-up (s) | p99 (ms) | p95 (ms) | Throughput (req/s) | Error % |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 | 5 |  |  |  |  |
-| 40 | 10 |  |  |  |  |
-| ... | ... |  |  |  |  |
+| Test | Ramp-Up | Threads totales | # Repetición | p99 (ms) | p95 (ms) | Throughput (req/s) | Error % |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Smoke test | 5s | 10 | 1 |  |  |  |  |
+| Smoke test | 5s | 10 | 2 |  |  |  |  |
+| ... | ... | ... | ... |  |  |  |  |
+| Operación normal | 50s | 900 | 1 |  |  |  |  |
+| ... | ... | ... | ... |  |  |  |  |
 
-Marque el registro del punto de inflexion en cada tabla.
+Cada `Test` debe tener exactamente el número de filas indicado por "Repeticiones mínimas" en 5.2 (por ejemplo, 8 filas para "Operación normal" y 8 para "Estrés fuerte", 4 para el resto). Marque el registro del punto de inflexion en cada tabla.
 
 ### 7.2 Evidencias
 
