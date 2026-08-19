@@ -310,6 +310,9 @@ nest --version
 
 #### Creación del proyecto
 
+> [!NOTE]
+> Este paso (`nest new`) es **solo explicativo**, para que entiendan qué genera el CLI de Nest y cómo luce un proyecto desde cero. No es necesario ejecutarlo ni conservar el proyecto resultante: más adelante en esta guía van a clonar y trabajar sobre un **repositorio ya configurado** ([Cheapest-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/Cheapest-api)), que es donde realmente se desarrolla el laboratorio.
+
 ``` bash
 nest new Cheapest-backend
 ```
@@ -410,10 +413,11 @@ Usted tiene en este momento las herramientas necesarias para levantar un proyect
 > Debe hacer un **fork** de este repositorio a su cuenta de GitHub (ver la sección [Estandarización del repositorio de entrega](#estandarización-del-repositorio-de-entrega) en Entregables) y luego clonar **su fork**, no el repositorio original:
 >
 > ```bash
-> git clone https://github.com/<su-usuario>/Cheapest-api.git
-> cd Cheapest-api
+> git clone https://github.com/<su-usuario>/cheapest-api.git
+> cd cheapest-api
 > git checkout main
 > npm install
+> npm run start:dev
 > ```
 >
 > El paso `npm install` es indispensable: la carpeta `node_modules/` no se sube al repositorio, así que el proyecto no correrá hasta instalar las dependencias declaradas en `package.json`.
@@ -422,22 +426,42 @@ Estructura de carpetas del repositorio (dentro de `src/`), donde cada carpeta de
 
 ```
 src/
- ├── datasources/        # Configuración y providers de conexión a la base de datos (TypeORM/DataSource)
- ├── logistica/           # Subdominio de Logística, pedidos y operaciones (Catálogo, Producto)
+ ├── datasources/          # Configuración y providers de conexión a la base de datos (TypeORM/DataSource)
+ │    ├── database.module.ts
+ │    ├── database.providers.ts
+ │    └── database-seeder.service.ts
+ ├── logistica/            # Subdominio de Logística, pedidos y operaciones (Catálogo, Producto, Pedido, Despacho, Promoción, DisponibilidadZona, NotaCredito)
  │    ├── controllers/
  │    ├── services/
  │    ├── repositories/
  │    │    └── entities/
  │    ├── dtos/
- │    └── clients/        # Clientes (o mocks) hacia servicios externos, ej. TiendaClientMock
- ├── identificacion/      # Subdominio de identificación y autenticación de usuario (Tienda)
+ │    ├── clients/         # Clientes (o mocks) hacia servicios externos, ej. TiendaClientMock
+ │    └── logistica.module.ts
+ ├── inventario/            # Subdominio de Inventario (ItemInventario, RegistroCompra, RegistroVenta) — importa LogisticaModule
  │    ├── controllers/
  │    ├── services/
  │    ├── repositories/
- │    └── dtos/
- ├── app.module.ts        # Módulo raíz, importa LogisticaModule e IdentificacionModule
+ │    │    └── entities/
+ │    ├── dtos/
+ │    ├── clients/
+ │    └── inventario.module.ts
+ ├── ventas/                # Subdominio de Ventas (Venta, ProductoExterno) — importa LogisticaModule
+ │    ├── controllers/
+ │    ├── services/
+ │    ├── repositories/
+ │    │    └── entities/
+ │    ├── dtos/
+ │    ├── clients/
+ │    └── ventas.module.ts
+ ├── app.controller.ts     # Controller raíz (health check)
+ ├── app.service.ts
+ ├── app.module.ts         # Módulo raíz, importa InventarioModule, LogisticaModule y VentasModule
  └── main.ts               # Punto de entrada; arranca la aplicación Nest
 ```
+
+> [!NOTE]
+> El subdominio de **Identificación y autenticación** (`Tienda`) **todavía no existe** como módulo en el repositorio — es justamente lo que ustedes deben crear como parte del **Entregable 2.2** (`IdentificacionModule`), siguiendo la misma organización interna (`controllers/`, `services/`, `repositories/entities/`, `dtos/`) que ya ven en `logistica/`, `inventario/` y `ventas/`.
 
 ### Paso 0 — Módulo de datasources
 
@@ -858,16 +882,7 @@ export class LogisticaModule {}
 
 2. Implementación funcional de los siguientes componentes, con el código fuente adjunto como un **archivo comprimido (.zip)** junto con el PDF. No se debe entregar un enlace a repositorio en este laboratorio.
 
-   **2.1 CRUD de Producto (módulo de Logística)**
-
-   Tomando como base el diagrama de dominio y el diagrama de componentes de Cheapest, implementar un CRUD completo para la entidad `Producto` dentro del módulo de logística (`LogisticaModule`). Debe seguir la misma arquitectura del CRUD de `Catalogo`:
-   - Entidad `Producto` mapeada con TypeORM.
-   - `ProductoRepository` con operaciones CRUD y filtros relevantes.
-   - `ProductoService` con validaciones y manejo de excepciones.
-   - `ProductoController` con rutas RESTful y validación de DTOs.
-   - DTOs de creación, actualización y consulta con `class-validator`.
-
-   **2.2 Módulo de Autenticación e Identificación con CRUD de Tienda**
+   **2.1 Módulo de Autenticación e Identificación con CRUD de Tienda**
 
    Crear un nuevo módulo `IdentificacionModule` que encapsule la gestión de tiendas:
    - Entidad `Tienda` mapeada con TypeORM según el diagrama de dominio.
@@ -875,12 +890,15 @@ export class LogisticaModule {}
    - CRUD completo expuesto vía HTTP con validación de DTOs.
    - El módulo debe exportar `TiendaService` para que pueda ser consumido por otros módulos.
 
-   **2.3 Reemplazo del mock de Tienda en el servicio de Catálogo**
+   **2.2 Reemplazo del mock de Tienda en los servicios de Logística**
 
-   Eliminar `TiendaClientMock` del módulo de logística y reemplazar su uso en `CatalogoService` por una llamada real a `TiendaService`:
+   > ⚠️ **Nota:** `TiendaClientMock` (en `src/logistica/clients/`) no lo usa únicamente `CatalogoService`; `PedidoService` también depende de él para verificar la existencia de la tienda al crear un pedido. Si eliminan el provider del módulo sin migrar ambos servicios, Nest fallará al iniciar la aplicación por no poder resolver la dependencia restante.
+
+   Reemplace `TiendaClientMock` por `TiendaService` en los componentes del módulo de logística que actualmente verifican la existencia de tiendas, **incluyendo `CatalogoService` y `PedidoService`**. Después de actualizar todas sus dependencias (y las pruebas que los mockean), elimine `TiendaClientMock` de los providers de `LogisticaModule`:
    - `LogisticaModule` debe importar `IdentificacionModule`.
-   - `CatalogoService` debe inyectar `TiendaService` en lugar de `TiendaClientMock`.
-   - La verificación de existencia de la tienda al crear un catálogo debe realizarse a través del servicio real.
+   - `CatalogoService` y `PedidoService` deben inyectar `TiendaService` en lugar de `TiendaClientMock`.
+   - La verificación de existencia de la tienda al crear un catálogo o un pedido debe realizarse a través del servicio real.
+   - `TiendaClientMock` debe quedar completamente eliminado de `LogisticaModule` (import, provider y archivo, si ya no lo usa nada más en ese módulo).
 
 > [!IMPORTANT]
 > **¿A dónde se suben los entregables?**

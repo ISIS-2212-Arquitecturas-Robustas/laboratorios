@@ -57,15 +57,17 @@ export class CreateCatalogoDto {
 }
 ```
 
-El diagrama de dominio completo está en [`recursos/Modelo_Dominio_Cheapest.pdf`](recursos/Modelo_Dominio_Cheapest.pdf). De ahí necesitan solo los campos de `Producto`: `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, y su relación many-to-many con `Catalogo` (ya está definida en la entidad de arriba).
+El diagrama de dominio completo está en [`recursos/Modelo_Dominio_Cheapest.pdf`](recursos/Modelo_Dominio_Cheapest.pdf). De ahí necesitan solo los campos de `Producto`: `codigoInterno`, `codigoBarras`, `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, `monedaId`, y su relación many-to-many con `Catalogo` (ya está definida en la entidad de arriba).
 
 ## Tarea 
 
+> ⚠️ **Nota:** los cuatro archivos que se piden a continuación **ya existen, implementados, en el [repositorio de Cheapest-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/Cheapest-api)** (rama `main`). El objetivo de este warm-up **no** es producir código nuevo, sino que cada equipo lo escriba por su cuenta a partir del patrón de `Catalogo` para afianzar la comprensión de `Entity`/DTOs antes de verlos ya resueltos en el repositorio.
+
 En un IDE con soporte de TypeScript instalado (por ejemplo VS Code con las dependencias del proyecto instaladas, para tener resaltado de errores y autocompletado — no es necesario correr la aplicación ni la base de datos), escriban el código de los siguientes archivos siguiendo **exactamente el mismo patrón** que `Catalogo`:
 
-1. **`producto.entity.ts`** — entidad `Producto` con TypeORM: `id` (uuid), `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, `createdAt`, `updatedAt`, y la relación inversa `@ManyToMany` hacia `Catalogo`.
+1. **`producto.entity.ts`** — entidad `Producto` con TypeORM: `id` (uuid), `codigoInterno`, `codigoBarras`, `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, `monedaId` (uuid), `createdAt`, `updatedAt`, y la relación inversa `@ManyToMany` hacia `Catalogo`.
 2. **`create-producto.dto.ts`** — DTO de creación con `class-validator` (`@IsString`, `@IsNumber`, `@MaxLength`, etc. según el tipo de cada campo).
-3. **`update-producto.dto.ts`** — DTO de actualización (puede extender el de creación con `PartialType`).
+3. **`update-producto.dto.ts`** — DTO de actualización
 4. **`query-producto.dto.ts`** — DTO de consulta con al menos un filtro opcional (por ejemplo `categoria`).
 
 **No es necesario** escribir el Repository, Service ni Controller todavía — eso lo verán en el resto del laboratorio, donde reutilizarán directamente lo que escribieron aquí.
