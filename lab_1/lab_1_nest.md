@@ -248,10 +248,7 @@ Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicac
 > Puede consultar el [enunciado completo de Cheapest](../enunciado-cheapest.md) para más contexto de negocio sobre la aplicación.
 
 ### 5.1 Vista de Información y Funcional de Cheapest
-Antes de empezar con el código, es importante entender el modelamiento que se hizo de Cheapest, a partir del enunciado se pudo comprender el dominio de la aplicación el cual nos permite entender que entidades tenemos que implementar y como se comporta la aplicación:
-- [Diagrama de Dominio](recursos/Modelo_Dominio_Cheapest.pdf)
-
-A partir de este modelado, tenemos un entendimiento más profundo de como funciona Cheapest, el siguiente paso es comprender la estructura funcional de Cheapest. Es decir, cómo podemos organizar y dividir nuestra aplicación en unidades lógicas que tengan sentido entre si. Los diagramas de componentes y conectores nos permiten modelar estas estructuras, sin embargo para lograr esto vamos a separar el modelo de dominio en múltiples subdominios que tengan sentido entre si, recuerde que un subdominio es un conjunto de elementos del dominio que tienen sentido en conjunto. A partir de esta separación llegamos al siguiente diagrama en donde vemos cada subdominio identificado con un color
+Antes de empezar con el código, es importante entender el modelamiento que se hizo de Cheapest, a partir del enunciado se pueden abstraer las entidades (así como sus relaciones) en un diagrama de clases. A partir de este diagrama, tenemos un entendimiento más profundo de los datos de Cheapest, el siguiente paso es definir subdominios: entidades que tienen sentido en conjunto. Las entidades que pertenecen a un mismo subdominio se representarán con un mismo color. A partir de esta separación llegamos al siguiente diagrama en donde vemos tanto entidades, relaciones como subdominios.
 - [Subdominios](recursos/Subdominios.pdf)
 
 Por último podemos identificar cada uno de estos subdominios como componentes, estos componentes definirán la estructura de nuestra aplicación Nest pues cada componente puede mapearse a un módulo.
