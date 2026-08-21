@@ -220,7 +220,7 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 
 > [!WARNING]
 > Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
-> Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando los siguientes comandos (`docker compose down` no acepta un nombre de servicio como argumento; siempre detiene todo el proyecto y, con `-v`, borra todos los volúmenes, no solo el de `postgres`):
+> Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando los siguientes comandos:
 > ```bash
 > docker compose stop postgres
 > docker compose rm -f -v postgres
