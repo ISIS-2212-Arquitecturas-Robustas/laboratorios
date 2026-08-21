@@ -17,10 +17,10 @@
 
 | Etapa                           | Resumen                                                                                | Uso de IA generativa                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 1. Contexto experimental y ASRs | Definicion del experimento, criterios de exito y marco de evaluacion del monolito.     | Uso acotado para entender ASRs; el analisis de impacto debe ser propio.                     |
-| 2. Preparacion del entorno      | Levantamiento de base de datos, backend y verificacion inicial del entorno de pruebas. | Recomendado para resolver bloqueos tecnicos de instalacion y configuracion.                   |
-| 3. Diseño de pruebas            | Definicion de distribucion de datos, matriz de carga e hipotesis de degradacion.       | Puede ayudar a proponer diseños, pero se debe justificar con el contexto de Cheapest. |
-| 4. Ejecución de pruebas         | Ejecución con JMeter y opcion de script en Python para cargas altas.                   | Recomendado en cargas altas para generar o ajustar scripts de prueba y analisis.              |
+| 1. Contexto experimental y ASRs | Definición del experimento, criterios de éxito y marco de evaluación del monolito.     | Uso acotado para entender ASRs; el análisis de impacto debe ser propio.                     |
+| 2. Preparación del entorno      | Levantamiento de base de datos, backend y verificación inicial del entorno de pruebas. | Recomendado para resolver bloqueos técnicos de instalación y configuración.                   |
+| 3. Diseño de pruebas            | Definición de distribución de datos, matriz de carga e hipótesis de degradación.       | Puede ayudar a proponer diseños, pero se debe justificar con el contexto de Cheapest. |
+| 4. Ejecución de pruebas         | Ejecución con JMeter y opción de script en Python para cargas altas.                   | Recomendado en cargas altas para generar o ajustar scripts de prueba y análisis.              |
 | 5. Entregables y conclusiones   | Reporte de resultados, punto de inflexion y propuestas de mejora arquitectónica.       | No recomendado para redactar conclusiones sin evidencia del experimento.                      |
 
 ## Objetivos
@@ -36,7 +36,7 @@
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Propósito**                 | Determinar el punto de inflexión del sistema bajo carga concurrente de dos endpoints críticos <br><br>- Servicio GET de consulta con múltiples JOINs<br>- Servicio POST de escritura de una entidad extensa                                                                          |
 | **Sistema bajo prueba**       | Backend monolítico Cheapest (NestJS + PostgreSQL)                                                                                                                                                                                                                                      |
-| **Resultados esperados**      | - Obtener el punto de inflexión (número máximo de usuarios en que los requerimientos no funcionales, e.g., REQ1 y REQ2, se dejan de respetar) de los servicios REST del sistema. |
+| **Resultados esperados**      | - Obtener el punto de inflexión (número máximo de usuarios en que los requerimientos no funcionales, e.g., ASR1 y ASR2, se dejan de respetar) de los servicios REST del sistema. |
 | **Infraestructura requerida** | Local (Node.js + PostgreSQL en Docker opcional)<br><br>Cliente local pruebas (JMeter o script propio) |
 
 ## ASRs evaluados
@@ -153,7 +153,7 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 | Estilos de Arquitectura asociados | Análisis |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Monolito                          | - Favorece latencia y testeabilidad.<br>- Desfavorece escalabilidad y disponibilidad.                                     |
-| Cliente-servidor                  | - Favorece seguridad (el control de acceso a los datos es centralizado).<br>- Desfavorece escalabilidad y disponibilidad. |
+| Cliente-servidor                  | - Favorece seguridad (el control de acceso a los datos es centralizado).<br>- Puede introducir un cuello de botella o punto único de falla en el servidor si este no se replica; esto no descarta que el servidor pueda escalarse horizontalmente. |
 | Capas                             | - Favorece la mantenibilidad y la flexibilidad del sistema.<br>- Desfavorece latencia y aumenta la complejidad.           |
 
 ## Tecnologías asociadas
@@ -164,7 +164,7 @@ Note que todos los componentes están desplegados en un único nodo de ejecució
 | **Lenguajes de programación** | - **TypeScript:** Lenguaje principal del backend, aporta tipado estático y mayor robustez en el desarrollo.                                                                                        |
 | **Plataforma de ejecución**   | - **Node.js:** Entorno de ejecución basado en event loop, adecuado para aplicaciones I/O intensivas como APIs REST.                                                                                |
 | **Bases de datos**            | - **PostgreSQL:** Base de datos relacional robusta que soporta transacciones ACID, índices avanzados y optimización de consultas complejas (JOINs).                                                |
-| **Herramientas de análisis**  | - **Apache JMeter :** Herramienta de pruebas de carga utilizada para simular concurrencia y medir latencia, throughput y porcentaje de error.                                                      |
+| **Herramientas de análisis**  | - **Apache JMeter:** Herramienta de pruebas de carga utilizada para simular concurrencia y medir latencia, throughput y porcentaje de error.                                                      |
 | **Contenedores (opcional)**   | - **Docker:** Permite levantar servicios en entornos aislados para facilitar reproducibilidad del experimento.                                                                                     |
 | **Librerías**                 | - **TypeORM:** ORM utilizado por NestJS para mapear entidades a tablas y manejar consultas, relaciones y transacciones.                                                                            |
 
@@ -220,9 +220,10 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 
 > [!WARNING]
 > Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
-> Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando el siguiente comando: 
+> Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando los siguientes comandos (`docker compose down` no acepta un nombre de servicio como argumento; siempre detiene todo el proyecto y, con `-v`, borra todos los volúmenes, no solo el de `postgres`):
 > ```bash
-> docker compose down -v postgres
+> docker compose stop postgres
+> docker compose rm -f -v postgres
 > ```
 > De igual forma en el archivo `src/datasources/seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas. Por ejemplo: `tiendaId = bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`, `zona = Zona Norte`, `monedaId = cccccccc-cccc-4ccc-8ccc-cccccccccccc` y `productoId = aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`.
 
@@ -243,10 +244,10 @@ Indica el número de iteraciones que se van a hacer del escenario de prueba. En 
 ### Matriz mínima de pruebas (mínimo recomendado)
 Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés fuerte, para las otras ejecute al menos 4 veces (más si el quiebre no es claro):
 
-| Test                 | Ramp-Up | Threads | Loops | Usuarios concurrentes (req/seg) |
-| -------------------- | ------- | ------- | ----- | ------------------------------- |
+| Test                 | Ramp-Up | Threads | Loops | Throughput objetivo (req/s)     |
+| -------------------- | ------- | ------- | ----- | -------------------------------- |
 | **Smoke test**       | 5s      | 5       | 1     | 1                               |
-| **Baja carga**       | 10s     | 10      | 1     | 3                               |
+| **Baja carga**       | 10s     | 30      | 1     | 3                               |
 | **Carga media**      | 20s     | 100     | 1     | 5                               |
 | **Operación normal** | 50s     | 450     | 1     | 9                               |
 | **Alta carga**       | 75s     | 1500    | N/A   | 20                              |
@@ -268,11 +269,11 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 
 ## Pruebas de carga
 
-A continuación, descargue Apache Jmeter en su máquina personal y realice las pruebas de carga
+A continuación, descargue Apache JMeter en su máquina personal y realice las pruebas de carga
 
 Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST.
 
-El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene jMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos
+El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene JMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos
 
 Si no tiene JMeter instalado, descárguelo desde la [página oficial de descarga](https://jmeter.apache.org/download_jmeter.cgi). Requisito previo: JMeter necesita una versión de **Java (JDK) 8 o superior** instalada y configurada en el `PATH` (verifique con `java -version`); una instalación de Java faltante o incorrecta es una causa frecuente de errores confusos al intentar arrancar JMeter. Pasos generales de instalación:
 - **Windows:** descargue el `.zip` (binario) desde la página oficial, descomprímalo en una carpeta de su preferencia y ejecute `bin\jmeter.bat`.
@@ -348,7 +349,7 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 > - Las capturas de pantalla mostrando la ejecución del laboratorio son tan importantes como los resultados
 > - Incluir los prompts utilizados para la generación de pruebas
 
-1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", las configuraciones de Jmeter.
+1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", las configuraciones de JMeter.
 
 > [!IMPORTANT]
 > No es suficiente con reportar únicamente los escenarios de operación normal y evento de promociones; se espera que documente el incremento progresivo de carga y las repeticiones indicadas en la [matriz mínima de pruebas](#matriz-mínima-de-pruebas-mínimo-recomendado), con el fin de ubicar con precisión el punto de inflexión. Como mínimo debe reportar **8 corridas** para los escenarios de **operación normal** y **estrés fuerte**, y al menos **4 corridas** para cada uno de los demás escenarios (smoke test, baja carga, carga media, alta carga, muy alta carga y estrés).
