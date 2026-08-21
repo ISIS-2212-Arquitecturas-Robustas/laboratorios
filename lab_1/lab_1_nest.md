@@ -249,7 +249,7 @@ Este tutorial recorre, paso a paso, cómo está construido un CRUD de la aplicac
 
 ### 5.1 Vista de Información y Funcional de Cheapest
 Antes de empezar con el código, es importante entender el modelamiento que se hizo de Cheapest, a partir del enunciado se pueden abstraer las entidades (así como sus relaciones) en un diagrama de clases. A partir de este diagrama, tenemos un entendimiento más profundo de los datos de Cheapest, el siguiente paso es definir subdominios: entidades que tienen sentido en conjunto. Las entidades que pertenecen a un mismo subdominio se representarán con un mismo color. A partir de esta separación llegamos al siguiente diagrama en donde vemos tanto entidades, relaciones como subdominios.
-- [Subdominios](recursos/Subdominios.pdf)
+- [Subdominios](recursos/Subdominios.png)
 
 Por último podemos identificar cada uno de estos subdominios como componentes, estos componentes definirán la estructura de nuestra aplicación Nest pues cada componente puede mapearse a un módulo.
 
@@ -257,7 +257,7 @@ Por último podemos identificar cada uno de estos subdominios como componentes, 
 *Figura 2. Diagrama de componentes y conectores de Cheapest. Cada componente (Inventario, Inteligencia de negocio, Ventas, Logística/pedidos/operaciones, Identificación y autenticación, Fiado) corresponde a un subdominio y se mapeará a un módulo de Nest.*
 
 > [!NOTE]
-> **Diagrama de dominio vs. diagrama de componentes:** en el [diagrama de subdominios](recursos/Subdominios.pdf), la entidad `Producto` aparece coloreada dentro del subdominio de **Ventas**. Sin embargo, en la implementación (y en el entregable 2.1) `Producto` se construye dentro del módulo de **Logística** (`LogisticaModule`), junto con `Catalogo`. Esta decisión se toma porque, en términos de comportamiento y ciclo de vida, `Producto` está más acoplado a la gestión de catálogo (qué productos existen, sus atributos, su disponibilidad) que a la lógica de venta en sí misma; `Venta` seguirá viviendo conceptualmente en el subdominio de Ventas. Tenga esto en cuenta al leer el diagrama de dominio: no todos los elementos se implementan en el subdominio con el que están coloreados, y donde exista esta discrepancia, priorice lo indicado en el enunciado del entregable sobre el color del diagrama.
+> **Diagrama de dominio vs. diagrama de componentes:** en el [diagrama de subdominios](recursos/Subdominios.png), la entidad `Producto` aparece coloreada dentro del subdominio de **Ventas**. Sin embargo, en la implementación (y en el entregable 2.1) `Producto` se construye dentro del módulo de **Logística** (`LogisticaModule`), junto con `Catalogo`. Esta decisión se toma porque, en términos de comportamiento y ciclo de vida, `Producto` está más acoplado a la gestión de catálogo (qué productos existen, sus atributos, su disponibilidad) que a la lógica de venta en sí misma; `Venta` seguirá viviendo conceptualmente en el subdominio de Ventas. Tenga esto en cuenta al leer el diagrama de dominio: no todos los elementos se implementan en el subdominio con el que están coloreados, y donde exista esta discrepancia, priorice lo indicado en el enunciado del entregable sobre el color del diagrama.
 
 A continuación se resume cómo los elementos del modelado (dominio y componentes) se traducen a artefactos concretos en el código Nest:
 
