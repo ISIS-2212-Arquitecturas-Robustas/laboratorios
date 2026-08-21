@@ -410,7 +410,7 @@ Usted tiene en este momento las herramientas necesarias para levantar un proyect
 > Debe hacer un **fork** de este repositorio a su cuenta de GitHub (ver la sección [Estandarización del repositorio de entrega](#estandarización-del-repositorio-de-entrega) en Entregables) y luego clonar **su fork**, no el repositorio original:
 >
 > ```bash
-> git clone https://github.com/<su-usuario>/cheapest-api.git
+> git clone https://github.com/ISIS-2212-Arquitecturas-Robustas/cheapest-api.git
 > cd cheapest-api
 > git checkout main
 > npm install
