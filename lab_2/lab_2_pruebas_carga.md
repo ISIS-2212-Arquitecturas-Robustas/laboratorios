@@ -215,7 +215,7 @@ Hay dos escenarios de carga importantes para este laboratorio (tomados de los AS
 El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts` puede configurar el número de entidades, el número de tiendas y zonas, y la distribución modificando `src/datasources/load-seed.yaml`
 
 > [!WARNING]
-> Su tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
+> Parte de la tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**
 > Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando los siguientes comandos:
 > ```bash
 > docker compose stop postgres
@@ -248,7 +248,7 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 
 A continuación, descargue Apache JMeter en su máquina personal y realice las pruebas de carga indicados en la sección anterior (Matriz mínima de pruebas).
 
-Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST.
+Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST. Este archivo contiene un Summary Report el cual resume métricas de la prueba como Throughput, % de Error, desviación estándar.
 
 El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene JMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos.
 
