@@ -5,7 +5,7 @@ GitHub Copilot es un asistente de programación integrado en Visual Studio Code.
 ##  1. Acceso a la configuración de Copilot
 
 Como parte del [Github Students Developer Pack](https://education.github.com/pack), usted tiene acceso a copilot. Si todavía no ha solicitado acceso puedo hacerlos en el enlace.
-Antes de solicitar los beneficios asegúrese que su cuenta de Github está asociada al correo Uniandes.
+Antes de solicitar los beneficios asegure que su cuenta de Github está asociada al correo Uniandes.
 
 Una vez tenga acceso (**el proceso dura aproximadamente 72hrs**), sincronice su VSCode con su cuenta de **Github** (el que usó para inscribirse al students developer pack).
 
