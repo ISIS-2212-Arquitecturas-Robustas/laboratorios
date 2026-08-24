@@ -28,4 +28,4 @@ Para cada fila, escriba en una línea el criterio que usó para el número (ej: 
 
 ## Cierre de la sesión
 
-Cada equipo debe terminar con el `load-seed.yaml` completo. Este es el archivo real que van a usar para poblar la base de datos al ejecutar el laboratorio, y es exactamente la base de la respuesta al punto 1 de los entregables ("Describa la distribución de los datos y la razón de los mismos"). No hay que rediseñarlo después.
+Cada estudiante debe terminar con el `load-seed.yaml` completo. Este es el archivo real que van a usar para poblar la base de datos al ejecutar el laboratorio, y es exactamente la base de la respuesta al punto 1 de los entregables ("Describa la distribución de los datos y la razón de los mismos"). No hay que rediseñarlo después.
