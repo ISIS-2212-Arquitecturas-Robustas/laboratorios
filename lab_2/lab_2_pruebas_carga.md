@@ -136,10 +136,6 @@ GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-b
 > - tipo de carga,
 > - y costo/tiempo de implementación de mejoras.
 
-
-> [!NOTE]
-> **Warm-up en clase:** hay una sesión práctica de 40 minutos, sin necesidad de tener el ambiente de desarrollo instalado, en la que se diseña el `load-seed.yaml` y la matriz de pruebas: [`lab_2_warmup.md`](lab_2_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **Preparación del entorno** y usar el diseño que ya hizo.
-
 ## Diagrama de despliegue
 
 <img src="recursos/Pasted image 20260304160111.png"/>
