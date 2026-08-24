@@ -248,7 +248,7 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 
 A continuación, descargue Apache JMeter en su máquina personal y realice las pruebas de carga indicados en la sección anterior (Matriz mínima de pruebas).
 
-Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST. Este archivo contiene un Summary Report el cual resume métricas de la prueba como Throughput, % de Error, desviación estándar.
+Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST. Este archivo contiene un Summary Report el cual resume métricas de la prueba como Throughput, % de Error, desviación estándar, entre otras. Además, puede añadir un listener "Aggregate Report" al archivo para ver métricas como P95 y P99.
 
 El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene JMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos.
 
@@ -311,7 +311,7 @@ Restricciones:
   python load_test.py --users 100 --ramp-up 50 --duration 60 --endpoint POST --body sample_body.json
 ```
 
-Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot.md) le explicará como usarlo
+Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot.md) le explicará como usarlo.
 
 ## Entregables
 
@@ -321,7 +321,7 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 > - Las capturas de pantalla mostrando la ejecución del laboratorio son tan importantes como los resultados
 > - Incluir los prompts utilizados para la generación de pruebas
 
-1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", las configuraciones de JMeter.
+1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", "Aggregate Report", y las configuraciones de JMeter.
 
 > [!IMPORTANT]
 > No es suficiente con reportar únicamente los escenarios de operación normal y evento de promociones; se espera que documente el incremento progresivo de carga y las repeticiones indicadas en la [matriz mínima de pruebas](#matriz-mínima-de-pruebas-mínimo-recomendado), con el fin de ubicar con precisión el punto de inflexión. Como mínimo debe reportar **8 corridas** para los escenarios de **operación normal** y **estrés fuerte**, y al menos **4 corridas** para cada uno de los demás escenarios (smoke test, baja carga, carga media, alta carga, muy alta carga y estrés).
