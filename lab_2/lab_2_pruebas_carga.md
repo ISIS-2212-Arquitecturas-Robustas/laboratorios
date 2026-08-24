@@ -244,25 +244,13 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 | **Estrés**           | 150s    | 7500    | N/A   | 50                              |
 | **Estrés fuerte**    | 200s    | 18000   | N/A   | 90                              |
 
-> [!IMPORTANT]
-> **Pregunta 3:**
-> La matriz propuesta aumenta carga de forma escalonada, pero no necesariamente separa bien causas de degradación.
-> ¿Qué cambiaría en el diseño experimental para distinguir si el quiebre proviene principalmente de:
-> - saturación del pool de conexiones,
-> - consultas SQL ineficientes,
-> - límites del generador de carga?
->
-> Defina un diseño alternativo con variables controladas y resultados esperados para cada hipótesis.
-> Incluya una gráfica esperada por hipótesis (curva o comparación) para mostrar cómo identificaría visualmente cada tipo de cuello de botella.
-> **Pista**: La distribución de pareto muchas veces ayuda a modelar mejor el comportamiento de un ecommerce que una distribución uniforme, dado que hay tiendas que compran mucho más que otras, zonas con más actividad comercial y productos que son más populares que otros.
-
 ## Pruebas de carga
 
-A continuación, descargue Apache JMeter en su máquina personal y realice las pruebas de carga
+A continuación, descargue Apache JMeter en su máquina personal y realice las pruebas de carga indicados en la sección anterior (Matriz mínima de pruebas).
 
 Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST.
 
-El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene JMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos
+El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene JMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos.
 
 Si no tiene JMeter instalado, descárguelo desde la [página oficial de descarga](https://jmeter.apache.org/download_jmeter.cgi). Requisito previo: JMeter necesita una versión de **Java (JDK) 8 o superior** instalada y configurada en el `PATH` (verifique con `java -version`); una instalación de Java faltante o incorrecta es una causa frecuente de errores confusos al intentar arrancar JMeter. Pasos generales de instalación:
 - **Windows:** descargue el `.zip` (binario) desde la página oficial, descomprímalo en una carpeta de su preferencia y ejecute `bin\jmeter.bat`.
@@ -324,11 +312,6 @@ Restricciones:
 ```
 
 Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot.md) le explicará como usarlo
-
-> [!IMPORTANT]
-> **Pregunta 4:**
-> Investigue qué técnicas existen para lograr que agentes de IA generen código siguiendo de forma consistente patrones y reglas de desarrollo definidas por todo el equipo.
-> Con base en esa investigación, proponga una estrategia aplicable a Cheapest que incluya instrucciones y plantillas aplicables para el desarrollo dentro del equipo
 
 ## Entregables
 
