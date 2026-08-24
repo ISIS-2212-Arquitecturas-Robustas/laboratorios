@@ -223,13 +223,6 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 > ```
 > De igual forma en el archivo `src/datasources/seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas. Por ejemplo: `tiendaId = bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`, `zona = Zona Norte`, `monedaId = cccccccc-cccc-4ccc-8ccc-cccccccccccc` y `productoId = aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`.
 
-> [!IMPORTANT]
-> **Pregunta 2:**
-> Diseñe una distribución de datos que haga realista el escenario de Cheapest en hora pico (tiendas con comportamientos heterogéneos, zonas con distinta densidad de pedidos y promociones activas).
-> ¿Qué sesgos introduciría una distribución uniforme y cómo podría llevar a conclusiones erróneas sobre el punto de inflexión?
-> Proponga al menos dos estrategias de distribución y explique qué hipótesis de arquitectura valida cada una.
-> Presente su propuesta con una comparación visual clara entre estrategias: incluya al menos dos gráficas equivalentes (una por estrategia) usando los mismos ejes y escala (por ejemplo, demanda por zona o pedidos por tienda), y señale explícitamente qué patrón en la gráfica explica por qué una estrategia representa mejor el contexto real de Cheapest.
-
 Las pruebas en JMeter se definen con los siguientes parámetros
 #### Threads:
 Indica el número de threads que se lanzarán en 1 Loop (Iteración).
