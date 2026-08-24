@@ -215,7 +215,8 @@ Hay dos escenarios de carga importantes para este laboratorio (tomados de los AS
 El objetivo de las pruebas en un primer momento es **simular los escenarios** basados en las necesidades de negocio. Note también que las pruebas de carga no tendrán los mismos resultados para un diferente número de datos, por esa razón en el proyecto base se agrega un script (como provider de Nest) para agregar un número de datos. El script se encuentra en la siguiente ruta `src/datasources/database-seeder.service.ts` puede configurar el número de entidades, el número de tiendas y zonas, y la distribución modificando `src/datasources/load-seed.yaml`
 
 > [!WARNING]
-> Parte de la tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**. Para saber lo que se espera de este entregable puedes ir al [`lab_2_warmup.md`](lab_2_warmup.md) donde se diseña el `load-seed.yaml`. 
+> Parte de la tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**. Para saber lo que se espera de este entregable puede ir al
+> [`lab_2_warmup.md`](lab_2_warmup.md) donde se diseña el `load-seed.yaml`. 
 > Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando los siguientes comandos:
 > ```bash
 > docker compose stop postgres
