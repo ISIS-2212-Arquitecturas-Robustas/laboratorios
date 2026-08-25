@@ -249,7 +249,26 @@ Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés
 
 A continuación, descargue Apache JMeter en su máquina personal y realice las pruebas de carga indicados en la sección anterior (Matriz mínima de pruebas).
 
-Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST. Este archivo contiene un Summary Report el cual resume métricas de la prueba como Throughput, % de Error, desviación estándar, entre otras. Además, puede añadir un listener "Aggregate Report" al archivo para ver métricas como P95 y P99.
+Descargue el archivo [`load_test.jmx`](recursos/load_test.jmx) el cual contiene las pruebas GET y POST. Este archivo contiene un Summary Report el cual resume métricas de la prueba como Throughput, % de Error, desviación estándar, entre otras. Además, ya trae incluido un listener "Aggregate Report" (renombrado "Percentiles de Latencia") con métricas como P95 y P99.
+
+![Estructura del plan de pruebas en JMeter](recursos/j_meter.png)
+
+Un **Plan de Pruebas** es el archivo completo que se abre en la herramienta. Dentro de él, un **Thread Group** ("grupo de hilos") simula a un grupo de usuarios reales — cada "hilo" (thread) es un usuario simulado enviando peticiones al mismo tiempo. Dentro de cada Thread Group hay un **sampler**, que es la petición HTTP concreta que ese usuario va a enviar (en este caso, un GET o un POST), y varios **listeners**, que son las pantallas donde JMeter muestra los resultados de esas peticiones (tiempos de respuesta, errores, gráficas, etc.).
+
+El archivo `load_test.jmx` que se descarga ya trae todo esto configurado — no hay que armarlo desde cero. Trae dos Thread Groups independientes (uno para cada endpoint), cada uno con su sampler y el mismo set de 4 listeners:
+
+- **Grupo GET Request**: simula 5 usuarios (threads) que se van "conectando" en 5 segundos (ramp-up) y cada uno envía la petición una sola vez (1 loop). La petición es `GET /logistics/tenderos/productos-disponibles?tiendaId=...&zona=Zona Norte`.
+- **Grupo POST Request**: simula 1 solo usuario, que envía una petición `POST /logistics/pedidos` con headers `Content-Type: application/json` y `Accept: application/json`, y un cuerpo (body) en JSON que representa un pedido con 4 ítems.
+
+> Nota: estos números de threads (5 y 1) son solo el ejemplo inicial que trae el archivo — en la sección de "Diseño de la prueba de carga" ustedes van a modificarlos para simular la carga baja, media, normal y pico que pide cada ASR.
+
+Cada grupo incluye los mismos 4 listeners, que son distintas formas de ver los resultados de la misma prueba:
+- **View Results Tree**: muestra el detalle de cada petición y respuesta individual (útil para depurar si algo falla, por ejemplo ver el mensaje de error exacto que devolvió el servidor).
+- **Summary Report**: una tabla resumen con throughput (peticiones por segundo), tiempo promedio, mínimo y máximo — pero sin percentiles.
+- **Aggregate Report** (aquí renombrado "Percentiles de Latencia"): es la tabla que interesa para los ASRs de este laboratorio, porque ya trae columnas de percentil 90, 95 y 99 calculadas automáticamente — no hay que configurar nada extra para obtener el p95 o el p99 que piden las medidas de respuesta.
+- **Graph Results**: una gráfica de los tiempos de respuesta a lo largo del tiempo que dura la prueba.
+
+**¿Qué es un percentil y por qué importa aquí?** El "p99" (percentil 99) de la latencia significa: "el 99% de las peticiones respondieron en este tiempo o menos". Es una medida más realista que el promedio, porque el promedio puede esconder a ese pequeño porcentaje de usuarios que tuvo una experiencia muy lenta. Por eso el ASR 1 exige `p99 < 1000ms` en vez de simplemente un "tiempo promedio" — y por eso el Aggregate Report, que calcula ese percentil directamente, es el listener que se debe reportar como evidencia.
 
 El siguiente [recurso](https://testertina.medium.com/a-beginners-guide-to-performance-testing-with-apache-jmeter-be7a7eb0a6ad) contiene información de que componentes tiene JMeter, apréndalos para modificar los argumentos necesarios en el test que le proveemos.
 
@@ -321,6 +340,7 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 > documentados en un archivo de Word o PDF.
 > - Las capturas de pantalla mostrando la ejecución del laboratorio son tan importantes como los resultados
 > - Incluir los prompts utilizados para la generación de pruebas
+> - En el documento debe incluir también la respuesta a las preguntas planteadas a lo largo del laboratorio.
 
 1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", "Aggregate Report", y las configuraciones de JMeter.
 
