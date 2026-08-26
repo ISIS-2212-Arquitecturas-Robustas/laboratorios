@@ -166,9 +166,82 @@ Este lab incluye un template de CloudFormation basado en el Lab 4, extendido con
 
 Antes de desplegar, publique las imágenes Docker en ECR desde la rama `cognito-auth`.
 
+Si ya tiene clonado el repositorio (ver [tutoriales/subir_imagenes_a_ecr.md, sección 3. Prerrequisitos](../tutoriales/subir_imagenes%20_a_ecr.md#3-prerrequisitos)), haga:
+
+```bash
+git checkout cognito-auth
+```
+
+Antes de crear los repositorios, defina en CloudShell las variables que va a reutilizar en todos los comandos siguientes:
+
+```bash
+REGION=us-east-1
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+> [!IMPORTANT]
+> `ACCOUNT_ID` no es un valor fijo: es el ID de 12 dígitos de su propia cuenta AWS. El comando de arriba lo obtiene automáticamente; también puede verlo en la consola de AWS, en la esquina superior derecha (menú de la cuenta).
+
+Como vimos en el [diagrama de componentes](#21-diagrama-de-componentes), en este laboratorio necesitamos tres imágenes: `Logistica`, `Inventario` y `Ventas`. Cree los tres repositorios en ECR pegando lo siguiente en CloudShell:
+
+```bash
+aws ecr create-repository --repository-name cheapest-logistica --region us-east-1
+aws ecr create-repository --repository-name cheapest-inventario --region us-east-1
+aws ecr create-repository --repository-name cheapest-ventas --region us-east-1
+```
+
+Un ejemplo de cómo se ve en CloudShell:
+
+![](./recursos/creacion_repositorio.png)
+
+Autentique Docker contra ECR:
+
+```bash
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
+```
+
+Ahora construya y etiquete cada imagen. El etiquetado es necesario porque Docker debe saber a qué repositorio de ECR corresponde cada imagen local antes de poder subirla (ver [tutoriales/subir_imagenes_a_ecr.md, "Paso 4: etiquetar la imagen con la URI de ECR"](../tutoriales/subir_imagenes%20_a_ecr.md#8-paso-4-etiquetar-la-imagen-con-la-uri-de-ecr)):
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -f apps/logistica/Dockerfile \
+  -t ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/cheapest-logistica:1.0.0 \
+  --load .
+```
+
+**Es importante repetir este build para cada servicio: `logistica`, `inventario` y `ventas`**, cambiando la ruta del `Dockerfile` y el nombre del repositorio en cada caso. Cada build se debería ver de la siguiente manera:
+
+![](./recursos/Build_etiqueta.png)
+
+Finalmente, haga push de las tres imágenes creadas. Ejemplo de push de una imagen:
+
+```bash
+docker push ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cheapest-logistica:1.0.0
+```
+
+Debe quedar similar a lo mostrado a continuación:
+
+![](./recursos/push_ejemplo.png)
+
+> Recuerde que el `IMAGE_TAG` utilizado, si siguió los pasos anteriores, es `1.0.0`.
+
 ### 4.1 Desplegar el stack
 
 Desde la carpeta `lab_6/recursos/`:
+
+Para el siguiente paso vamos a necesitar las URIs de las tres imágenes que creamos. Recuerde que para construir una URI necesita el siguiente formato:
+
+```text
+<account-id>.dkr.ecr.<region>.amazonaws.com/<repository>:<tag>
+```
+
+Si `$ACCOUNT_ID` ya no está definida en su sesión (por ejemplo, porque cerró CloudShell), vuelva a ejecutar:
+
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+Y luego ejecute el despliegue del stack, reemplazando cada `<URI_ECR_...>` por la URI real de su repositorio:
 
 ```bash
 aws cloudformation deploy \
@@ -179,6 +252,19 @@ aws cloudformation deploy \
     InventarioImageUri=<URI_ECR_INVENTARIO> \
     VentasImageUri=<URI_ECR_VENTAS> \
     DBPassword=<PASSWORD>
+```
+
+Por ejemplo, usando los repositorios y el tag `1.0.0` [y con clave isis2212] creados en los pasos anteriores:
+
+```bash
+aws cloudformation deploy \
+  --stack-name Cheapest-lab6-jwt \
+  --template-file cloudformation_template.yaml \
+  --parameter-overrides \
+    LogisticaImageUri=$ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cheapest-logistica:1.0.0 \
+    InventarioImageUri=$ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cheapest-inventario:1.0.0 \
+    VentasImageUri=$ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cheapest-ventas:1.0.0 \
+    DBPassword=isis2212
 ```
 
 Al finalizar, guarde los **Outputs** del stack:

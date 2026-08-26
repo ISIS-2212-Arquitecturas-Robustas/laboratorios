@@ -29,7 +29,36 @@ El flujo básico es:
 
 Para facilitar el tutorial vamos a seguir usando Cloudshell. Este servicio tiene integrado docker por lo que desde acá vamos a generar las imágenes.
 
+Para abrir CloudShell inicie sesión en la **AWS Console** y en la barra superior busque el ícono de terminal (`>_`), ubicado junto al ícono de notificaciones. El ícono luce así:
+
+![](./recursos/cloudshell_aws.png)
+
+Al hacer clic se abrirá una terminal en la parte inferior de la pantalla. Espere a que termine de inicializar; CloudShell ya incluye AWS CLI y Docker instalados, además de las credenciales de su usuario configuradas automáticamente.
+
 En cloudshell debe clonar el repositorio de Cheapest-api. La implementación basada en microservicios se encuentra en la rama `microservicios`
+
+Para esto, clone el repositorio con:
+
+```bash
+git clone https://github.com/ISIS-2212-Arquitecturas-Robustas/Cheapest-api
+```
+
+Luego ubíquese dentro de la carpeta del repositorio:
+
+```bash
+cd Cheapest-api
+```
+
+Y haga `git checkout` sobre el branch que necesite trabajar, por ejemplo, si necesita el branch `cognito-auth`:
+
+```bash
+git checkout cognito-auth
+```
+
+Así se debería ver su terminal después de clonar el repositorio y ubicarse en el branch correspondiente:
+
+![](./recursos/git_clone.png)
+
 
 AWS documenta que el cliente Docker debe autenticarse con ECR usando un token temporal generado con AWS CLI. Ese token tiene validez limitada. ([Documentación AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html?utm_source=chatgpt.com "push a Docker image to an Amazon ECR repository"))
 
@@ -46,7 +75,36 @@ REPO_NAME=cheapest-inventario
 IMAGE_TAG=0.0.1
 ```
 
-Recuerde cambiar estos valores por sus valores reales
+Para no tener que escribir estos valores en cada comando, ejecute lo siguiente en su CloudShell para dejarlos guardados como variables de la sesión:
+
+```bash
+REGION=us-east-1
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+> [!CAUTION]
+> Estas variables solo existen mientras dure la sesión de CloudShell. Si cierra CloudShell o la sesión se desconecta, `$REGION` y `$ACCOUNT_ID` quedarán vacías y tendrá que volver a ejecutar estos comandos (o reemplazar los valores manualmente) antes de continuar con el resto del tutorial.
+
+**¿Cómo identificar el ID de su cuenta?**
+
+Su Account ID se encuentra en la parte superior derecha de la consola de AWS, como se muestra en el recuadro rojo de la siguiente imagen. En el recuadro azul puede ver el resultado de ejecutar `ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)`:
+
+![](./recursos/Account_ID.png)
+
+> [!IMPORTANT]
+> El Account ID se usa sin guiones (`-`). Si lo copia desde la consola con guiones, elimínelos antes de usarlo.
+
+Recuerde cambiar estos valores por sus valores reales.
+
+Para verificar que las variables quedaron correctamente inicializadas, ejecute:
+
+```bash
+echo "Región: $REGION | Cuenta: $ACCOUNT_ID"
+```
+
+Le debe aparecer algo similar a lo mostrado en la siguiente imagen:
+
+![](./recursos/resultado_echo.png)
 
 ## 5. Paso 1: crear el repositorio en Amazon ECR
 
@@ -112,6 +170,15 @@ docker buildx build --platform linux/amd64 -f apps/inventario/Dockerfile -t 1234
 ## 8. Paso 4: etiquetar la imagen con la URI de ECR
 
 Para subir la imagen a ECR, debe etiquetarla con la URI completa del repositorio. AWS usa el formato (URI del primer paso) para identificar la imagen:
+
+> [!TIP]
+> Si no recuerda el nombre exacto de su repositorio, puede consultarlo con:
+>
+> ```bash
+> aws ecr describe-repositories --region $REGION --query "repositories[].repositoryName"
+> ```
+>
+> ![](./recursos/repositories_names.png)
 
 ```text
 <account-id>.dkr.ecr.<region>.amazonaws.com/<repository>:<tag>
