@@ -899,7 +899,7 @@ Adjunte capturas de:
 - Task Definition de Ventas mostrando los **dos containers**: `ventas` y `ventas-sidecar`.
 - Servicios ECS de los tres microservicios en estado RUNNING.
 - API Gateway con throttling configurado devolviendo HTTP 429.
-- `envoy.yaml.tmpl` con los valores completados por el equipo (los seis `TODO`).
+- `envoy.yaml.tmpl` con los valores completados por el estudiante (los seis `TODO`).
 - Logs de CloudWatch del container `ventas-sidecar` mostrando: reintentos (acceso log con múltiples líneas por request) y transiciones de estado del circuit breaker (`ejections_active`).
 - Respuesta HTTP 200 con `status: pending_stock_confirmation` capturada en JMeter durante el fallo de Inventario.
 - Summary Report de JMeter para la ronda baseline y la ronda con tácticas combinadas.

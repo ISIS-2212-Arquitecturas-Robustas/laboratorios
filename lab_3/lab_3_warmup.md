@@ -90,4 +90,4 @@ sudo docker ps
 
 ## Cierre de la sesión
 
-Al terminar, cada equipo debe tener los 3 Security Groups creados y `Cheapest-db` corriendo con PostgreSQL activo (verificado con `docker ps`). Esto es exactamente lo que pide la sección 4.2 y 4.3 del laboratorio — no hay que rehacerlo después, se sigue directamente con las 3 instancias de app.
+Al terminar, cada estudiante debe tener los 3 Security Groups creados y `Cheapest-db` corriendo con PostgreSQL activo (verificado con `docker ps`). Esto es exactamente lo que pide la sección 4.2 y 4.3 del laboratorio — no hay que rehacerlo después, se sigue directamente con las 3 instancias de app.

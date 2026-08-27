@@ -28,4 +28,4 @@ Y dentro de cada repositorio
 
 ## Cierre de la sesión
 
-Al terminar, cada equipo debe tener los 3 repositorios ECR creados con su imagen publicada (verificado con las capturas de arriba). Esto es exactamente la sección 4.1 del laboratorio — no hay que rehacerlo después, se sigue directamente con RDS, ECS y API Gateway.
+Al terminar, cada estudiante debe tener los 3 repositorios ECR creados con su imagen publicada (verificado con las capturas de arriba). Esto es exactamente la sección 4.1 del laboratorio — no hay que rehacerlo después, se sigue directamente con RDS, ECS y API Gateway.

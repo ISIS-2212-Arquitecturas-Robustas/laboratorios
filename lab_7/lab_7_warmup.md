@@ -28,4 +28,4 @@ Para la Pregunta 3, tengan en cuenta esta tabla del laboratorio con las táctica
 
 ## Cierre de la sesión
 
-Cada equipo debe terminar con las respuestas escritas a las Preguntas 2 y 3. Son exactamente las respuestas que pide el laboratorio — no hay que rehacerlas después, se incluyen tal cual en los entregables. La Pregunta 3, en particular, es la base conceptual del Lab 8.
+Cada estudiante debe terminar con las respuestas escritas a las Preguntas 2 y 3. Son exactamente las respuestas que pide el laboratorio — no hay que rehacerlas después, se incluyen tal cual en los entregables. La Pregunta 3, en particular, es la base conceptual del Lab 8.

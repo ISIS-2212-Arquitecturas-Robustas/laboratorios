@@ -45,7 +45,7 @@
 
 ### 1.2 Contexto de negocio
 
-En el Lab 7, el endpoint `GET /ventas/resumen-operativo` -que llama síncronamente a Logística e Inventario- violó ASR-1 (p99 < 2000 ms) a cargas donde los servicios individuales funcionaban correctamente. La causa estructural fue el **fan-out síncrono**: la latencia del orquestador es la suma de las latencias de sus dependientes, y bajo carga esa suma crece de forma no lineal. La Pregunta 3 del Lab 7 les pidió proponer una alternativa. Este laboratorio implementa esa alternativa.
+En el Lab 7, el endpoint `GET /ventas/resumen-operativo` -que llama síncronamente a Logística e Inventario- violó ASR-1 (p99 < 2000 ms) a cargas donde los servicios individuales funcionaban correctamente. La causa estructural fue el **fan-out síncrono**: la latencia del orquestador es la suma de las latencias de sus dependientes, y bajo carga esa suma crece de forma no lineal. La Pregunta 3 del Lab 7 le pidió proponer una alternativa. Este laboratorio implementa esa alternativa.
 
 Cheapest tiene tres necesidades que la arquitectura síncrona no puede satisfacer simultáneamente:
 

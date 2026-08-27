@@ -70,7 +70,7 @@ export ACCESS_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.AuthenticationResult.AccessT
 export REFRESH_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.AuthenticationResult.RefreshToken')
 ```
 
-Verifiquen que ambas variables tengan contenido (no vacío):
+Verifique que ambas variables tengan contenido (no vacío):
 
 ```bash
 echo "ACCESS_TOKEN length: ${#ACCESS_TOKEN}"
@@ -96,7 +96,7 @@ Resultado esperado: código `2xx` (la request es aceptada porque el token es vá
 
 #### Paso 4 — Como "atacante", reemitir access tokens usando`REFRESH_TOKEN`
 
-Simulen que un atacante ya tiene el `REFRESH_TOKEN` (en este ejercicio, ustedes mismos) y lo usa para pedir un access token nuevo, sin volver a autenticarse con usuario/contraseña:
+Simule que un atacante ya tiene el `REFRESH_TOKEN` (en este ejercicio, usted mismo) y lo usa para pedir un access token nuevo, sin volver a autenticarse con usuario/contraseña:
 
 ```bash
 NEW_JSON=$(aws cognito-idp initiate-auth \
@@ -107,7 +107,7 @@ NEW_JSON=$(aws cognito-idp initiate-auth \
 export ATTACKER_ACCESS_TOKEN=$(echo "$NEW_JSON" | jq -r '.AuthenticationResult.AccessToken')
 ```
 
-Usen ese nuevo token contra el mismo endpoint protegido:
+Use ese nuevo token contra el mismo endpoint protegido:
 
 ```bash
 curl -i -X POST "$API_BASE_URL/ventas" \
@@ -122,7 +122,7 @@ curl -i -X POST "$API_BASE_URL/ventas" \
 
 ## Cierre de la sesión
 
-Al terminar los 4 pasos, cada equipo debe tener:
+Al terminar los 4 pasos, cada estudiante debe tener:
 
 - El `ACCESS_TOKEN` y `REFRESH_TOKEN` originales, capturados (Paso 2).
 - Evidencia de la llamada exitosa al endpoint protegido con `ACCESS_TOKEN` (Paso 3).

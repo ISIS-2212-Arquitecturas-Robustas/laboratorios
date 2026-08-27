@@ -90,7 +90,7 @@ Un provider es cualquier clase que puede ser gestionada por el contenedor de Nes
 
 En este curso utilizaremos principalmente dos tipos:
 - Servicios (Services): Contienen la lógica de negocio y llaman a los providers de infraestructura necesarios.
-- Infraestructura: Manejan el acceso a servicios externos, por ejemplo Repositorios (Repositories) para el acceso a bases de datos, servicios de caché externos, otras bases de datos o almacenamientos en la nube entre otros. En este tutorial solo se crearán repositorios, sin embargo a lo largo del curso conocerán otros tipos de elementos de infraestructura que les servirán como tácticas para satisfacer requerimientos de arquitectura. 
+- Infraestructura: Manejan el acceso a servicios externos, por ejemplo Repositorios (Repositories) para el acceso a bases de datos, servicios de caché externos, otras bases de datos o almacenamientos en la nube entre otros. En este tutorial solo se crearán repositorios, sin embargo a lo largo del curso conocerá otros tipos de elementos de infraestructura que le servirán como tácticas para satisfacer requerimientos de arquitectura. 
 ### 2.4 Módulos (Modules)
 Un módulo agrupa controladores y providers relacionados bajo un mismo contexto funcional.
 
@@ -458,7 +458,7 @@ src/
 ```
 
 > [!NOTE]
-> El subdominio de **Identificación y autenticación** (`Tienda`) **todavía no existe** como módulo en el repositorio — es justamente lo que ustedes deben crear como parte del **Entregable 2.2** (`IdentificacionModule`), siguiendo la misma organización interna (`controllers/`, `services/`, `repositories/entities/`, `dtos/`) que ya ven en `logistica/`, `inventario/` y `ventas/`.
+> El subdominio de **Identificación y autenticación** (`Tienda`) **todavía no existe** como módulo en el repositorio — es justamente lo que usted debe crear como parte del **Entregable 2.2** (`IdentificacionModule`), siguiendo la misma organización interna (`controllers/`, `services/`, `repositories/entities/`, `dtos/`) que ya ven en `logistica/`, `inventario/` y `ventas/`.
 
 ### Paso 0 — Módulo de datasources
 

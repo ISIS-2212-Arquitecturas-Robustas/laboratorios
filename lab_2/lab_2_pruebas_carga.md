@@ -260,7 +260,7 @@ El archivo `load_test.jmx` que se descarga ya trae todo esto configurado — no 
 - **Grupo GET Request**: simula 5 usuarios (threads) que se van "conectando" en 5 segundos (ramp-up) y cada uno envía la petición una sola vez (1 loop). La petición es `GET /logistics/tenderos/productos-disponibles?tiendaId=...&zona=Zona Norte`.
 - **Grupo POST Request**: simula 1 solo usuario, que envía una petición `POST /logistics/pedidos` con headers `Content-Type: application/json` y `Accept: application/json`, y un cuerpo (body) en JSON que representa un pedido con 4 ítems.
 
-> Nota: estos números de threads (5 y 1) son solo el ejemplo inicial que trae el archivo — en la sección de "Diseño de la prueba de carga" ustedes van a modificarlos para simular la carga baja, media, normal y pico que pide cada ASR.
+> Nota: estos números de threads (5 y 1) son solo el ejemplo inicial que trae el archivo — en la sección de "Diseño de la prueba de carga" usted va a modificarlos para simular la carga baja, media, normal y pico que pide cada ASR.
 
 Cada grupo incluye los mismos 4 listeners, que son distintas formas de ver los resultados de la misma prueba:
 - **View Results Tree**: muestra el detalle de cada petición y respuesta individual (útil para depurar si algo falla, por ejemplo ver el mensaje de error exacto que devolvió el servidor).
@@ -294,7 +294,7 @@ Para escenarios de alta carga > 450 threads, dado que JMeter empieza a tener lim
 	- Error % por tipo (status >= 400 + timeouts + connection errors)
 - Idealmente debería generar la tabla y gráficos para **SU** análisis
 
-Les dejamos un prompt de ejemplo, note que debe cambiar algunos valores para ajustarlo al laboratorio
+Le dejamos un prompt de ejemplo, note que debe cambiar algunos valores para ajustarlo al laboratorio
 ```
 Vamos a realizar pruebas de performance. Necesito un script en Python para ejecutar pruebas de carga ligeras contra un backend NestJS usando HTTP.
 
