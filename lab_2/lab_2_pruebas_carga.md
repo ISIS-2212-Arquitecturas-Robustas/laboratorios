@@ -69,18 +69,19 @@ Los dos endpoints evaluados en este laboratorio corresponden directamente a los 
 
 **Ejemplo de request:**
 ```
-GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-baf722e18ab9&zona=Zona+Norte
+GET /logistics/tenderos/productos-disponibles?tiendaId=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb&zona=Zona+Norte
 ```
 
 **Respuesta exitosa (200):** arreglo de productos con campos `id`, `nombre`, `marca`, `categoria`, `presentacion`, `precioBase`, entre otros.
 
-**Lógica interna (múltiples consultas secuenciales a la base de datos):**
-1. Recupera todos los pedidos históricos de la tienda y extrae sus `productoId`.
-2. Filtra las promociones activas (fecha vigente + tienda incluida) y extrae sus `productoId`.
-3. Obtiene los catálogos de la zona y consulta disponibilidad > 0 para cada uno.
-4. Calcula la intersección de los tres conjuntos y resuelve el detalle de cada producto.
+**Lógica interna:**
+El endpoint resuelve la intersección de tres condiciones sobre la tabla `productos`, mediante **una sola consulta** con tres subconsultas `EXISTS` correlacionadas (todo el trabajo ocurre en PostgreSQL, no en la aplicación):
+1. `EXISTS` sobre `items_pedido` ⋈ `pedidos` filtrando por `tiendaId`: el producto fue pedido alguna vez por esa tienda.
+2. `EXISTS` sobre `promociones` ⋈ `promocion_tiendas`: hay una promoción vigente hoy para ese producto y esa tienda.
+3. `EXISTS` sobre `disponibilidad_zona` ⋈ `catalogos` filtrando por `zona`: hay disponibilidad > 0 en un catálogo de la zona.
 
-> Este endpoint realiza varios JOINs sobre tablas con una cantidad considerable de datos
+> Revise la implementación real en `src/logistica/repositories/producto.repository.ts`
+> (`findProductosDisponiblesParaTendero`) y contrástela con esta descripción y con la del POST antes de responder las preguntas de cuello de botella: ¿el costo está en los `EXISTS` de esta lectura o en otra parte? Note que **no hay índices** sobre `pedidos.tiendaId`, `items_pedido.productoId`, `catalogos.zona` ni `disponibilidad_zona.productoId`, y que el pool de conexiones usa el valor por defecto de `pg` (10), porque `src/datasources/database.providers.ts` no lo configura.
 
 ---
 
@@ -90,18 +91,18 @@ GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-b
 **Ruta:** `/logistics/pedidos`  
 **Content-Type:** `application/json`
 
-**Body (ejemplo con 10 ítems):**
+**Body (ejemplo con 2 ítems):**
 ```json
 {
   "identificador": "PED-20260601-001",
-  "tiendaId": "9a2f2e7b-40c4-4c5f-a37c-baf722e18ab9",
+  "tiendaId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   "fechaHoraCreacion": "2026-06-01T10:00:00.000Z",
-  "montoTotal": 150000,
-  "monedaId": "<uuid-moneda>",
-  "estado": "PENDIENTE",
+  "montoTotal": 85000,
+  "monedaId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "estado": "creado",
   "items": [
-    { "productoId": "<uuid>", "cantidad": 5, "precioUnitario": 12000, "descuento": 0,   "monedaId": "<uuid-moneda>" },
-    { "productoId": "<uuid>", "cantidad": 3, "precioUnitario": 8500,  "descuento": 500, "monedaId": "<uuid-moneda>" }
+    { "productoId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "cantidad": 5, "precioUnitario": 12000, "descuento": 0,   "monedaId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
+    { "productoId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab", "cantidad": 3, "precioUnitario": 8500,  "descuento": 500, "monedaId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }
   ]
 }
 ```
@@ -138,7 +139,7 @@ GET /logistics/tenderos/productos-disponibles?tiendaId=9a2f2e7b-40c4-4c5f-a37c-b
 
 ## Diagrama de despliegue
 
-<img src="recursos/Pasted image 20260304160111.png"/>
+<img src="recursos/despliegue_monolito.png"/>
 
 *Figura 1. Despliegue de los componentes del backend monolítico de Cheapest (API, base de datos) sobre un único nodo de ejecución local.*
 
@@ -204,7 +205,7 @@ Verifique que la aplicación está corriendo:
 
 Usted debería ver algo así:
 
-<img src="recursos/Pasted image 20260305024253.png"/>
+<img src="recursos/health_check.png"/>
 
 ## Diseño de la prueba de carga
 
@@ -216,12 +217,22 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 
 > [!WARNING]
 > Parte de la tarea es diseñar el número y la distribución de datos en las tablas para que las pruebas tengan sentido. Para mayor facilidad el script lee un archivo `yaml` en donde usted puede definir el número de datos por cada prueba. **En los entregables tiene que justificar el número de datos y distribución para cada prueba y la justificación de los mismos**. Para saber lo que se espera de este entregable puede ir al
-> [`lab_2_warmup.md`](lab_2_warmup.md) donde se diseña el `load-seed.yaml`. 
-> Dado que debe modificar múltiples veces el número de datos. Puede eliminar el volumen de docker (datos persistentes) para cada prueba usando los siguientes comandos:
+> [`lab_2_warmup.md`](lab_2_warmup.md) donde se diseña el `load-seed.yaml`.
+>
+> **Nota:** el `load-seed.yaml` que trae la rama `load_tests` viene con **valores placeholder arbitrarios y uniformes** (todos números redondos), pensados solo para que la app arranque. **No son un escenario de prueba válido** y no deben usarse tal cual. Parte del trabajo (warm-up + entregable 1) es reemplazarlos por su propio diseño de datos: conteos por tabla, `tiendas`, `zonas` y `distribucion`, cada uno **justificado con el contexto de Cheapest**. Un diseño realista no es uniforme (distribución tipo Pareto). Se espera además que ajuste el archivo por escenario (p. ej. inflar histórico de pedidos para estresar el GET, concentrar demanda para estresar el POST).
+> Dado que debe modificar múltiples veces el número de datos, tiene que **eliminar el volumen persistente de PostgreSQL** entre corridas. El comando para hacer esto es:
 > ```bash
-> docker compose stop postgres
-> docker compose rm -f -v postgres
+> docker compose down -v
 > ```
+> `docker compose down -v` borra el contenedor **y el volumen con nombre `postgres_data`** donde viven los datos.
+>
+> Después de `docker compose down -v` debe volver a levantar la base (`docker compose up postgres -d`) y reiniciar el backend para que el seeder re-poblé la base con el `load-seed.yaml` vigente.
+
+> [!CAUTION]
+> **Contaminación entre corridas.** Si al arrancar encuentra que ya hay ≥ el número de `pedidos` configurado, no agrega ni recorta nada. Pero **cada corrida del POST inserta pedidos reales** para la misma tienda (`bbbbbbbb-...-bbbb`) que consulta el GET, y el GET se encarece con el histórico de esa tienda. Si encadena corridas sin limpiar, cada corrida del POST degrada el GET de la siguiente y el "punto de inflexión" que reporte quedará corrido.
+> Por eso, para que las repeticiones sean repeticiones del *mismo* experimento y no una serie degradante:
+> - Ejecute `docker compose down -v` + re-seed **entre la campaña completa de GET y la campaña completa de POST**, y
+> - vuelva a limpiar y re-sembrar cada vez que cambie el `load-seed.yaml`.
 > De igual forma en el archivo `src/datasources/seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas. Por ejemplo: `tiendaId = bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`, `zona = Zona Norte`, `monedaId = cccccccc-cccc-4ccc-8ccc-cccccccccccc` y `productoId = aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`.
 
 Las pruebas en JMeter se definen con los siguientes parámetros
@@ -232,18 +243,28 @@ Tiempo en segundos en los cuales se deben lanzar los threads. Para el primer cas
 #### Loop Count (Iteraciones):
 Indica el número de iteraciones que se van a hacer del escenario de prueba. En cada iteración se van a ejecutar el no. de threads indicados en el primer parámetro (i.e., number of threads). 
 ### Matriz mínima de pruebas (mínimo recomendado)
-Haga al menos **8 ejecuciones** de los escenarios de operación normal y estrés fuerte, para las otras ejecute al menos 4 veces (más si el quiebre no es claro):
 
-| Test                 | Ramp-Up | Threads | Loops | Throughput objetivo (req/s)     |
-| -------------------- | ------- | ------- | ----- | -------------------------------- |
-| **Smoke test**       | 5s      | 5       | 1     | 1                               |
-| **Baja carga**       | 10s     | 30      | 1     | 3                               |
-| **Carga media**      | 20s     | 100     | 1     | 5                               |
-| **Operación normal** | 50s     | 450     | 1     | 9                               |
-| **Alta carga**       | 75s     | 1500    | N/A   | 20                              |
-| **Muy alta carga**   | 100s    | 3000    | N/A   | 30                              |
-| **Estrés**           | 150s    | 7500    | N/A   | 50                              |
-| **Estrés fuerte**    | 200s    | 18000   | N/A   | 90                              |
+Cada corrida se ejecuta **por endpoint**: una para el GET (ASR 1) y otra para el POST (ASR 2), porque los dos ASRs se miden por separado (p99 del GET, Error % del POST) y la pregunta 6 pide comparar cuál degradó primero. Es decir, los conteos de abajo son por endpoint.
+
+Repeticiones mínimas **por endpoint**:
+- **Operación normal** y **Estrés fuerte** (los dos puntos donde se evalúan los ASRs): **5 corridas** cada uno.
+- **Alta carga**, **Muy alta carga**, **Estrés**: **3 corridas** cada uno (más si el quiebre no es claro).
+- **Smoke test**, **Baja carga**, **Carga media**: **1 corrida** cada uno (sanity check de la línea base).
+
+Esto da como mínimo 22 corridas por endpoint ≈ **44 corridas en total**. Si algún ASR no se rompe dentro de la matriz, extienda con más threads / ramp-up más corto hasta ubicar el punto de inflexión.
+
+Las columnas **Ramp-Up** y **Loops** aplican a JMeter (escenarios hasta 450 threads). Los escenarios que se ejecutan con el script de Python (> 450 threads) no usan Loops sino **Duración**: el script corre `--duration` segundos sosteniendo la concurrencia objetivo. Use **60 s** de duración para esos cuatro escenarios salvo que necesite más para estabilizar el throughput.
+
+| Test                 | Herramienta | Ramp-Up | Threads / `--users` | Loops | Duración | Throughput objetivo (req/s) |
+| -------------------- | ----------- | ------- | ------------------- | ----- | -------- | --------------------------- |
+| **Smoke test**       | JMeter      | 5s      | 5                   | 1     | —        | 1                           |
+| **Baja carga**       | JMeter      | 10s     | 30                  | 1     | —        | 3                           |
+| **Carga media**      | JMeter      | 20s     | 100                 | 1     | —        | 5                           |
+| **Operación normal** | JMeter      | 50s     | 450                 | 1     | —        | 9                           |
+| **Alta carga**       | Script Py   | 75s     | 1500                | N/A   | 60s      | 20                          |
+| **Muy alta carga**   | Script Py   | 100s    | 3000                | N/A   | 60s      | 30                          |
+| **Estrés**           | Script Py   | 150s    | 7500                | N/A   | 60s      | 50                          |
+| **Estrés fuerte** (= "Evento de promociones / pico", 5000 req/min ≈ 90 req/s) | Script Py | 200s | 18000 | N/A | 60s | 90 |
 
 ## Pruebas de carga
 
@@ -345,50 +366,32 @@ Como estudiante usted tiene acceso a Github copilot para generación de código,
 1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", "Aggregate Report", y las configuraciones de JMeter.
 
 > [!IMPORTANT]
-> No es suficiente con reportar únicamente los escenarios de operación normal y evento de promociones; se espera que documente el incremento progresivo de carga y las repeticiones indicadas en la [matriz mínima de pruebas](#matriz-mínima-de-pruebas-mínimo-recomendado), con el fin de ubicar con precisión el punto de inflexión. Como mínimo debe reportar **8 corridas** para los escenarios de **operación normal** y **estrés fuerte**, y al menos **4 corridas** para cada uno de los demás escenarios (smoke test, baja carga, carga media, alta carga, muy alta carga y estrés).
+> No es suficiente con reportar únicamente los escenarios de operación normal y evento de promociones; se espera que documente el incremento progresivo de carga y las repeticiones indicadas en la [matriz mínima de pruebas](#matriz-mínima-de-pruebas-mínimo-recomendado), con el fin de ubicar con precisión el punto de inflexión.
+> **La tabla se llena por endpoint** (una fila por corrida de GET y una por corrida de POST), porque el ASR 1 se evalúa sobre el p99 del GET y el ASR 2 sobre el Error % del POST. Repeticiones mínimas **por endpoint**:
+> - **Operación normal** y **Estrés fuerte**: **5 corridas** cada uno.
+> - **Alta carga**, **Muy alta carga**, **Estrés**: **3 corridas** cada uno.
+> - **Smoke test**, **Baja carga**, **Carga media**: **1 corrida** cada uno.
+>
+> Total mínimo ≈ 22 corridas por endpoint (≈ 44 en total). Para los escenarios con script de Python registre también la **Duración** usada (`--duration`, por defecto 60 s). Si ningún ASR se rompe dentro de la matriz, extienda con más `--users` o ramp-up más corto y repórtelo.
 
-| Test / Escenario     | Corrida | Threads | Ramp-up | p99 (ms) | p95 (ms) | Throughput | Error % |
-| --------------------- | ------- | ------- | ------- | -------- | -------- | ---------- | ------- |
-| Smoke test             | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Smoke test             | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Smoke test             | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Smoke test             | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Baja carga             | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Baja carga             | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Baja carga             | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Baja carga             | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Carga media            | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Carga media            | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Carga media            | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Carga media            | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 5       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 6       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 7       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Operación normal       | 8       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Alta carga             | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Alta carga             | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Alta carga             | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Alta carga             | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Muy alta carga         | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Muy alta carga         | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Muy alta carga         | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Muy alta carga         | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés                 | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés                 | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés                 | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés                 | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 1       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 2       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 3       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 4       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 5       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 6       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 7       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
-| Estrés fuerte          | 8       | &nbsp;  | &nbsp;  | &nbsp;   | &nbsp;   | &nbsp;     | &nbsp;  |
+Use una tabla como la siguiente (replique las filas según el número de corridas de cada escenario; puede mantener GET y POST en una sola tabla con la columna **Endpoint** o hacer dos tablas separadas):
+
+| Escenario | Endpoint | Corrida | Threads / users | Ramp-up | Duración | p99 (ms) | p95 (ms) | Throughput | Error % |
+| --------- | -------- | ------- | --------------- | ------- | -------- | -------- | -------- | ---------- | ------- |
+| Smoke test | GET  | 1 | 5 | 5s | — |  |  |  |  |
+| Smoke test | POST | 1 | 5 | 5s | — |  |  |  |  |
+| Baja carga | GET / POST | 1 | 30 | 10s | — |  |  |  |  |
+| Carga media | GET / POST | 1 | 100 | 20s | — |  |  |  |  |
+| Operación normal | GET  | 1–5 | 450 | 50s | — |  |  |  |  |
+| Operación normal | POST | 1–5 | 450 | 50s | — |  |  |  |  |
+| Alta carga | GET  | 1–3 | 1500 | 75s | 60s |  |  |  |  |
+| Alta carga | POST | 1–3 | 1500 | 75s | 60s |  |  |  |  |
+| Muy alta carga | GET  | 1–3 | 3000 | 100s | 60s |  |  |  |  |
+| Muy alta carga | POST | 1–3 | 3000 | 100s | 60s |  |  |  |  |
+| Estrés | GET  | 1–3 | 7500 | 150s | 60s |  |  |  |  |
+| Estrés | POST | 1–3 | 7500 | 150s | 60s |  |  |  |  |
+| Estrés fuerte (pico) | GET  | 1–5 | 18000 | 200s | 60s |  |  |  |  |
+| Estrés fuerte (pico) | POST | 1–5 | 18000 | 200s | 60s |  |  |  |  |
 
 
 Responder con evidencia:
@@ -396,5 +399,5 @@ Responder con evidencia:
 2. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
 3. Teniendo en cuenta los resultados registrados, ¿el diseño monolítico de arquitectura propuesto en este experimento beneficia el cumplimiento de los ASRs involucrados?
 4. En caso afirmativo, explique cómo se beneficiaron los ASRs. De lo contrario, explique qué modificaciones podría hacer a la arquitectura (estilos o tácticas) para cumplir con los ASRs.
-5. ¿El patrón de degradación fue gradual o abrupto? ¿En donde se encuentra el cuello de botella de la aplicación?
+5. ¿El patrón de degradación fue gradual o abrupto? ¿En dónde se encuentra el cuello de botella de la aplicación? Sustente su respuesta revisando el código real de los dos endpoints (`producto.repository.ts` para el GET, `pedido.service.ts` + `pedido.repository.ts` para el POST): ¿el trabajo pesado del GET ocurre en la aplicación o dentro de PostgreSQL? ¿Cuántos round-trips a la base hace el POST por cada ítem del pedido? Considere también la ausencia de índices y el tamaño del pool de conexiones.
 6. ¿Qué endpoint degradó primero y por qué ocurrió?
