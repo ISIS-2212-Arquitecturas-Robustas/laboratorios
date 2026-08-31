@@ -419,8 +419,10 @@ Use una tabla como la siguiente (replique las filas según el número de corrida
 | --------- | -------- | ------- | --------------- | ------- | -------- | -------- | -------- | ---------- | ------- |
 | Smoke test | GET  | 1 | 5 | 5s | — |  |  |  |  |
 | Smoke test | POST | 1 | 5 | 5s | — |  |  |  |  |
-| Baja carga | GET / POST | 1 | 30 | 10s | — |  |  |  |  |
-| Carga media | GET / POST | 1 | 100 | 20s | — |  |  |  |  |
+| Baja carga | GET | 1 | 30 | 10s | — |  |  |  |  |
+| Baja carga | POST | 1 | 30 | 10s | — |  |  |  |  |
+| Carga media | GET | 1 | 100 | 20s | — |  |  |  |  |
+| Carga media | POST | 1 | 100 | 20s | — |  |  |  |  |
 | Operación normal | GET  | 1–5 | 450 | 50s | — |  |  |  |  |
 | Operación normal | POST | 1–5 | 450 | 50s | — |  |  |  |  |
 | Alta carga | GET  | 1–3 | 1500 | 75s | 60s |  |  |  |  |
