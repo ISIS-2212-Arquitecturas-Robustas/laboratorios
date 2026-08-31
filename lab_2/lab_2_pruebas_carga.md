@@ -12,6 +12,9 @@
 - [Diseño de la prueba de carga](#diseño-de-la-prueba-de-carga)
 - [Pruebas de carga](#pruebas-de-carga)
 - [Entregables](#entregables)
+  - [Formato de entrega](#formato-de-entrega)
+  - [1. Tabla de resultados](#1-tabla-de-resultados)
+  - [2. Análisis de resultados](#2-análisis-de-resultados)
 
 ## Etapas del laboratorio
 
@@ -235,6 +238,12 @@ El objetivo de las pruebas en un primer momento es **simular los escenarios** ba
 > - vuelva a limpiar y re-sembrar cada vez que cambie el `load-seed.yaml`.
 > De igual forma en el archivo `src/datasources/seed.sql` va a encontrar IDs de ejemplo que serán creados cada vez que ejecute el script. Dado que el resto de datos (y por ende IDs) son aleatorios, le serán de ayuda para el cuerpo de las peticiones al momento de ejecutar las pruebas. Por ejemplo: `tiendaId = bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`, `zona = Zona Norte`, `monedaId = cccccccc-cccc-4ccc-8ccc-cccccccccccc` y `productoId = aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`.
 
+> [!IMPORTANT]
+> **Pregunta 2:**
+> Diseñe una distribución de datos que haga realista el escenario de Cheapest en hora pico (tiendas con comportamientos heterogéneos, zonas con distinta densidad de pedidos y promociones activas). Tome como punto de partida el warm-up ([`lab_2_warmup.md`](lab_2_warmup.md)).
+> - ¿Qué sesgos introduciría una distribución uniforme y cómo podría llevar a conclusiones erróneas sobre el punto de inflexión?
+> - Proponga al menos **dos estrategias de distribución** y explique qué hipótesis de arquitectura valida cada una (una orientada a estresar el GET / ASR 1 y otra el POST / ASR 2).
+
 Las pruebas en JMeter se definen con los siguientes parámetros
 #### Threads:
 Indica el número de threads que se lanzarán en 1 Loop (Iteración).
@@ -244,7 +253,7 @@ Tiempo en segundos en los cuales se deben lanzar los threads. Para el primer cas
 Indica el número de iteraciones que se van a hacer del escenario de prueba. En cada iteración se van a ejecutar el no. de threads indicados en el primer parámetro (i.e., number of threads). 
 ### Matriz mínima de pruebas (mínimo recomendado)
 
-Cada corrida se ejecuta **por endpoint**: una para el GET (ASR 1) y otra para el POST (ASR 2), porque los dos ASRs se miden por separado (p99 del GET, Error % del POST) y la pregunta 6 pide comparar cuál degradó primero. Es decir, los conteos de abajo son por endpoint.
+Cada corrida se ejecuta **por endpoint**: una para el GET (ASR 1) y otra para el POST (ASR 2), porque los dos ASRs se miden por separado (p99 del GET, Error % del POST) y el análisis de resultados de los entregables pide comparar cuál degradó primero. Es decir, los conteos de abajo son por endpoint.
 
 Repeticiones mínimas **por endpoint**:
 - **Operación normal** y **Estrés fuerte** (los dos puntos donde se evalúan los ASRs): **5 corridas** cada uno.
@@ -265,6 +274,16 @@ Las columnas **Ramp-Up** y **Loops** aplican a JMeter (escenarios hasta 450 thre
 | **Muy alta carga**   | Script Py   | 100s    | 3000                | N/A   | 60s      | 30                          |
 | **Estrés**           | Script Py   | 150s    | 7500                | N/A   | 60s      | 50                          |
 | **Estrés fuerte** (= "Evento de promociones / pico", 5000 req/min ≈ 90 req/s) | Script Py | 200s | 18000 | N/A | 60s | 90 |
+
+> [!IMPORTANT]
+> **Pregunta 3:**
+> La matriz propuesta aumenta la carga de forma escalonada, pero no necesariamente separa bien las causas de degradación.
+> ¿Qué cambiaría en el diseño experimental para distinguir si el quiebre proviene principalmente de:
+> - saturación del **pool de conexiones** (`pg` usa el valor por defecto 10, no configurado en `src/datasources/database.providers.ts`),
+> - **consultas SQL ineficientes** (no hay índices en `pedidos.tiendaId`, `items_pedido.productoId`, `catalogos.zona` ni `disponibilidad_zona.productoId`),
+> - **límites del generador de carga** (JMeter deja de ser confiable por encima de 450 threads)?
+>
+> Defina un diseño alternativo con **variables controladas** y los **resultados esperados para cada hipótesis**.
 
 ## Pruebas de carga
 
@@ -354,16 +373,36 @@ Restricciones:
 
 Como estudiante usted tiene acceso a Github copilot para generación de código, este [tutorial](../tutoriales/como_usar_github_copilot.md) le explicará como usarlo.
 
+> [!IMPORTANT]
+> **Pregunta 4:**
+> Para los escenarios de más de 450 threads debe generar un script de carga con ayuda de un agente de IA. En un equipo real, varias personas generarían código con IA sobre el mismo repositorio de Cheapest y es fácil que el estilo, las convenciones y las decisiones de arquitectura se vuelvan inconsistentes.
+> Investigue qué técnicas existen para lograr que los agentes de IA generen código siguiendo de forma consistente los patrones y reglas de desarrollo definidas por todo el equipo.
+
 ## Entregables
 
 > [!WARNING]
-> - Todos los entregables deben estar bien organizados y 
-> documentados en un archivo de Word o PDF.
-> - Las capturas de pantalla mostrando la ejecución del laboratorio son tan importantes como los resultados
-> - Incluir los prompts utilizados para la generación de pruebas
+> - Todos los entregables deben estar bien organizados y documentados en un archivo de Word o PDF.
+> - Las capturas de pantalla mostrando la ejecución del laboratorio son tan importantes como los resultados.
+> - Incluir los prompts utilizados para la generación de pruebas.
 > - En el documento debe incluir también la respuesta a las preguntas planteadas a lo largo del laboratorio.
 
-1. Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary report", "Aggregate Report", y las configuraciones de JMeter.
+### Formato de entrega
+
+Suba a la Actividad correspondiente en el aula de Bloque Neón de su sección **un único archivo comprimido (`.zip`)** que contenga:
+
+1. **Informe** en PDF o Word (`.pdf` o `.docx`) con:
+   - La tabla de resultados de las pruebas de carga (sección 1).
+   - Las capturas de pantalla de evidencia ("Summary Report", "Aggregate Report" / "Percentiles de Latencia", y las configuraciones de JMeter y/o del script de Python).
+   - Los prompts utilizados para generar el script de carga.
+   - Las **respuestas argumentadas a la Pregunta 1 a la Pregunta 4** (planteadas a lo largo de la guía) y el **análisis de resultados** de la sección 2. Todo debe ir más allá de lo superficial.
+2. **Código** (no se debe entregar un enlace a repositorio):
+   - El archivo `load-seed.yaml` final utilizado en cada escenario (si usó más de una variante, inclúyalas todas e indique a qué escenario corresponde cada una).
+   - El **script de Python** de pruebas de carga generado con IA.
+   - Los archivos de resultados que haya producido (`results_get.csv`, `results_post.csv`) y las gráficas generadas.
+
+### 1. Tabla de resultados
+
+Complete la siguiente tabla con los resultados que obtuvo en las pruebas del laboratorio. En el documento deben ir las capturas de pantalla como evidencia de las pruebas realizadas. Estas capturas incluyen el "Summary Report", el "Aggregate Report" / "Percentiles de Latencia", y las configuraciones de JMeter (o del script de Python).
 
 > [!IMPORTANT]
 > No es suficiente con reportar únicamente los escenarios de operación normal y evento de promociones; se espera que documente el incremento progresivo de carga y las repeticiones indicadas en la [matriz mínima de pruebas](#matriz-mínima-de-pruebas-mínimo-recomendado), con el fin de ubicar con precisión el punto de inflexión.
@@ -394,10 +433,11 @@ Use una tabla como la siguiente (replique las filas según el número de corrida
 | Estrés fuerte (pico) | POST | 1–5 | 18000 | 200s | 60s |  |  |  |  |
 
 
-Responder con evidencia:
-1. Describa la distribución de los datos y la razón de los mismos para cada prueba basado en el contexto de Cheapest
-2. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
-3. Teniendo en cuenta los resultados registrados, ¿el diseño monolítico de arquitectura propuesto en este experimento beneficia el cumplimiento de los ASRs involucrados?
-4. En caso afirmativo, explique cómo se beneficiaron los ASRs. De lo contrario, explique qué modificaciones podría hacer a la arquitectura (estilos o tácticas) para cumplir con los ASRs.
-5. ¿El patrón de degradación fue gradual o abrupto? ¿En dónde se encuentra el cuello de botella de la aplicación? Sustente su respuesta revisando el código real de los dos endpoints (`producto.repository.ts` para el GET, `pedido.service.ts` + `pedido.repository.ts` para el POST): ¿el trabajo pesado del GET ocurre en la aplicación o dentro de PostgreSQL? ¿Cuántos round-trips a la base hace el POST por cada ítem del pedido? Considere también la ausencia de índices y el tamaño del pool de conexiones.
-6. ¿Qué endpoint degradó primero y por qué ocurrió?
+### 2. Análisis de resultados
+
+Con base en las tablas y la evidencia, incluya un análisis (1–2 páginas) que cubra:
+
+- **Punto de inflexión:** en qué nivel de carga se alcanzó y cuál ASR se incumplió primero, con los datos que lo respaldan.
+- **Cuello de botella y patrón de degradación:** dónde está el cuello de botella y si la degradación fue gradual o abrupta. Sustente su respuesta revisando el código real de los dos endpoints (`producto.repository.ts` para el GET; `pedido.service.ts` + `pedido.repository.ts` para el POST): ¿el trabajo pesado del GET ocurre en la aplicación o dentro de PostgreSQL? ¿cuántos round-trips a la base hace el POST por cada ítem del pedido? Considere también la ausencia de índices y el tamaño del pool de conexiones. Indique **qué endpoint degradó primero y por qué**.
+- **Distribución de datos:** confirme qué distribución usó finalmente en cada escenario y por qué, de forma coherente con su respuesta a la **Pregunta 2**.
+- **Arquitectura:** ¿el diseño monolítico favorece el cumplimiento de los ASRs evaluados? Si es así, explique cómo se beneficiaron; de lo contrario, qué modificaciones de arquitectura (estilos o tácticas) haría para cumplirlos.
