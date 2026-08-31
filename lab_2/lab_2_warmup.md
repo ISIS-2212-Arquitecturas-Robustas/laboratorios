@@ -13,18 +13,20 @@ El proyecto trae un script de seed (`src/datasources/database-seeder.service.ts`
 
 ## Tarea
 
-Complete el `load-seed.yaml` con números concretos (no "muchos" o "pocos", sino cantidades exactas) para que el escenario sea realista y no uniforme — el propio laboratorio le pide considerar que "hay tiendas que compran mucho más que otras, zonas con más actividad comercial y productos que son más populares que otros" (distribución tipo Pareto, no uniforme):
+Complete el `load-seed.yaml` con números concretos (no "muchos" o "pocos", sino cantidades exactas) para que el escenario sea realista y no uniforme — el propio laboratorio le pide considerar que "hay tiendas que compran mucho más que otras, zonas con más actividad comercial y productos que son más populares que otros":
 
-| Entidad | Cantidad total | Cómo se distribuye (zonas/tiendas con más o menos peso) |
-| --- | ---: | --- |
-| Tiendas | | |
-| Zonas | | |
-| Catálogos por zona | | |
-| Productos | | |
-| Promociones activas | | |
-| Pedidos históricos por tienda | | |
+| Entidad | Cantidad total |
+| --- | ---: |
+| Tiendas | |
+| Zonas | |
+| Catálogos por zona | |
+| Productos | |
+| Promociones activas | |
+| Pedidos históricos por tienda | |
 
-Para cada fila, escriba en una línea el criterio que usó para el número (ej: "80 tiendas, 20% en 'Zona Norte' concentran 60% de los pedidos históricos, el resto distribuido uniformemente en las otras 4 zonas").
+**Cómo se distribuye la actividad:** la concentración (`distribucion` de `load-seed.yaml`) es una configuración global y afecta a la vez a tiendas, zonas y productos (cada una con su propio sesgo, pero con el mismo `peso_cabeza`/`fraccion_cabeza`). Descríbalo:
+
+> _(ej: "20% de las tiendas y zonas concentran el 80% de la actividad (pedidos, catálogos), y 20% de los productos concentran el 80% de las promociones e items de pedido")_
 
 ## Cierre de la sesión
 
