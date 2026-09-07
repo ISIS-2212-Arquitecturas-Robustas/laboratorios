@@ -443,3 +443,7 @@ Con base en las tablas y la evidencia, incluya un análisis (1–2 páginas) que
 - **Cuello de botella y patrón de degradación:** dónde está el cuello de botella y si la degradación fue gradual o abrupta. Sustente su respuesta revisando el código real de los dos endpoints (`producto.repository.ts` para el GET; `pedido.service.ts` + `pedido.repository.ts` para el POST): ¿el trabajo pesado del GET ocurre en la aplicación o dentro de PostgreSQL? ¿cuántos round-trips a la base hace el POST por cada ítem del pedido? Considere también la ausencia de índices y el tamaño del pool de conexiones. Indique **qué endpoint degradó primero y por qué**.
 - **Distribución de datos:** confirme qué distribución usó finalmente en cada escenario y por qué, de forma coherente con su respuesta a la **Pregunta 2**.
 - **Arquitectura:** ¿el diseño monolítico favorece el cumplimiento de los ASRs evaluados? Si es así, explique cómo se beneficiaron; de lo contrario, qué modificaciones de arquitectura (estilos o tácticas) haría para cumplirlos.
+
+> [!IMPORTANT]
+> **¿A dónde se suben los entregables?**
+> A la Actividad correspondiente en el aula de Bloque Neón de su sección.
