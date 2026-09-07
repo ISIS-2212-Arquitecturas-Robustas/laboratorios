@@ -532,6 +532,10 @@ Para cada endpoint:
 Luego reporte el primer punto (threads) donde dejan de cumplirse.
 ## 7. Entregables
 
+### 7.1 Evidencias del despliegue
+
+Adjunte capturas del despliegue de la arquitectura en AWS (EC2, RDS, ALB, Security Groups).
+
 ### 7.2 Tablas de resultados
 
 Entregue **dos tablas** (una por endpoint):
@@ -554,13 +558,12 @@ Use este formato (con **p95 y p99**):
 >
 > De cada ejecución se espera reportar todas las columnas de la tabla (threads, ramp-up, p99, p95, throughput, error %) y **marcar explícitamente** el registro correspondiente al **punto de inflexión** (por ejemplo resaltando la fila o con una nota al pie).
 
-### 7.3 Evidencias y prompts
+### 7.3 Evidencias de pruebas de carga y prompts
 
 Adjunte evidencias de:
 
 - Configuración de la prueba (JMeter o script).
-- Ejecución de pruebas (capturas de Summary y Aggregate Reports o logs del script). Al menos para las iteraciones relevantes
-- Iteración donde **deja de cumplir** algún ASR.
+- Ejecución de pruebas (capturas de Summary y Aggregate Reports o logs del script). Al menos para la iteración donde **deja de cumplir** algún ASR y dos iteraciones relevantes más.
 - **Prompts utilizados** (si usó IA) y el **script final**.
 
 ### 7.4 Análisis breve
