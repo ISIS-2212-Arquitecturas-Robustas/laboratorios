@@ -169,28 +169,24 @@ Cuando ingrese a la plataforma de AWS Academy podrá observar la sección “Mó
 
 ![](./recursos/Pasted%20image%2020260310214319.png)
 
-Inicie el **Learning Lab** (esto habilita los créditos del curso). Usted debe ver algo así
-![](recursos/Pasted%20image%2020260310214359.png)
-
 Para iniciar el ambiente de AWS siga estos pasos:
 
 1. Presione el botón **"Start Lab"**.
-2. Espere hasta que el indicador de estado cambie a **punto verde**; esto indica que el ambiente ya está listo y puede acceder a la consola de AWS (abriendo el enlace **"AWS"** que aparece junto al indicador).
+2. Espere hasta que el indicador de estado cambie a **punto verde**; esto indica que el ambiente ya está listo y puede acceder a la consola de AWS (abriendo el enlace **"AWS"** que aparece junto al indicador). Usted debe ver algo así
+![](recursos/Pasted%20image%2020260310214359.png)
+
 
 > [!WARNING]
 > **No presione "Reset Lab"** salvo que sea estrictamente necesario (por ejemplo, si el ambiente quedó en un estado irrecuperable). El reseteo del ambiente puede demorar **bastante tiempo** en completarse y durante ese lapso no podrá acceder a los recursos de AWS.
 
 > [!WARNING]
-> Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Usted puede escoger cualquiera de las dos formas, sin embargo **es importante que sepa como usar la UI (consola de AWS) ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.** Se recomienda que use ambas formas de usar AWS al menos una vez y después escoja la que más le convenga.
-
-> [!NOTE]
-> **Warm-up en clase:** las secciones 4.2 y 4.3 (Security Groups + instancia `Cheapest-db`) están disponibles como una sesión práctica de 40 minutos para trabajar en clase: [`lab_3_warmup.md`](lab_3_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **4.4 Crear instancias EC2 para la App**.
+> Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Se recomienda que emplee ambas formas de usar AWS al menos una vez. Sin embargo, **es importante que sepa como usar la consola de AWS ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.**
 
 ### 4.2 Configuración de seguridad (Security Groups)
 
 > Nota: use nombres **sin tildes** y sin caracteres especiales.
 
-Cree los siguientes Security Groups (VPC por defecto del lab):
+Cree dos Security Groups con los parámetros indicados en las secciones 4.2.1 y 4.2.2, para el paso a paso vaya a este sub-recurso:
 - [Tutorial para crear Security Groups en AWS](../tutoriales/crear_security_groups.md)
 
 #### 4.2.1 Security Group 1 — SSH
