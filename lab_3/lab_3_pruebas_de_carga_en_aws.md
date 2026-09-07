@@ -186,7 +186,7 @@ Para iniciar el ambiente de AWS siga estos pasos:
 
 > Nota: use nombres **sin tildes** y sin caracteres especiales.
 
-Cree dos Security Groups con los parámetros indicados en las secciones 4.2.1 y 4.2.2, para el paso a paso vaya a este sub-recurso:
+Cree tres Security Groups con los parámetros indicados en las secciones 4.2.1, 4.2.2 y 4.2.3, para el paso a paso vaya a este sub-recurso:
 - [Tutorial para crear Security Groups en AWS](../tutoriales/crear_security_groups.md)
 
 #### 4.2.1 Security Group 1 — SSH
@@ -216,7 +216,6 @@ Cree dos Security Groups con los parámetros indicados en las secciones 4.2.1 y 
    > - estrategia de segmentación de red
    >
    > Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
-   > Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
 
 #### 4.2.3 Security Group 3 — HTTP API (Cheapest)
 
@@ -244,9 +243,8 @@ Usted debe ver algo así
 
 ### 4.3 Crear instancia EC2 para Base de Datos (PostgreSQL)
 
+Cree una instancia EC2 con los parámetros de la tabla, para el paso a paso siga este sub-recurso:
 - [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md)
-
-Cree una instancia EC2 con los parámetros:
 
 | Parámetro         | Valor                      |
 | ----------------- | -------------------------- |
