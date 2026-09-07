@@ -258,7 +258,7 @@ Cree una instancia EC2 con los parámetros de la tabla, para el paso a paso siga
 > [!NOTE]
 > Evalúe usar la AMI **Amazon Linux con Docker preinstalado** como alternativa a Ubuntu Server 24.04 LTS. Esto reduce el tiempo dedicado a instalar Docker manualmente (ver sección 4.3.2) y le permite enfocarse antes en las pruebas de carga. Si opta por esta AMI, tenga en cuenta que el usuario de conexión SSH suele ser `ec2-user` en lugar de `ubuntu`, y que los comandos de gestión de paquetes (`yum`/`dnf`) difieren de los de Ubuntu (`apt`).
 
-#### 4.3.1 Conexión a la instancia
+#### 4.3.1 Conexión a la instancia de base de datos
 
 **Opción A — EC2 Instance Connect (recomendada):**
 
@@ -321,7 +321,7 @@ Cree **tres** instancias EC2, una por cada zona de disponibilidad. Distribuirlas
 
 Para obtener el `SubnetId` de cada AZ antes de crear cada instancia, siga el **Paso 5** del [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md).
 
-#### 4.4.1 Conexión por SSH
+#### 4.4.1 Conexión por SSH a cada instancia EC2
 
 ```bash
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_APP>
@@ -355,7 +355,7 @@ npm -v
 
 #### 4.4.3 Clonar el repositorio del backend
 
-Clone el repositorio del backend de su proyecto (reemplace la URL, y recuerde que estamos trabajando sobre la rama load_tests):
+Clone el repositorio del backend de su proyecto (reemplace la URL, **y recuerde que estamos trabajando sobre la rama load_tests**):
 
 ```bash
 git clone <URL_REPO_BACKEND_Cheapest>
@@ -407,7 +407,7 @@ nano .env
 > Para el laboratorio usaremos la IP privada para conectar la aplicación a la base de datos. Compare el uso de IP privada vs IP pública para la conexión entre App y Base de Datos en este laboratorio.
 >
 > ¿Qué diferencias esperaría en seguridad, latencia, estabilidad y costo operativo para Cheapest, y en qué casos podría justificarse usar cada opción?
-> Apoye la comparación con una tabla de trade-offs.
+> Apoye la comparación con una tabla.
 
 #### 4.4.5 Ejecucuión y seed de datos (si aplica)
 
@@ -455,11 +455,6 @@ sudo docker ps
 ```bash
 npm run start:dev
 ```
-
-> [!IMPORTANT]
-> **Pregunta 6:**
-> Si una de las tres instancias queda con configuración de entorno distinta (por ejemplo timeout, pool de conexiones o variables de DB), ¿cómo se manifestaría este problema en resultados agregados?
-> Incluya al menos una gráfica de ejemplo (p95/p99/error %) que muestre cómo detectaría visualmente la inconsistencia entre instancias.
 
 ### 4.7 Verificación rápida desde el navegador
 
@@ -581,11 +576,11 @@ Adjunte evidencias de:
 Incluya un análisis (1–2 páginas) que responda:
 
 1. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
-2. Con base en los resultados, ¿el diseño monolítico favorece el cumplimiento de los ASRs? Explique.
-3. ¿Qué cambios de arquitectura (estilos o tácticas) propondría para cumplir los ASRs?
+2. Con base en los resultados, ¿el diseño monolítico con balanceador de carga favorece el cumplimiento de los ASRs? Explique.
+3. ¿Qué otros cambios de arquitectura (estilos o tácticas) propondría para cumplir los ASRs?
 4. ¿El patrón de degradación fue gradual o abrupto? ¿Cuál fue el cuello de botella más probable?
 5. ¿Qué endpoint degradó primero y por qué ocurrió?
-6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicadas a Cheapest**
+6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicados a Cheapest**
 
 ## Nota final (créditos AWS)
 
