@@ -571,8 +571,8 @@ Adjunte evidencias de:
 Incluya un análisis (1–2 páginas) que responda:
 
 1. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
-2. Con base en los resultados, ¿el diseño monolítico con balanceador de carga favorece el cumplimiento de los ASRs? Explique.
-3. ¿Qué otros cambios de arquitectura (estilos/tácticas/patrones) propondría para cumplir los ASRs?
+2. Con base en los resultados, ¿el diseño monolítico favorece el cumplimiento de los ASRs? Explique.
+3. ¿Qué cambios de arquitectura (estilos/tácticas/patrones) propondría para cumplir los ASRs?
 4. ¿El patrón de degradación fue gradual o abrupto? ¿Cuál fue el cuello de botella más probable?
 5. ¿Qué endpoint degradó primero y por qué ocurrió?
 6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicados a Cheapest**
