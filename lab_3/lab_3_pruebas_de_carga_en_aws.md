@@ -532,7 +532,7 @@ Para cada endpoint:
 Luego reporte el primer punto (threads) donde dejan de cumplirse.
 ## 7. Entregables
 
-### 7.1 Tablas de resultados
+### 7.2 Tablas de resultados
 
 Entregue **dos tablas** (una por endpoint):
 
@@ -554,20 +554,12 @@ Use este formato (con **p95 y p99**):
 >
 > De cada ejecución se espera reportar todas las columnas de la tabla (threads, ramp-up, p99, p95, throughput, error %) y **marcar explícitamente** el registro correspondiente al **punto de inflexión** (por ejemplo resaltando la fila o con una nota al pie).
 
-- Marque el registro del **punto de inflexión**.
-### 7.2 Evidencias
-
-Adjunte capturas de pantalla de:
-
-- `Summary Report` por iteración (o al menos de las iteraciones relevantes)
-- La iteración donde **deja de cumplir** REQ1 o REQ2
-
 ### 7.3 Evidencias y prompts
 
 Adjunte evidencias de:
 
 - Configuración de la prueba (JMeter o script).
-- Ejecución de pruebas (capturas de Summary Report o logs del script).
+- Ejecución de pruebas (capturas de Summary y Aggregate Reports o logs del script). Al menos para las iteraciones relevantes
 - Iteración donde **deja de cumplir** algún ASR.
 - **Prompts utilizados** (si usó IA) y el **script final**.
 
@@ -577,10 +569,14 @@ Incluya un análisis (1–2 páginas) que responda:
 
 1. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
 2. Con base en los resultados, ¿el diseño monolítico con balanceador de carga favorece el cumplimiento de los ASRs? Explique.
-3. ¿Qué otros cambios de arquitectura (estilos o tácticas) propondría para cumplir los ASRs?
+3. ¿Qué otros cambios de arquitectura (estilos/tácticas/patrones) propondría para cumplir los ASRs?
 4. ¿El patrón de degradación fue gradual o abrupto? ¿Cuál fue el cuello de botella más probable?
 5. ¿Qué endpoint degradó primero y por qué ocurrió?
 6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicados a Cheapest**
+
+> [!IMPORTANT]
+> **¿A dónde se suben los entregables?**
+> A la Actividad correspondiente en el aula de Bloque Neón de su sección.
 
 ## Nota final (créditos AWS)
 
