@@ -229,7 +229,6 @@ Usted debe ver algo así
 > - estrategia de segmentación de red
 >
 > Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
-> Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
 
 ### 4.3 Crear instancia EC2 para Base de Datos (PostgreSQL)
 
