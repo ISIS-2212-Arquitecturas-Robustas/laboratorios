@@ -43,14 +43,14 @@
 
 | ID | Fuente del estímulo | Estímulo | Artefacto | Entorno/Contexto | Respuesta | Medida de la respuesta |
 | --- | --- | --- | --- | --- | --- | --- |
-| REQ1 | Tendero (usuario final) mediante la aplicación | Solicitud de confirmación de un pedido (endpoint POST) | Microservicio de Ventas (y servicios dependientes) | Operación normal / pico de carga, ejecución concurrente con otros endpoints | El sistema procesa y responde la confirmación del pedido | p99 < 2000 ms |
+| REQ1 | Tendero (usuario final) mediante la aplicación | Solicitud de confirmación de un pedido (endpoint `POST /logistics/pedidos`) | Microservicio de Logística, que es el que expone `/logistics/pedidos` (y servicios dependientes) | Operación normal / pico de carga, ejecución concurrente con otros endpoints | El sistema procesa y responde la confirmación del pedido | p99 < 2000 ms |
 | REQ2 | Tráfico agregado de tenderos/clientes durante un evento de alta demanda | Ráfaga de solicitudes concurrentes GET + POST | API Gateway y microservicios expuestos | Evento de alta demanda (pico de carga simultanea) | El sistema responde exitosamente a la mayoría de solicitudes en vez de fallar | Error % <= 10% |
 | REQ3 | Tráfico agregado de tenderos/clientes en un pico comercial (ej. promociones) | Carga simultanea GET + POST sostenida en 5000 req/min | Arquitectura de microservicios completa (API Gateway, ECS/Fargate, RDS) | Pico de carga de 5000 req/min, ejecución simultanea GET + POST | El sistema sostiene el throughput agregado sin degradarse por debajo del umbral | Throughput total >= 83.3 req/s y Error % <= 10% durante la ejecución simultanea |
 
 > [!IMPORTANT]
 > **Pregunta 1:**
 > REQ1, REQ2 y REQ3 (ya estructurados como escenarios de calidad arriba) pueden degradarse de forma diferente por servicio.
-> Defina un criterio matemático simple (por ejemplo, ganancia marginal de throughput vs. incremento de recursos), represéntelo en una gráfica con sus resultados y explique en qué punto la curva muestra que el sistema deja de escalar eficientemente en Cheapest.
+> Antes de desplegar los microservicios, analice qué tan eficiente es escalar el monolito **agregando recursos** (eje X: instancias, vCPU o memoria; no carga). Con sus resultados del **Lab 3** como datos de partida, defina un criterio matemático simple (por ejemplo, ganancia marginal de throughput por recurso agregado, `ΔThroughput / ΔRecursos`), represéntelo en una gráfica de throughput vs. recursos junto a la línea de escalamiento ideal (lineal) y explique a partir de qué punto agregar recursos deja de traducirse en throughput proporcional en Cheapest y qué componente de la arquitectura lo explica.
 > La respuesta debe apoyarse en los ASRs correctamente estructurados (estímulo, fuente, entorno, artefacto, respuesta, medida de respuesta); un ASR mal definido invalida el análisis pedido.
 
 ### 1.3 Qué se va a probar
@@ -146,9 +146,30 @@ Y dentro de cada repositorio
 Tutorial de apoyo:
 - [Crear una instancia RDS PostgreSQL para Cheapest](../tutoriales/crear_instancia_rds.md)
 
-1. Cree una instancia RDS PostgreSQL para el laboratorio.
+1. Cree una instancia RDS PostgreSQL para el laboratorio (pasos 1 a 6 del tutorial). Anote el endpoint (`DB_HOST`), el nombre de la base (`--db-name`, `Cheapest` en el tutorial) y la contraseña del usuario `postgres`.
 2. Configure Security Groups para permitir trafico solo desde ECS.
-3. Configure las variables de entorno de los microservicios para apuntar a RDS.
+3. Cree el esquema y cargue los datos base (sección 4.2.1).
+4. Configure las variables de entorno de los microservicios para apuntar a RDS (sección 4.3).
+
+#### 4.2.1 Crear el esquema y cargar los datos base
+
+La RDS se crea **vacía**: sin tablas y sin datos. A diferencia del Lab 3, en la rama `microservicios` los servicios **no** ejecutan un seeder al arrancar. Sin este paso, las pruebas de carga no tienen datos: el GET responde una lista vacía y el POST falla porque la tienda, los productos y la moneda del pedido no existen.
+
+- **Esquema (tablas):** lo crea TypeORM (`synchronize`) cuando `DB_SYNCHRONIZE=true`. El script de seed también sincroniza el esquema completo (las entidades de los tres servicios) antes de insertar los datos.
+- **Datos:** el script `npm run db:seed` de la rama `microservicios` carga `libs/shared/database/src/seed.sql`, que contiene los mismos UUID fijos que usa el plan de JMeter del Lab 2 (tiendas `bbbbbbbb-...`, productos `aaaaaaaa-...`, moneda `cccccccc-...`, zonas `Zona Norte`/`Zona Sur`). Si detecta que la base ya tiene datos, no inserta nada.
+
+Ejecútelo **una sola vez**, desde su computador, con el repositorio en la rama `microservicios` (después de `npm install`) y **antes** de crear los servicios de ECS. Como la RDS no es pública, siga la sección **7. Cargar datos base** del [tutorial de RDS](../tutoriales/crear_instancia_rds.md#7-cargar-datos-base-npm-run-dbseed): hacer la RDS temporalmente pública, abrir el 5432 solo para su IP, correr el seed y **revertir ambos cambios**. El comando es:
+
+```bash
+DB_HOST=<ENDPOINT_RDS> DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=<PASSWORD> DB_NAME=Cheapest npm run db:seed
+```
+
+> En Windows (PowerShell), defina cada variable antes del comando: `$env:DB_HOST="<ENDPOINT_RDS>"`, `$env:DB_USERNAME="postgres"`, etc., y luego ejecute `npm run db:seed`.
+
+Salida esperada: `Database seeded successfully.` (o `Database already seeded. Skipping.` si ya se había cargado).
+
+> [!WARNING]
+> Defina siempre `DB_HOST` al correr el seed. Si lo omite, el script usa `127.0.0.1` y, si tiene un Postgres local corriendo, lo sembrará a él y el comando terminará sin errores aunque la RDS siga vacía.
 
 ### 4.3 Crear servicios en ECS
 
@@ -156,9 +177,38 @@ Recursos de ECS (Fargate) y parametros necesarios para el proyecto del curso:
 
 | Servicio   | Task Definition        | Servicio ECS            | Puerto contenedor | Desired count inicial | Variables a declarar                                                                         |
 | ---------- | ---------------------- | ----------------------- | ----------------- | --------------------- | -------------------------------------------------------------------------------------------- |
-| Logistica  | `td-Cheapest-logistica`  | `svc-Cheapest-logistica`  | 3001              | 1                     | `PORT=3001`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`                       |
-| Inventario | `td-Cheapest-inventario` | `svc-Cheapest-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
-| Ventas     | `td-Cheapest-ventas`     | `svc-Cheapest-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOGISTICA_BASE_URL` |
+| Logistica  | `td-Cheapest-logistica`  | `svc-Cheapest-logistica`  | 3001              | 1                     | `PORT=3001`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNCHRONIZE=true`                       |
+| Inventario | `td-Cheapest-inventario` | `svc-Cheapest-inventario` | 3002              | 1                     | `PORT=3002`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNCHRONIZE=true`, `LOGISTICA_BASE_URL` |
+| Ventas     | `td-Cheapest-ventas`     | `svc-Cheapest-ventas`     | 3003              | 1                     | `PORT=3003`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNCHRONIZE=true`, `LOGISTICA_BASE_URL` |
+
+Valores de las variables:
+
+| Variable | Valor |
+| --- | --- |
+| `DB_HOST` | Endpoint de la RDS (paso 6 del tutorial de RDS), por ejemplo `cheapest-rds.xxxxxxxx.us-east-1.rds.amazonaws.com` |
+| `DB_PORT` | `5432` |
+| `DB_USERNAME` | `postgres` (el `--master-username` de la RDS) |
+| `DB_PASSWORD` | La contraseña que definió en `--master-user-password` |
+| `DB_NAME` | El `--db-name` de la RDS (`Cheapest` en el tutorial; respete mayúsculas y minúsculas) |
+| `DB_SYNCHRONIZE` | `true`: cada servicio crea o actualiza las tablas de sus entidades al arrancar. El código también usa `true` si la variable no está definida, pero declárela explícitamente para no depender de ese valor por defecto |
+| `LOGISTICA_BASE_URL` | `http://<IP_PRIVADA_TAREA_LOGISTICA>:3001`, sin `/` final ni prefijo `/logistics` (el cliente HTTP lo agrega) |
+
+> [!NOTE]
+> Use el nombre `DB_USERNAME`, el mismo del `.env.example`, del `docker-compose.yml` y de la [guía de migración](./guia_migracion_monolito_microservicios.md#4-variables-de-entorno). El código también acepta `DB_USER` como alias, pero use un solo nombre en las tres task definitions.
+
+**Orden de creación:** inventario y ventas llaman a logística por HTTP a través de `LOGISTICA_BASE_URL`, así que ese valor debe existir antes de registrar sus task definitions:
+
+1. Cree primero el servicio de **logística** y espere a que su tarea quede en `RUNNING`.
+2. Obtenga la **IP privada** de esa tarea (la comunicación entre servicios ocurre dentro de la VPC):
+
+   ```bash
+   aws ecs describe-tasks --cluster Cheapest-cluster --tasks <TASK_ARN_LOGISTICA> --query "tasks[0].attachments[0].details[?name=='privateIPv4Address'].value" --output text
+   ```
+
+3. Use esa IP en `LOGISTICA_BASE_URL` y cree los servicios de **inventario** y **ventas**.
+
+> [!WARNING]
+> La IP de la tarea de logística **cambia** cada vez que la tarea se reinicia. Si eso ocurre, inventario y ventas quedan apuntando a la IP anterior. Vea en la sección 4.5 qué debe actualizar.
 
 Antes de crear los servicios, configure el security group de las tareas para permitir trafico entrante en los puertos 3001, 3002 y 3003. Sin esa regla, las tareas quedan en `RUNNING` pero inaccesibles desde afuera, y tanto el curl directo como los healthchecks de API Gateway fallaran con timeout.
 
@@ -199,14 +249,39 @@ Recursos globales de API Gateway y parametros necesarios:
 
 | Recurso global | Nombre sugerido | Parametros necesarios                                                                   |
 | -------------- | --------------- | --------------------------------------------------------------------------------------- |
-| API            | `Cheapest-ms-api` | Tipo de API (HTTP/REST), CORS y esquema de autenticacion/autorizacion para laboratorio. |
-| Stage          | `lab`           | Nombre de stage y variables de stage (si aplica).                                       |
-| Deployment     | `deploy-lab`    | Stage destino y version/publicacion de rutas e integraciones.                           |
+| API            | `Cheapest-ms-api` | Tipo **HTTP API** (`--protocol-type HTTP`), CORS y autorizacion `NONE` para el laboratorio. |
+| Stage          | `lab`           | Creado con `--auto-deploy`. El tutorial usa `dev` como ejemplo: reemplacelo por `lab`.   |
+| Deployment     | — (automatico)  | Con `--auto-deploy`, cada cambio en rutas e integraciones se publica solo en el stage; no necesita crear deployments manuales. |
+
+> [!NOTE]
+> Use **HTTP API**, no REST API. Son dos productos distintos de API Gateway con comandos distintos: todos los comandos de este laboratorio y del tutorial (`aws apigatewayv2 ...`) corresponden a HTTP API. Si crea una REST API (`aws apigateway ...` o la opción "REST API" en la consola), esos comandos no le van a funcionar.
 
 ### 4.5 Verificación rápida
 
 > [!WARNING]
-> Las tareas de Fargate creadas con `assignPublicIp=ENABLED` reciben una IP publica nueva cada vez que la tarea se reinicia (por ejemplo, si falla un healthcheck, se actualiza la task definition o se hace un despliegue). Si en algun momento sus endpoints dejan de responder, revise primero si la IP publica de la tarea cambio (`aws ecs describe-tasks` + `aws ec2 describe-network-interfaces`, ver [tutorial de ECS](../tutoriales/crear_instancia_ecs.md#15-cómo-obtener-la-ip-pública-de-la-tarea)) y actualice la integracion de API Gateway (`aws apigatewayv2 update-integration --integration-uri http://<NUEVA_IP>:<PUERTO>/...`) con la IP nueva.
+> Las tareas de Fargate reciben una IP publica **y** una IP privada nuevas cada vez que la tarea se reinicia (por ejemplo, si el contenedor se cae, se actualiza la task definition o se hace un despliegue). En este laboratorio hay dos lugares que guardan IPs de tareas:
+>
+> - **API Gateway**: las integraciones apuntan a la IP **publica** de cada tarea.
+> - **Inventario y ventas**: `LOGISTICA_BASE_URL` apunta a la IP **privada** de la tarea de logística.
+>
+> Qué actualizar según la tarea que se reinició:
+>
+> | Tarea reiniciada | Qué debe actualizar |
+> | --- | --- |
+> | Logística | 1. Las dos integraciones de logística en API Gateway (negocio y health) con la nueva IP publica.<br>2. `LOGISTICA_BASE_URL` en inventario y ventas: registre una nueva revisión de cada task definition con la nueva IP privada y actualice cada servicio (`aws ecs update-service --cluster Cheapest-cluster --service <SERVICIO> --task-definition <FAMILIA_TASK_DEFINITION>`).<br>3. El paso 2 reemplaza las tareas de inventario y ventas, así que esas tareas también quedan con IPs nuevas: actualice sus integraciones en API Gateway. |
+> | Inventario o ventas | Solo las integraciones de ese servicio en API Gateway. |
+>
+> Para obtener las IPs nuevas use `aws ecs describe-tasks` + `aws ec2 describe-network-interfaces` (ver [tutorial de ECS](../tutoriales/crear_instancia_ecs.md#15-cómo-obtener-la-ip-pública-de-la-tarea)). Para ubicar y actualizar las integraciones:
+>
+> ```bash
+> aws apigatewayv2 get-integrations --api-id <API_ID> --query "Items[].{Id:IntegrationId,Uri:IntegrationUri}" --output table
+> aws apigatewayv2 update-integration --api-id <API_ID> --integration-id <INTEGRATION_ID> --integration-uri "http://<NUEVA_IP_PUBLICA>:<PUERTO>/<PREFIJO_SERVICIO>/{proxy}"
+> aws apigatewayv2 update-integration --api-id <API_ID> --integration-id <INTEGRATION_ID_HEALTH> --integration-uri "http://<NUEVA_IP_PUBLICA>:<PUERTO>/health"
+> ```
+>
+> **Síntoma típico de `LOGISTICA_BASE_URL` desactualizada:** `/inventory/health` y `/ventas/health` responden bien, pero las operaciones de inventario o ventas que validan productos tardan unos 3 segundos (`LOGISTICA_TIMEOUT_MS`) y devuelven `503` con el mensaje `Logistica service is unavailable`.
+>
+> En un sistema real no se usan IPs de tareas: los servicios se ubican por un nombre estable (un balanceador interno, ECS Service Connect o AWS Cloud Map). En este laboratorio se usan IPs directas por simplicidad, y esta fragilidad es un costo de esa decisión.
 
 Desde su computador, pruebe primero el health de cada servicio (no existe un `/health` global unico, cada microservicio expone el suyo bajo su propio prefijo de ruta):
 
@@ -295,12 +370,13 @@ Para este laboratorio, reporte:
 
 - Punto de inflexion de GET bajo carga simultanea.
 - Punto de inflexion de POST bajo carga simultanea.
-- Punto de inflexion global del sistema (cuando el comportamiento deja de escalar de forma eficiente).
+- Punto de inflexion global del sistema (cuando el comportamiento deja de escalar de forma eficiente, según el criterio que defina en la Pregunta 5).
 
 > [!IMPORTANT]
 > **Pregunta 5:**
-> ¿Qué significa exactamente "dejar de escalar eficientemente" en términos medibles para este laboratorio?
-> Defina un criterio y represéntelo en una gráfica con sus resultados y explique en qué punto la curva evidencia que el sistema deja de escalar eficientemente en Cheapest.
+> A diferencia de la Pregunta 1 (eficiencia al agregar **recursos**, con datos del Lab 3), esta pregunta se responde con los resultados **de este laboratorio**: la infraestructura se mantiene fija y lo que aumenta es la **carga ofrecida** (threads de la matriz de la sección 5.2).
+> ¿Qué significa exactamente "dejar de escalar eficientemente" en términos medibles para la ejecución simultánea GET + POST?
+> Defina un criterio que combine throughput, p99 y error % frente a la carga ofrecida, represéntelo en una gráfica con sus resultados y explique en qué punto la curva evidencia que el sistema deja de escalar eficientemente y qué significa ese punto para el negocio de Cheapest (pedidos atendidos vs. pedidos demorados o rechazados).
 
 ## 7. Entregables
 
@@ -327,6 +403,7 @@ Cada `Test` debe tener exactamente el número de filas indicado por "Repeticione
 
 Adjunte capturas de:
 
+- Repositorios ECR con la imagen `1.0.0` de cada servicio (sección 4.1).
 - Configuracion de API Gateway y rutas usadas.
 - Servicios ECS y cantidad de tareas por servicio.
 - RDS en estado disponible.
@@ -355,6 +432,10 @@ Incluya un analisis de 1 a 2 paginas que responda:
 7. Dada la evidencia recolectada, que estrategia de escalamiento en ECS recomiendan (horizontal, vertical o mixta) y por que.
 8. Que cambios de arquitectura proponen para reducir el acoplamiento con RDS y que trade-offs introducen. Investigue que tácticas (diferentes de una base de datos por servicio) puede usar y justifique basado en el contexto de Cheapest
 9. Si tuvieran que priorizar una inversion de infraestructura para el siguiente pico de 5000 req/min, cual componente reforzarían primero y como justifican la decision con las medidas de respuesta.
+
+### 7.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado. Cada respuesta debe incluir los elementos que pide la pregunta (tablas, gráficas o diagramas) y debe ir más allá de lo superficial.
 
 
 ## Nota final (créditos AWS)

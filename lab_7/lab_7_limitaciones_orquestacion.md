@@ -378,6 +378,11 @@ Incluya un análisis de 1 a 2 páginas que responda:
 6. Compare este laboratorio con el Lab 5: ¿qué es más peligroso para Cheapest — un fallo explícito de un servicio (que dispara alertas inmediatas) o una degradación silenciosa por saturación de fan-out (que puede pasar desapercibida)? Justifique.
 7. Si el equipo de Cheapest decidiera implementar las tácticas del Lab 5 (circuit breaker + graceful degradation) sobre el endpoint de este laboratorio, ¿resolvería el problema de compounding de latencia? ¿Qué problema sí resolvería y cuál quedaría abierto?
 
+### 7.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado. Cada respuesta debe incluir los elementos que pide la pregunta (cálculos, tablas o gráficas) y debe ir más allá de lo superficial.
+
+
 ---
 
 ## Nota final (créditos AWS)

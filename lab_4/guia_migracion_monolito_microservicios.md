@@ -187,7 +187,8 @@ export class DatabaseModule {
               type: 'postgres',
               // ...config desde env vars
               entities,  // solo las entidades del servicio
-              synchronize: process.env.DB_SYNCHRONIZE === 'true',
+              // crea/actualiza las tablas al arrancar; true si DB_SYNCHRONIZE no está definida
+              synchronize: isTrue(process.env.DB_SYNCHRONIZE, true),
             });
             return dataSource.initialize();
           },
@@ -243,7 +244,7 @@ export class LogisticaProductosClient {
       );
       return response.ok;
     } catch {
-      throw new ServiceUnavailableException('Servicio de logística no disponible');
+      throw new ServiceUnavailableException('Logistica service is unavailable');
     } finally {
       clearTimeout(timeout);
     }
@@ -361,13 +362,13 @@ services:
 |----------|----------|----------------|-------------|
 | `DB_HOST` | ✓ | ✓ | Host de PostgreSQL |
 | `DB_PORT` | ✓ | ✓ | Puerto de PostgreSQL |
-| `DB_USERNAME` | ✓ | ✓ | Usuario de BD |
+| `DB_USERNAME` | ✓ | ✓ | Usuario de BD (en microservicios el código también acepta `DB_USER` como alias; use `DB_USERNAME`) |
 | `DB_PASSWORD` | ✓ | ✓ | Contraseña de BD |
 | `DB_NAME` | ✓ | ✓ | Nombre de la base de datos |
 | `NODE_ENV` | ✓ | ✓ | Entorno de ejecución |
 | `LOGISTICA_BASE_URL` | — | ✓ | URL del servicio de logística |
 | `LOGISTICA_TIMEOUT_MS` | — | ✓ | Timeout para llamadas HTTP (default: 3000ms) |
-| `DB_SYNCHRONIZE` | — | ✓ | Controla sincronización de esquema |
+| `DB_SYNCHRONIZE` | — | ✓ | Si es `true`, cada servicio crea/actualiza las tablas de sus entidades al arrancar (`true` por defecto si no se define). No carga datos: para eso está `npm run db:seed` |
 | `DB_CONNECT_TIMEOUT_MS` | — | ✓ | Timeout de conexión a BD |
 
 ---

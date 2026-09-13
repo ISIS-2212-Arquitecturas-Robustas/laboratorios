@@ -263,7 +263,9 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 
 ### 5.3 Tabla de políticas de acceso
 
-| Endpoint | Método | Protección | Rol requerido | 200 | 401 | 403 |
+Las rutas están escritas como se invocan **a través del API Gateway** (`<ApiGatewayUrl>` + ruta). El gateway traduce el prefijo de cada servicio a la ruta interna del contenedor: `/logistica/{proxy+}` → `/logistics/{proxy}`, `/inventario/{proxy+}` → `/inventory/{proxy}` y `/ventas/{proxy+}` → `/ventas/{proxy}`. Si prueba directo contra el ALB o el contenedor, use la ruta interna (por ejemplo `/logistics/pedidos`).
+
+| Endpoint (vía API Gateway) | Método | Protección | Rol requerido | 200 | 401 | 403 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `/logistica/health` | GET | Público | — | ✓ | — | — |
 | `/inventario/health` | GET | Público | — | ✓ | — | — |
@@ -271,8 +273,8 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 | `/ventas/ventas` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
 | `/ventas/ventas` | GET | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
 | `/ventas/ventas/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
-| `/logistics/pedidos` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
-| `/logistics/pedidos/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
+| `/logistica/pedidos` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
+| `/logistica/pedidos/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
 
 ### 5.4 Instrucciones de despliegue
 
@@ -332,12 +334,14 @@ Reporte:
 ## 8. Entregables
 
 1. **Tabla de políticas** (mínimo 6 filas): endpoint, método, protegido/público, rol requerido, código esperado (200/401/403).
-2. **Evidencia del incidente**:
+2. **Verificación de JWT + RBAC**: para cada fila de su tabla de políticas, la request real con el código obtenido (200 con el rol correcto, 401 sin token o con token inválido, 403 con un rol insuficiente) y los logs de CloudWatch del `AuthLoggerMiddleware` registrando esos 401/403 (ASR-2).
+3. **Evidencia del incidente**:
+   - Login del usuario de prueba (obtención de `ACCESS_TOKEN` y `REFRESH_TOKEN`).
    - Requests exitosas usando refresh token (antes de revocar).
    - Fallo del refresh tras revocar (error devuelto por Cognito).
    - Request fallida después de expirar el access token (401).
-3. **Cálculo** de ventana máxima de exposición y justificación del TTL.
-4. Respuestas a las preguntas 1–4.
+4. **Cálculo** de ventana máxima de exposición y justificación del TTL.
+5. **Respuestas a las preguntas del laboratorio**: incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 4**, planteadas a lo largo del enunciado. Deben ir más allá de lo superficial.
 
 > Nota: al terminar, elimine el stack para evitar costos:
 >

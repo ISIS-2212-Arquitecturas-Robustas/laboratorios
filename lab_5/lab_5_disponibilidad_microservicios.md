@@ -121,7 +121,7 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 | Proxy sidecar (Envoy)                   | Permite implementar retry y circuit breaker en la capa de red, sin tocar el código de negocio.<br>El sidecar intercepta el tráfico saliente de Ventas hacia Inventario y aplica las políticas configuradas en su archivo YAML.<br>Introduce un salto de red adicional y requiere que los parámetros del sidecar sean coherentes con los timeouts de la aplicación. |
 
 > [!IMPORTANT]
-> **Pregunta 3:**
+> **Pregunta 3 (parte A — propuesta de parámetros):**
 > Retry, circuit breaker y rate limiting pueden entrar en conflicto si se calibran mal.
 > Proponga un conjunto coherente de parámetros iniciales para Cheapest (timeouts, retries, umbral de apertura, reset timeout, rate y burst) y justifique cómo evitaría inestabilidad sistémica.
 
@@ -367,7 +367,7 @@ Realice los siguientes pasos:
 6. (Opcional, recomendado) Pídale a un asistente de IA que le ayude a interpretar algún recurso o configuración que no le quede clara — por ejemplo, pegue un fragmento del template o una captura de la consola y pregunte qué hace ese recurso específico y cómo se relaciona con los demás.
 
 > [!IMPORTANT]
-> **Pregunta 0 (post-despliegue):**
+> **Actividad post-despliegue (evidencia del despliegue, ver sección 10.2):**
 > Elija dos recursos creados por el stack que no haya usado directamente en labs anteriores (por ejemplo, un Target Group, un rol IAM, o una ruta del API Gateway) y explique, en sus propias palabras, qué hacen y por qué son necesarios para que el laboratorio funcione. Acompañe su respuesta con una captura de pantalla de la consola de AWS por cada recurso elegido.
 
 ## 5. Configuración del sidecar y ajuste de código
@@ -434,7 +434,7 @@ Los seis puntos a completar son:
 - `base_ejection_time` < `RECOVERY_TIME_MS` de Inventario, para que el estado HALF-OPEN pueda detectar la recuperación automática del servicio.
 
 > [!IMPORTANT]
-> **Pregunta 3:**
+> **Pregunta 3 (parte B — valores implementados; continúa la parte A de la sección 2.3):**
 > Documente en su entregable los valores que eligió para cada `TODO`, la justificación cuantitativa de cada uno y cómo garantiza que no violan ASR-2.
 
 **Verificar la configuración de Envoy localmente antes de subir a ECR:**
@@ -896,6 +896,7 @@ Compare esta ronda con la Ronda 4 bajo las mismas condiciones de carga para aisl
 Adjunte capturas de:
 
 - Stack CloudFormation en estado `CREATE_COMPLETE`.
+- Actividad post-despliegue (sección 4.7): los dos recursos del stack que eligió, con una captura de la consola por cada uno y su explicación.
 - Task Definition de Ventas mostrando los **dos containers**: `ventas` y `ventas-sidecar`.
 - Servicios ECS de los tres microservicios en estado RUNNING.
 - API Gateway con throttling configurado devolviendo HTTP 429.
@@ -928,6 +929,11 @@ Incluya un análisis de 1 a 2 páginas que responda:
 8. ¿Qué ventajas concretas tuvo desplegar con CloudFormation frente a la configuración manual del Lab 4? ¿En qué escenarios del negocio de Cheapest (ej. expansión a México o Brasil, un incidente que requiera reconstruir el ambiente) sería esta capacidad crítica?
 9. ¿Por qué at-least-once + idempotencia no equivale a exactly-once distribuido? ¿Qué requeriría una garantía de exactly-once real entre dos servicios con bases de datos independientes?
 10. Con base en los datos de la tabla 5a, ¿el patrón Outbox aumenta la latencia de `POST /ventas`? Argumente en qué condiciones ese overhead sería aceptable para Cheapest y en cuáles representaría un riesgo para los ASRs. Considere: tamaño del volumen transaccional, latencia de la base de datos RDS, y si el write adicional en `outbox_http_calls` ocurre dentro o fuera de la transacción principal.
+
+### 10.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado. Cada respuesta debe incluir los elementos que pide la pregunta (tablas, gráficas o diagramas) y debe ir más allá de lo superficial. La Pregunta 3 tiene dos partes (A y B) que se responden y califican juntas.
+
 
 ## Nota final (créditos AWS)
 

@@ -106,8 +106,9 @@ Cree un archivo llamado `task-definition.json` con el siguiente contenido:
         { "name": "DB_HOST", "value": "Cheapest-rds.xxxxx.us-east-1.rds.amazonaws.com" },
         { "name": "DB_PORT", "value": "5432" },
         { "name": "DB_NAME", "value": "Cheapest" },
-        { "name": "DB_USER", "value": "postgres" },
-        { "name": "DB_PASSWORD", "value": "postgres" }
+        { "name": "DB_USERNAME", "value": "postgres" },
+        { "name": "DB_PASSWORD", "value": "postgres" },
+        { "name": "DB_SYNCHRONIZE", "value": "true" }
       ],
       "portMappings": [
         {

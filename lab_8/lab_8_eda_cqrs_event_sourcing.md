@@ -682,11 +682,7 @@ Adjunte capturas de:
 - ECS → Inventario con `desired count = 0` durante la prueba de resiliencia (Pregunta 4).
 - ECS → Ventas respondiendo 201 a `POST /ventas/ventas` mientras Inventario está en `desired count = 0`.
 
-### 8.4 Respuestas a las preguntas
-
-Incluya las respuestas a las Preguntas 1–5 en el informe.
-
-### 8.5 Análisis (2–3 páginas)
+### 8.4 Análisis (2–3 páginas)
 
 Responda:
 
@@ -694,7 +690,11 @@ Responda:
 2. ¿El endpoint EDA satisface ASR-3 con Inventario en `desired count = 0`? ¿El endpoint síncrono lo satisfacía con Inventario en `desired count = 1`? Compare ambos resultados.
 3. ¿Qué sacrificó Cheapest al adoptar EDA para el resumen? Nombre dos escenarios de negocio concretos donde la **consistencia eventual** sería un problema real para Cheapest.
 4. ¿En qué punto el overhead operativo de EDA (EventBridge + SQS + DynamoDB + Event Sourcing) deja de valer la pena? ¿Cuándo no recomendaría este patrón? Considere también el riesgo de at-most-once delivery: ¿qué nivel de pérdida de eventos sería tolerable para Cheapest?
-5. Responda la Pregunta 5 (escenario de fallo). ¿Qué limitación de EDA revela ese escenario y cómo se mitigaría en producción?
+5. Con base en su respuesta a la Pregunta 5 (escenario de fallo), ¿qué limitación de EDA revela ese escenario y cómo se mitigaría en producción?
+
+### 8.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado (incluidas todas las sub-preguntas numeradas). Deben ir más allá de lo superficial.
 
 ---
 

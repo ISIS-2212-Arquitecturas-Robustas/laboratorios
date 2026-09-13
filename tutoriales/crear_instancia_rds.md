@@ -123,7 +123,7 @@ aws rds describe-db-instances --db-instance-identifier Cheapest-rds --query "DBI
 aws ec2 authorize-security-group-ingress  --group-id <SG_RDS_ID>  --protocol tcp --port 5432  --cidr <SU_IP_PUBLICA>/32
 
 # 5. Corra el seed apuntando explicitamente a RDS
-DB_HOST=<DB_HOST> DB_PORT=5432 DB_USER=postgres DB_PASSWORD=<PASSWORD_SEGURA> DB_NAME=Cheapest npm run db:seed
+DB_HOST=<DB_HOST> DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=<PASSWORD_SEGURA> DB_NAME=Cheapest npm run db:seed
 ```
 
 Al terminar, **revierta ambos cambios** para no dejar la base expuesta:

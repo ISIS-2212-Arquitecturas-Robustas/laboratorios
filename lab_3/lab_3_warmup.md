@@ -52,11 +52,20 @@ Cree una instancia EC2 con los parámetros:
 | Nombre            | `Cheapest-db`                |
 | AMI               | Ubuntu Server 24.04 LTS    |
 | Tipo de instancia | `t2.medium`                  |
+| Key pair          | `vockey` (o una llave propia, ver nota) |
 | IP pública        | Habilitar                  |
 | Security Groups   | `Cheapest-ssh` + `Cheapest-db` |
 | Almacenamiento    | 8 GB                       |
 
-**Conexión por SSH:**
+> [!IMPORTANT]
+> **Key pair (llave SSH):** el archivo `.pem` que se usa en `ssh -i <archivo>.pem ...` es la llave privada del **key pair** que usted seleccione al crear la instancia. El key pair **no se puede cambiar** después de lanzar la instancia.
+>
+> - **`vockey` (recomendada):** key pair que AWS Academy ya creó en su cuenta. Descargue la llave desde la página del Learner Lab en **AWS Details → SSH key → Download PEM** (archivo `labsuser.pem`; en Windows con PuTTY use **Download PPK**).
+> - **Llave propia:** créela antes de lanzar la instancia (**EC2 → Key Pairs → Create key pair**, formato `.pem`, o con el **Paso 2** del [Tutorial para crear instancias de EC2](../tutoriales/crear_instancia_ec2.md)) y guarde el archivo descargado.
+>
+> En Linux/macOS ejecute `chmod 400 labsuser.pem` antes de usarla. Use el mismo key pair después para las instancias de app.
+
+**Conexión por SSH** (o desde la consola con **Connect → EC2 Instance Connect**):
 
 ```bash
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
@@ -65,14 +74,15 @@ ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
 **Ejecutar la base de datos (`Cheapest-db`):**
 
 1. Conéctese por SSH a `Cheapest-db`.
-2. Verifique que Docker está instalado y corriendo ([Tutorial para instalar Docker](../tutoriales/instalar_docker_en_una_maquina_EC2.md)):
+2. Instale Docker. La AMI **Ubuntu Server 24.04 LTS no trae Docker preinstalado**: siga los pasos 1 a 7 del [Tutorial para instalar Docker](../tutoriales/instalar_docker_en_una_maquina_EC2.md).
+3. Verifique que Docker quedó instalado y el servicio está corriendo (debe mostrar `active (running)`):
 
 ```bash
 sudo docker --version
 sudo service docker status
 ```
 
-3. Levante PostgreSQL con Docker (si no existe el contenedor, créelo; si existe, inícielo):
+4. Levante PostgreSQL con Docker (si no existe el contenedor, créelo; si existe, inícielo):
 
 ```bash
 # Opción A: crear y levantar (primera vez)
@@ -82,7 +92,7 @@ sudo docker run --name cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_D
 sudo docker start cheapest-db
 ```
 
-4. Verifique que está arriba:
+5. Verifique que está arriba:
 
 ```bash
 sudo docker ps
