@@ -46,7 +46,7 @@ REPO_NAME=cheapest-inventario
 IMAGE_TAG=0.0.1
 ```
 
-Cambie el valor de ACCOUNT_ID por sus valores reales.
+Recuerde cambiar el valor de ACCOUNT_ID por sus valores reales.
 
 ## 5. Paso 1: crear el repositorio en Amazon ECR
 
@@ -163,7 +163,7 @@ AWS establece que la task definition especifica la imagen que ECS debe ejecutar.
 
 ## 12. Permisos necesarios en ECS
 
-Si luego ECS va a descargar la imagen desde ECR, la tarea o el agente necesita permisos de ejecución. AWS documenta que el **task execution role** se usa para que ECS pueda hacer llamadas a AWS en nombre de la tarea, incluyendo el pull desde ECR.
+Si luego ECS va a descargar la imagen desde ECR, la tarea necesita permisos de ejecución. AWS documenta que el **task execution role** se usa para que ECS pueda hacer llamadas a AWS en nombre de la tarea, incluyendo el pull desde ECR.
 
 En la práctica, suele usarse la política administrada:
 
