@@ -29,15 +29,15 @@ El flujo básico es:
 
 Para facilitar el tutorial vamos a seguir usando Cloudshell. Este servicio tiene integrado docker por lo que desde acá vamos a generar las imágenes.
 
-En cloudshell debe clonar el repositorio de Cheapest-api. La implementación basada en microservicios se encuentra en la rama `microservicios`
+En cloudshell debe clonar el repositorio de Cheapest-api. La implementación basada en microservicios se encuentra en la rama `microservicios`.
 
-AWS documenta que el cliente Docker debe autenticarse con ECR usando un token temporal generado con AWS CLI. Ese token tiene validez limitada (revise la [Documentación AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html?utm_source=chatgpt.com "push a Docker image to an Amazon ECR repository") para más detalles)
+AWS documenta que el cliente Docker debe autenticarse con ECR usando un token temporal generado con AWS CLI. Ese token tiene validez limitada (revise la [Documentación AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html?utm_source=chatgpt.com "push a Docker image to an Amazon ECR repository") para más detalles).
 
 ## 4. Escenario del laboratorio
 
-En este ejemplo se subirá la imagen del servicio llamado `inventario-service` en el repositorio `cheapest-inventario` con el tag `0.0.1`
-
-Se asumirán los siguientes valores de configuración:
+En esta guía se explicarán los pasos con la imagen del servicio llamado `inventario-service` en el repositorio `cheapest-inventario` con el tag `0.0.1`. 
+Luego, debe extrapolar los pasos a los otros servicios que se usan en el laboratorio.
+Para `inventario-service`, se asumirán los siguientes valores de configuración:
 
 ```bash
 REGION=us-east-1
@@ -46,7 +46,7 @@ REPO_NAME=cheapest-inventario
 IMAGE_TAG=0.0.1
 ```
 
-Recuerde cambiar estos valores por sus valores reales
+Cambie el valor de ACCOUNT_ID por sus valores reales.
 
 ## 5. Paso 1: crear el repositorio en Amazon ECR
 
@@ -58,11 +58,11 @@ aws ecr create-repository --repository-name cheapest-inventario --region us-east
 
 Este comando crea un repositorio privado llamado `cheapest-inventario` dentro de ECR en la región indicada. Ese repositorio será el destino donde se almacenará la imagen Docker.
 
-Usted verá el URI del repositorio, este se ve de la siguiente forma `449642781982.dkr.ecr.us-east-1.amazonaws.com`
+Usted verá el URI del repositorio, este se ve de la siguiente forma `123456789012.dkr.ecr.us-east-1.amazonaws.com`
 
 Donde:
 
-- `449642781982` es el account id
+- `123456789012` es el account id
 - `us-east-1` es la región
 
 ## 6. Paso 2: autenticar Docker contra ECR
