@@ -31,7 +31,7 @@ Para facilitar el tutorial vamos a seguir usando Cloudshell. Este servicio tiene
 
 En cloudshell debe clonar el repositorio de Cheapest-api. La implementación basada en microservicios se encuentra en la rama `microservicios`
 
-AWS documenta que el cliente Docker debe autenticarse con ECR usando un token temporal generado con AWS CLI. Ese token tiene validez limitada. ([Documentación AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html?utm_source=chatgpt.com "push a Docker image to an Amazon ECR repository"))
+AWS documenta que el cliente Docker debe autenticarse con ECR usando un token temporal generado con AWS CLI. Ese token tiene validez limitada (revise la [Documentación AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html?utm_source=chatgpt.com "push a Docker image to an Amazon ECR repository") para más detalles)
 
 ## 4. Escenario del laboratorio
 
