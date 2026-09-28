@@ -2,7 +2,7 @@
 
 ## Objetivos
 
-- Crear una instancia de Amazon RDS con PostgreSQL para el laboratorio.
+- Crear una instancia de Amazon RDS con PostgreSQL para el laboratorio ya sea a través de la consola o de CloudShell.
 - Configurar red y seguridad para permitir acceso a la base de datos.
 
 ## Marco conceptual
@@ -126,7 +126,7 @@ aws ec2 authorize-security-group-ingress  --group-id <SG_RDS_ID>  --protocol tcp
 DB_HOST=<DB_HOST> DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=<PASSWORD_SEGURA> DB_NAME=Cheapest npm run db:seed
 ```
 
-Al terminar, **revierta ambos cambios** para no dejar la base expuesta:
+Al terminar, **revierta los cambios** para no dejar la base expuesta:
 
 ```bash
 aws rds modify-db-instance --db-instance-identifier Cheapest-rds --no-publicly-accessible --apply-immediately
