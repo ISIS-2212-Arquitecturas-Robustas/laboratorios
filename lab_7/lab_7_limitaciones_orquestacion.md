@@ -146,9 +146,6 @@ Aplicar la misma matriz de carga sobre `GET /ventas/resumen-operativo`. Comparar
 **Fase 3 — Servicio dependiente degradado**
 Reducir el `desired count` de Inventario a 1 tarea en ECS (sin apagarlo, sin inyectar fallos). Observar cómo esta reducción de capacidad impacta el error % del endpoint orquestado. Verificar si ASR-3 se cumple.
 
-> [!NOTE]
-> **Warm-up en clase:** las Preguntas 2 y 3 (esta y la de la sección 2.3) no dependen de datos medidos y están disponibles como una sesión práctica de 40 minutos para trabajar en clase antes de desplegar nada: [`lab_7_warmup.md`](lab_7_warmup.md). Si su profesor ya realizó esta sesión en clase, esas dos preguntas ya están resueltas.
-
 > [!IMPORTANT]
 > **Pregunta 2:**
 > ¿Por qué reducir el `desired count` de Inventario a 1 tarea (sin apagarlo) es un experimento más representativo de una situación real que apagar el servicio por completo?
@@ -268,12 +265,12 @@ Tutoriales de apoyo del Lab 4:
 
 Siga los pasos 4.2, 4.3 y 4.4 del Lab 4 sin modificaciones. **Use los prefijos de ruta reales del backend** (`/logistics/*`, `/inventory/*`, `/ventas/*`, ver sección 4.4 y 4.5 del Lab 4)
 
-La única diferencia en ECS es que la Task Definition de **Ventas** requiere variables de entorno adicionales para los clientes HTTP del nuevo endpoint. Recuerde que, igual que en el Lab 4, no hay ALB: estas URLs apuntan directo a la IP pública de la tarea ECS correspondiente (y deben actualizarse si esa tarea se reinicia, ver advertencia de IP volátil en la sección 4.5 del Lab 4):
+La única diferencia en ECS es que la Task Definition de **Ventas** requiere variables de entorno adicionales para los clientes HTTP del nuevo endpoint. Recuerde que, igual que en el Lab 4, los servicios van detrás del Application Load Balancer (sección 4.3.1 del Lab 4): estas URLs apuntan al DNS del ALB y el puerto del listener del servicio correspondiente, no a la IP de una tarea:
 
 | Variable | Valor | Descripción |
 | --- | --- | --- |
-| `LOGISTICA_BASE_URL` | `http://<IP_TAREA_LOGISTICA>:3001` | Para que Ventas llame a Logistica (nuevo cliente `LogisticaCatalogosClient`) |
-| `INVENTARIO_BASE_URL` | `http://<IP_TAREA_INVENTARIO>:3002` | Para que Ventas llame a Inventario |
+| `LOGISTICA_BASE_URL` | `http://<ALB_DNS>:3001` | Para que Ventas llame a Logistica (nuevo cliente `LogisticaCatalogosClient`) |
+| `INVENTARIO_BASE_URL` | `http://<ALB_DNS>:3002` | Para que Ventas llame a Inventario |
 | `INVENTARIO_TIMEOUT_MS` | `8000` | Timeout de 8 s por llamada a Inventario |
 | `LOGISTICA_TIMEOUT_MS` | `8000` | Timeout de 8 s por llamada a Logística (sobreescribe el default de 3 s) |
 

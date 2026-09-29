@@ -147,11 +147,13 @@ aws ecr describe-images --repository-name cheapest-inventario --region us-east-1
 
 Este comando lista las imágenes que existen dentro del repositorio y permite confirmar que el push fue exitoso.
 
-TODO Agregar como se ve en la UI
+En la consola de AWS, entre al repositorio en Amazon ECR: la sección **Images** lista la imagen con el tag que acaba de subir (por ejemplo `0.0.1`), su tamaño y su *digest*.
+
+![Imágenes de un repositorio en la consola de ECR](./recursos/ecr_image.png)
 
 ## 11. Usar la imagen en ECS
 
-A partir de este momento usted podrá seguir el [tutorial para levantar instancias ECS](./crear_instancia_ecs)
+A partir de este momento usted podrá seguir el [tutorial para levantar instancias ECS](./crear_instancia_ecs.md)
 
 Cuando vaya a crear una task definition de ECS, en el campo `image` del contenedor debe poner la URI exacta de la imagen publicada:
 
@@ -163,12 +165,46 @@ AWS establece que la task definition especifica la imagen que ECS debe ejecutar.
 
 ## 12. Permisos necesarios en ECS
 
-Si luego ECS va a descargar la imagen desde ECR, la tarea necesita permisos de ejecución. AWS documenta que el **task execution role** se usa para que ECS pueda hacer llamadas a AWS en nombre de la tarea, incluyendo el pull desde ECR.
+Antes de crear las tareas en ECS conviene entender un concepto que AWS usa en todos sus servicios: los **permisos**. En este laboratorio no tiene que configurar nada, pero cuando algo falla por permisos el error puede ser confuso si no sabe cómo funcionan.
 
-En la práctica, suele usarse la política administrada:
+### ¿Por qué AWS necesita permisos?
 
-```text
-AmazonECSTaskExecutionRolePolicy
+En AWS, ningún servicio puede hacer nada sobre otro servicio a menos que alguien le haya dado permiso explícito. Por defecto todo está prohibido. Por ejemplo, el hecho de que ECS y ECR estén en su misma cuenta no significa que ECS pueda leer las imágenes de ECR: hay que autorizarlo. Esto protege su cuenta: si un componente se compromete, solo puede hacer lo que se le permitió.
+
+El servicio de AWS que administra estos permisos se llama **IAM** (*Identity and Access Management*, "gestión de identidades y accesos"). Usted ya lo ha usado sin saberlo: cuando corre comandos con la AWS CLI, sus credenciales son una identidad de IAM y lo que puede hacer depende de los permisos que esa identidad tenga.
+
+### Política y rol
+
+- **Política (*policy*):** una lista de acciones permitidas, por ejemplo "descargar imágenes de ECR" o "escribir logs". Es solo la lista; por sí sola no le da permisos a nadie.
+- **Rol (*role*):** una identidad a la que se le pueden adjuntar políticas. Los permisos de un rol son los de todas las políticas que tenga adjuntas. Un servicio de AWS (como ECS) puede "asumir" un rol, es decir, actuar con los permisos de ese rol.
+
+Una analogía: la política es la lista de puertas que se pueden abrir, y el rol es la credencial que se le entrega a alguien para que abra esas puertas.
+
+### ¿Qué permisos necesita una tarea de ECS?
+
+Cuando ECS lanza una tarea, antes de que su contenedor arranque debe hacer dos cosas por su cuenta:
+
+1. **Descargar (*pull*) la imagen** del repositorio de ECR donde usted la subió.
+2. **Enviar los logs** del contenedor a CloudWatch, para que usted pueda verlos.
+
+Ninguna de las dos las hace su contenedor ni su usuario: las hace ECS, y para eso necesita permisos. El rol que se le da a ECS para esto se llama **task execution role** (rol de ejecución de la tarea). Una política de AWS ya viene hecha con justo esos permisos: `AmazonECSTaskExecutionRolePolicy`.
+
+### ¿Qué rol usa este laboratorio?
+
+En su cuenta del laboratorio ya existe un rol llamado **`LabRole`** que tiene los permisos necesarios (entre ellos los de esa política). **Todos deben usar `LabRole`**: no hay que crear ningún rol ni adjuntar ninguna política.
+
+Solo debe indicarle a ECS que use ese rol. Eso se hace en el archivo `task-definition.json` (paso 2 del [tutorial para levantar instancias ECS](./crear_instancia_ecs.md)), en el campo `executionRoleArn`, que lleva la dirección (ARN) del rol:
+
+```json
+"executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/LabRole"
 ```
 
-Esa política incluye los permisos básicos requeridos para descargar imágenes y enviar logs, según la documentación de AWS.
+`<ACCOUNT_ID>` es el número de 12 dígitos de su cuenta. Si no lo recuerda, obtenga el ARN completo del rol con:
+
+```bash
+aws iam get-role --role-name LabRole --query "Role.Arn" --output text
+```
+
+### ¿Cómo me doy cuenta de que falta el rol o los permisos?
+
+Si `executionRoleArn` no está, o el rol no puede descargar la imagen, la tarea no llega a `RUNNING`: se queda en `PENDING` o pasa a `STOPPED`. Para ver la causa, describa la tarea (paso 8 del tutorial de ECS) y mire el campo `stoppedReason`. Un mensaje del tipo `CannotPullContainerError` o `pull access denied` indica que ECS no pudo descargar la imagen, y lo primero que debe revisar es que la task definition tenga el `executionRoleArn` con `LabRole`.

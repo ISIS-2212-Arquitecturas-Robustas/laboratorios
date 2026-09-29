@@ -324,9 +324,6 @@ El template incluye:
 > [!NOTE]
 > Los prefijos de ruta de este laboratorio son **`logistica`/`inventario`**, a diferencia de `logistics`/`inventory usados en el Lab 4. El API Gateway traduce correctamente hacia los prefijos reales del backend (`/logistics/*`, `/inventory/*`); si prueba manualmente con los prefijos en inglés obtendrá 404.
 
-> [!NOTE]
-> **Warm-up en clase:** las secciones 4 a 6 completas (desplegar CloudFormation, calibrar el sidecar Envoy y reproducir el fallo en cascada baseline) están disponibles como una sesión práctica extendida para trabajar en clase: [`lab_5_warmup.md`](lab_5_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Aplicar tácticas de resiliencia**, ya que el baseline y la configuración del sidecar quedaron listos.
-
 ### 4.3 Preparar parámetros
 
 Antes de desplegar, publique las imágenes Docker en ECR y anote los URIs. En este laboratorio hay **cuatro imágenes**: las tres del monorepo más la del sidecar Envoy.

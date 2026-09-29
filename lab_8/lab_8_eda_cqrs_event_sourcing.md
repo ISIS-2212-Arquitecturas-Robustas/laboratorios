@@ -479,9 +479,6 @@ GET <ApiGatewayUrl>/logistics/pedidos/<pedidoId>/historial
 
 ---
 
-> [!NOTE]
-> **Warm-up en clase:** las secciones 5 y 6 (Tareas 1.1-1.3 y 3.1-3.2 — completar y revisar el código de Event Sourcing y CQRS) están disponibles como una sesión práctica de 40 minutos para trabajar en clase, sin necesidad de tener el stack desplegado: [`lab_8_warmup.md`](lab_8_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Experimento comparativo**.
-
 ## 5. Parte 1 - Event Sourcing: historial de Pedidos
 
 ### 5.1 Concepto

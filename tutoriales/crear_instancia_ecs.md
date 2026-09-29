@@ -70,9 +70,9 @@ Recuerde reemplazar esos valores por los de su cuenta.
 ## 6.1 Paso 0: configurar el security group para los puertos de la aplicación
 
 > [!IMPORTANT]
-> En este laboratorio las tareas Fargate reciben IP pública y **no hay balanceador de carga ni VPC Link** — API Gateway y JMeter llegan directo a la IP pública de cada tarea. Si el security group de las tareas no permite trafico entrante en el puerto del contenedor, la tarea queda `RUNNING` en ECS pero **inaccesible desde afuera** (curl directo a la IP:puerto se queda colgado o da timeout), y por lo tanto los healthchecks de API Gateway tambien fallan aunque la integracion este bien configurada.
+> En este laboratorio los servicios van detrás de un **Application Load Balancer** (ver el [tutorial del ALB](./configurar_alb_para_ecs.md)), que es quien recibe el tráfico de API Gateway y de los otros servicios. Si el security group de las tareas no permite tráfico entrante desde el ALB en el puerto del contenedor, la tarea queda `RUNNING` en ECS pero el ALB la marca `unhealthy` y no le envía tráfico, por lo que los healthchecks de API Gateway también fallan aunque la integración esté bien configurada.
 
-Antes de crear el servicio, verifique o cree el security group que usaran las tareas y agregue una regla de entrada por cada puerto de contenedor (3001, 3002, 3003)
+Antes de crear el servicio, verifique o cree el security group que usarán las tareas y agregue una regla de entrada por cada puerto de contenedor (3001, 3002, 3003) **con origen el security group del ALB** (paso 2 del tutorial del ALB).
 
 ## 7. Paso 1: crear el clúster
 
@@ -131,7 +131,7 @@ Esta definición indica que:
 - tendrá **1 GB de memoria**
 - ejecutará la imagen publicada en ECR
 - expondrá el puerto `3000`
-- usará el rol `ecsTaskExecutionRole` para descargar la imagen
+- usará el rol indicado en `executionRoleArn` (`LabRole`) para descargar la imagen de ECR y enviar logs
 
 AWS indica que, para Fargate con `awsvpc`, la task definition debe incluir compatibilidad con Fargate y el modo de red `awsvpc`
 
@@ -172,6 +172,8 @@ Este comando crea un servicio que:
 - asigna IP pública a la tarea
 
 AWS documenta que las tareas Fargate usan red `awsvpc`, por lo que requieren configuración de red al crear el servicio.
+
+Si el servicio va detrás de un ALB (como en el laboratorio), agregue al comando el parámetro `--load-balancers targetGroupArn=<TG_ARN>,containerName=<NOMBRE_CONTENEDOR>,containerPort=<PUERTO>` para que ECS registre las tareas en el target group del ALB (ver el paso 6 del [tutorial del ALB](./configurar_alb_para_ecs.md#6-registrar-el-servicio-de-ecs-en-el-alb)).
 
 ## 11. Paso 5: listar los servicios del clúster
 
@@ -216,15 +218,31 @@ Este comando le permite revisar si la tarea está en estado `RUNNING`, si falló
 
 ## 15. Cómo obtener la IP pública de la tarea
 
-Una forma sencilla de verificar el despliegue es consultar la interfaz de red asociada a la tarea.
+Las tareas de Fargate no tienen una IP fija: cada vez que una tarea arranca (o se reinicia) recibe una IP pública y una IP privada nuevas. Si el servicio está detrás de un ALB no necesita estas IP para configurar API Gateway ni los otros servicios, pero le sirven para **diagnosticar** una tarea concreta. Se obtienen en dos pasos porque la IP no aparece en la descripción de la tarea, sino en su **interfaz de red**.
 
-Primero describa la tarea y ubique el `networkInterfaceId`. Luego consulte esa interfaz con:
+**Qué está pasando.** Con el modo de red `awsvpc`, cada tarea de Fargate recibe su propia interfaz de red (ENI, *Elastic Network Interface*), y es esa interfaz la que tiene las IP. Por eso:
+
+1. `aws ecs describe-tasks` le dice **cuál es la interfaz de red** de la tarea (su `networkInterfaceId`, algo como `eni-0abc...`), además de su estado (`lastStatus`: `RUNNING`, `PENDING`, `STOPPED`).
+2. `aws ec2 describe-network-interfaces` le dice **qué IP tiene esa interfaz**: la IP privada (`PrivateIpAddress`, válida dentro de la VPC) y la IP pública (`Association.PublicIp`, válida desde internet).
+
+**Paso 1: obtener la interfaz de red de la tarea.** Use el ARN de la tarea del paso 7 (`list-tasks`):
 
 ```bash
-aws ec2 describe-network-interfaces --network-interface-ids eni-xxxxxxxx --region us-east-1
+aws ecs describe-tasks --cluster Cheapest-cluster --tasks <TASK_ARN> --region us-east-1 --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text
 ```
 
-Si la tarea recibió IP pública, aquí podrá verla. Eso le permitirá probar el contenedor directamente si su aplicación expone un endpoint HTTP y el security group permite acceso al puerto correspondiente.
+El resultado es el identificador de la interfaz, por ejemplo `eni-0abc123def4567890`.
+
+**Paso 2: obtener las IP de esa interfaz:**
+
+```bash
+aws ec2 describe-network-interfaces --network-interface-ids <ENI_ID> --region us-east-1 --query "NetworkInterfaces[0].{IpPublica:Association.PublicIp,IpPrivada:PrivateIpAddress}" --output table
+```
+
+Anote la IP pública (la usará en las integraciones de API Gateway y para probar con `curl http://<IP_PUBLICA>:<PUERTO>/health`) y la IP privada (la usan otros servicios dentro de la VPC). Si `IpPublica` sale vacía, la tarea no recibió IP pública: revise que el servicio se creó con `assignPublicIp=ENABLED`. Para probar la tarea directamente, el security group también debe permitir el puerto de la aplicación.
+
+> [!NOTE]
+> La IP cambia cada vez que la tarea se reinicia. Con un ALB delante, eso no afecta a API Gateway ni a los demás servicios, porque ECS actualiza el target group automáticamente.
 
 ## 19. Limpiar el servicio ECS creado
 

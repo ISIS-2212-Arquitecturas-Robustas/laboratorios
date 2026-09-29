@@ -342,9 +342,6 @@ Las rutas están escritas como se invocan **a través del API Gateway** (`<ApiGa
 > ¿Por qué es peligroso devolver 403 cuando el token está ausente o es inválido?
 > Relacione su respuesta con enumeración de endpoints y debugging operacional.
 
-> [!NOTE]
-> **Warm-up en clase:** la sección 6 (Parte 1 — Incidente: secuestro de token) está disponible como una sesión práctica para trabajar en clase, asumiendo que el stack de la sección 4 ya está desplegado: [`lab_6_warmup.md`](lab_6_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Contención: revocación rápida**.
-
 ## 6. Parte 1 — Incidente: secuestro de token
 
 Este ejercicio simula que un atacante obtiene un **refresh token** de un usuario.
