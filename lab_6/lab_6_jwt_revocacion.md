@@ -4,8 +4,8 @@
 
 | Etapa | Resumen | Uso de IA generativa |
 | --- | --- | --- |
-| 1. Experimento y ASRs de seguridad | Definición del incidente (token theft) y criterios medibles de contención. | Uso acotado para ordenar hipótesis; los umbrales deben ser propios. |
-| 2. Arquitectura y tácticas | JWT en el borde y en servicios, TTL corto y revocación en Cognito. | Recomendado para contrastar trade-offs (UX vs seguridad) y riesgos residuales. |
+| 1. Experimento y ASRs de seguridad | Hipótesis de diseño, escenarios de calidad vinculados (ASRs), diseño y planeación del experimento sobre el incidente (token theft). | Uso acotado para ordenar hipótesis; los umbrales deben ser propios. |
+| 2. Arquitectura, tácticas y patrones | JWT en el borde y en servicios, TTL corto y revocación en Cognito. | Recomendado para contrastar trade-offs (UX vs seguridad) y riesgos residuales. |
 | 3. Preparación en AWS (IaC) | Despliegue reproducible con CloudFormation: microservicios + API Gateway + Cognito. | Recomendado para asistencia operativa; verifique manualmente en AWS. |
 | 4. Implementación de seguridad (código) | Autenticación JWT y RBAC por rol en microservicios (Nest). | Recomendado para soporte de implementación y revisión; validar manualmente. |
 | 5. Ejecución del incidente y contención | Simular robo de refresh token, revocar y medir ventana de exposición. | No recomendado para redactar conclusiones sin evidencia del experimento. |
@@ -59,7 +59,14 @@ Para refrescar conceptos:
 > ¿Qué puede hacer el atacante con un refresh token válido aunque usted cambie la contraseña del usuario?
 > Responda en términos de “capacidad” y “ventana de tiempo”, no en definiciones.
 
-### 1.3 ASRs
+### 1.3 Hipótesis de diseño
+
+| # | Hipótesis |
+| --- | --- |
+| H1 | **Si** implementamos access tokens de vida corta (2–5 min) junto con la revocación del refresh token (o global sign-out) en Cognito, **entonces** un token secuestrado se contiene y se verifica en menos de 2 minutos desde la detección, y el atacante pierde todo acceso al expirar el access token vigente, **porque** la revocación corta la capacidad de re-emisión y el TTL corto acota el tiempo que sobrevive un access token ya emitido (JWT es *stateless* y no puede invalidarse antes de expirar). |
+| H2 | **Si** validamos el JWT en el borde (API Gateway) y de nuevo en cada microservicio, y aplicamos RBAC por `cognito:groups`, **entonces** el 100% de los accesos indebidos se distingue por tipo de falla (sin token o token inválido → 401; token válido sin el grupo requerido → 403) y queda registrado, **porque** la autenticación (¿quién eres?) y la autorización (¿qué puedes hacer?) se evalúan en capas separadas, y cada capa produce su propio código de respuesta. |
+
+### 1.4 Escenarios de calidad vinculados
 
 | ID    | Descripción                                                                                                                                                                                                                                                                                                            |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -72,6 +79,52 @@ Para refrescar conceptos:
 > Elija el tiempo de vida para access token y justifíquelo.
 > Debe incluir: (1) ventana de exposición (tiempo que un token es válido), (2) impacto en la experiencia de usuario y operación, (3) impacto en costo/latencia, (4) justificación basada en el contexto de negocio de Cheapest.
 
+### 1.5 Diseño del experimento
+
+**¿Cómo se va a validar la hipótesis?** Simulando un incidente realista de secuestro de un refresh token (Parte 1) y aplicando la contención desde Cognito (Parte 2), midiendo los tiempos del incidente. Para H2, se ejecuta cada fila de la tabla de políticas de acceso con el token correcto, sin token, con un token inválido y con un rol insuficiente, y se verifica el código de respuesta y su registro en logs.
+
+**¿Qué componentes se van a diseñar o modificar?**
+
+| Componente | Cambio |
+| --- | --- |
+| Amazon Cognito | User Pool, App Client, grupos (`admin`, `operador`) y TTL del access token (sección 4) |
+| API Gateway (HTTP API) | JWT authorizer en el borde |
+| Librería `libs/shared/auth/` | `JwtAuthGuard` (401), `RolesGuard` (403), `@Public()`, `@Roles(...)` y `AuthLoggerMiddleware` en los microservicios (sección 5) |
+
+**¿Qué métricas se van a medir?**
+
+| Métrica | Hipótesis / ASR | Umbral |
+| --- | --- | --- |
+| Tiempo entre detección, revocación y verificación de contención | H1 / ASR-1 | < 2 min |
+| Ventana máxima de exposición (revocación + TTL restante del access token) | H1 / ASR-1 | ≤ TTL configurado |
+| Código HTTP por caso de acceso indebido (sin token, token inválido, rol insuficiente) | H2 / ASR-2 | 401 / 401 / 403 |
+| % de respuestas 401/403 registradas en CloudWatch | H2 / ASR-2 | 100% |
+
+### 1.6 Planeación del experimento
+
+**Recursos requeridos**
+
+| Recurso | Detalle |
+| --- | --- |
+| Infraestructura AWS | Stack de CloudFormation (Cognito, API Gateway, ECS/Fargate, RDS) desplegado en su cuenta |
+| Herramientas locales | AWS CLI, `curl` o Postman, Docker y el backend de la rama `cognito-auth` |
+| Créditos AWS | Elimine el stack al terminar (ver nota al final de la sección 8) |
+
+**Elementos de arquitectura involucrados**
+
+Amazon Cognito (emisor de tokens), API Gateway con JWT authorizer, microservicios de Logística, Inventario y Ventas con la librería de autenticación compartida, y CloudWatch Logs para la evidencia de 401/403.
+
+**Esfuerzo estimado** (referencia para planear; puede variar según su experiencia con AWS)
+
+| Etapa | Secciones | Esfuerzo aprox. |
+| --- | --- | --- |
+| Preparación de infraestructura (IaC) | 4 | 0,5 h |
+| Implementación de JWT + RBAC en microservicios | 5 | 1 h |
+| Parte 1: incidente de secuestro de token | 6 | 0,5 h |
+| Parte 2: contención por revocación | 7 | 0,5 h |
+| Análisis y entregables | 8 | 1,5 h |
+| **Total** | | **4 h** |
+
 ## 2. Arquitectura
 
 ### 2.1 Diagrama de componentes
@@ -79,7 +132,7 @@ Para refrescar conceptos:
 
 Note que AWS Cognito es un servicio autogestionado y será el único cambio frente a la arquitectura del Lab 4.
 
-### 2.2 Tácticas de seguridad aplicadas
+### 2.2 Tácticas y patrones de seguridad aplicados
 
 | Táctica                                                | Qué resuelve                                                     |
 | ------------------------------------------------------ | ---------------------------------------------------------------- |

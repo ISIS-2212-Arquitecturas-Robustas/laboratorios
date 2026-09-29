@@ -4,7 +4,7 @@
 
 | Etapa                                  | Resumen                                                                                     | Uso de IA generativa                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 1. Experimento y ASRs de escalabilidad | Definicion de objetivos de carga simultanea y criterios de exito para microservicios.       | Uso acotado para ordenar hipotesis; la priorizacion de ASRs debe ser propia en la pregunta 1.                    |
+| 1. Experimento y ASRs de escalabilidad | Hipótesis de diseño, escenarios de calidad vinculados (ASRs), diseño y planeación del experimento de carga simultánea en microservicios.       | Uso acotado para ordenar hipotesis; la priorizacion de ASRs debe ser propia en la pregunta 1.                    |
 | 2. Analisis arquitectonico             | Evaluacion de estilos (microservicios, API Gateway) y tacticas de escalamiento.             | Recomendado para contrastar trade-offs.                      |
 | 3. Despliegue en AWS                   | Publicacion de imagenes, configuracion de RDS, ECS y API Gateway.                           | Recomendado para asistencia operativa (comandos/configuracion), con verificacion manual en AWS. |
 | 4. Pruebas de carga simultaneas        | Ejecucion de GET y POST en paralelo para observar aislamiento y escalabilidad por servicio. | Recomendado para automatizar experimentos.                   |
@@ -39,7 +39,15 @@
 | Resultados esperados | Evidenciar como la separacion en microservicios permite escalar de forma independiente y sostener mayor carga |
 | Infraestructura | API Gateway + ECS/Fargate + ECR + RDS + computador personal para ejecutar JMeter |
 
-### 1.2 ASRs involucrados
+### 1.2 Hipótesis de diseño
+
+| # | Hipótesis |
+| --- | --- |
+| H1 | **Si** separamos la aplicación en microservicios (Logística, Inventario, Ventas) desplegados de forma independiente en ECS/Fargate, **entonces** el sistema sostiene 5000 req/min de carga simultánea GET + POST (throughput ≥ 83.3 req/s, error % ≤ 10%), **porque** cada servicio se escala según su propia demanda y una carga pesada en uno no consume la capacidad de los demás. |
+| H2 | **Si** aplicamos replicación horizontal de tareas ECS y escalamiento independiente por microservicio, **entonces** el p99 de `POST /logistics/pedidos` se mantiene < 2000 ms bajo carga simultánea, **porque** las tareas adicionales reparten las peticiones y reducen la utilización de cada una. |
+| H3 | **Si** usamos una base de datos administrada (RDS) compartida por los servicios, **entonces** el punto de inflexión del sistema lo determinará el acoplamiento con RDS más que la capacidad de cómputo de ECS, **porque** escalar tareas aumenta el número de conexiones y consultas concurrentes contra un único recurso que no escala horizontalmente. |
+
+### 1.3 Escenarios de calidad vinculados
 
 | ID | Fuente del estímulo | Estímulo | Artefacto | Entorno/Contexto | Respuesta | Medida de la respuesta |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -53,9 +61,30 @@
 > Antes de desplegar los microservicios, analice qué tan eficiente es escalar el monolito **agregando recursos** (eje X: instancias, vCPU o memoria; no carga). Con sus resultados del **Lab 3** como datos de partida, defina un criterio matemático simple (por ejemplo, ganancia marginal de throughput por recurso agregado, `ΔThroughput / ΔRecursos`), represéntelo en una gráfica de throughput vs. recursos junto a la línea de escalamiento ideal (lineal) y explique a partir de qué punto agregar recursos deja de traducirse en throughput proporcional en Cheapest y qué componente de la arquitectura lo explica.
 > La respuesta debe apoyarse en los ASRs correctamente estructurados (estímulo, fuente, entorno, artefacto, respuesta, medida de respuesta); un ASR mal definido invalida el análisis pedido.
 
-### 1.3 Qué se va a probar
+### 1.4 Diseño del experimento
 
-Se prueban dos escenarios funcionales:
+**¿Cómo se va a validar la hipótesis?** Ejecutando la matriz de carga de la sección 5.2 con GET y POST en simultáneo sobre la arquitectura de microservicios, repitiendo cada prueba el mínimo exigido, y comparando los resultados con los umbrales de REQ1–REQ3 y con el comportamiento del monolito del Lab 3.
+
+**¿Qué componentes se van a diseñar o modificar?**
+
+| Componente | Cambio |
+| --- | --- |
+| ECR | Publicación de la imagen `1.0.0` de cada microservicio (sección 4.1) |
+| RDS | Configuración de la base de datos administrada (sección 4.2) |
+| ECS/Fargate | Servicios con `desired count` y escalamiento independiente por microservicio (sección 4.3) |
+| API Gateway | Rutas hacia cada microservicio (sección 4.4) |
+| JMeter | Dos Thread Groups (GET y POST) ejecutados en simultáneo, con la distribución de carga que usted justifique |
+
+**¿Qué métricas se van a medir?**
+
+| Métrica | Hipótesis / ASR | Umbral |
+| --- | --- | --- |
+| p99 y p95 por endpoint | H2 / REQ1 | p99 < 2000 ms |
+| Error % por endpoint | H1 / REQ2 | ≤ 10% |
+| Throughput total y por endpoint | H1 / REQ3 | ≥ 83.3 req/s a 5000 req/min |
+| Punto de inflexión de GET, POST y global; cuello de botella (ECS vs. RDS) | H2, H3 | criterio definido en la Pregunta 5 |
+
+**Escenarios funcionales.** Se prueban dos escenarios funcionales:
 
 1. GET (lectura pesada / consulta con JOINs)
    - Consultar productos que un usuario haya pedido, que esten en promocion y disponibles.
@@ -65,6 +94,30 @@ Se prueban dos escenarios funcionales:
 
 3. Ejecucion simultanea GET + POST
    - Ambas cargas se ejecutan al mismo tiempo para observar aislamiento entre servicios y comportamiento de escalamiento.
+
+### 1.5 Planeación del experimento
+
+**Recursos requeridos**
+
+| Recurso | Detalle |
+| --- | --- |
+| Infraestructura AWS | API Gateway, ECS/Fargate, ECR y RDS (PostgreSQL) en su cuenta |
+| Herramientas locales | Docker, AWS CLI, JMeter (o el script en Python de la sección 5.4) y los resultados del Lab 3 como referencia |
+| Créditos AWS | Ver la nota final; elimine los recursos al terminar |
+
+**Elementos de arquitectura involucrados**
+
+Microservicios de Logística, Inventario y Ventas, API Gateway, base de datos RDS compartida y el generador de carga (JMeter).
+
+**Esfuerzo estimado** (referencia para planear; puede variar según su experiencia con AWS)
+
+| Etapa | Secciones | Esfuerzo aprox. |
+| --- | --- | --- |
+| Despliegue en AWS | 4 | 1 h |
+| Ejecución de la matriz de carga (con repeticiones mínimas) | 5 | 1,5 h |
+| Interpretación de resultados | 6 | 0,5 h |
+| Entregables y respuestas a las preguntas | 7 | 1 h |
+| **Total** | | **4 h** |
 
 ## 2. Arquitectura
 
@@ -82,7 +135,7 @@ Se prueban dos escenarios funcionales:
 | Microservicios | Favorece escalabilidad independiente por dominio funcional, despliegue desacoplado y resiliencia localizada.<br>Desfavorece complejidad operativa, observabilidad y mayor costo de coordinacion. |
 | API Gateway | Favorece seguridad y control de trafico.<br>Puede desfavorecer latencia adicional por salto de red y posible cuello de botella si no se configura bien. |
 
-### 2.3 Tácticas
+### 2.3 Tácticas y patrones
 
 | Tacticas | Analisis (atributos de calidad que favorece y desfavorece) |
 | --- | --- |
