@@ -594,14 +594,46 @@ Estas son las pruebas que debe ejecutar, de menor a mayor carga. La columna **Th
 
 #### Cómo observar la infraestructura durante las pruebas
 
-JMeter le dice cómo ve el sistema un cliente (latencia, throughput, errores), pero no qué pieza se está quedando sin capacidad. Para eso está **Amazon CloudWatch**, el servicio de monitoreo de AWS: todas las piezas que desplegó le envían métricas automáticamente, sin configurar nada. Puede verlas en la consola de CloudWatch o en la pestaña de monitoreo de cada recurso:
+JMeter le dice cómo ve el sistema un cliente (latencia, throughput, errores), pero no qué pieza se está quedando sin capacidad. Para eso está CloudWatch.
 
-| Pieza | Dónde verlo | Métricas disponibles |
-| --- | --- | --- |
-| Tareas de ECS (por servicio) | Consola de ECS → clúster → servicio → pestaña de métricas | Uso de CPU (`CPUUtilization`) y de memoria (`MemoryUtilization`) del servicio |
-| Base de datos RDS | Consola de RDS → instancia → pestaña de monitoreo | Uso de CPU (`CPUUtilization`) y conexiones abiertas (`DatabaseConnections`) |
-| ALB | Consola de EC2 → balanceadores de carga → pestaña de monitoreo | Tiempo de respuesta de los destinos (`TargetResponseTime`) y errores 5xx |
-| API Gateway | Consola de API Gateway → API → métricas | Latencia total (`Latency`), latencia del backend (`IntegrationLatency`) y errores 4xx/5xx |
+> [!NOTE]
+> **Amazon CloudWatch** es el servicio de observabilidad de AWS para ver métricas (series de tiempo), logs y alarmas. Todas las piezas que desplegó le envían métricas automáticamente, sin configurar nada. En este laboratorio lo usará para observar **cuánta CPU y memoria usan las tareas de cada servicio de ECS** y **cuánta CPU y cuántas conexiones usa la RDS** durante cada prueba.
+
+**Abrir CloudWatch (consola AWS):**
+
+1. Verifique la región: arriba a la derecha seleccione la misma región donde desplegó la infraestructura (por ejemplo, **us-east-1**).
+2. En la consola de AWS use el buscador y abra **CloudWatch**.
+3. En el menú izquierdo: **Metrics** → **All metrics**.
+
+**Ver el uso de recursos de cada microservicio (ECS):**
+
+1. En **All metrics** seleccione el namespace **ECS**.
+2. Abra **ClusterName, ServiceName**.
+3. Para cada uno de los tres servicios (`svc-Cheapest-logistica`, `svc-Cheapest-inventario` y `svc-Cheapest-ventas`) marque estas métricas:
+   - `CPUUtilization` (porcentaje de la CPU asignada a las tareas del servicio que se está usando)
+   - `MemoryUtilization` (porcentaje de la memoria asignada que se está usando)
+
+**Ver el uso de recursos de la base de datos (RDS):**
+
+1. En **All metrics** seleccione el namespace **RDS**.
+2. Abra las métricas por instancia (**DBInstanceIdentifier**) y busque `Cheapest-rds`.
+3. Marque estas métricas:
+   - `CPUUtilization` (porcentaje de CPU de la instancia)
+   - `DatabaseConnections` (número de conexiones abiertas contra la base de datos)
+
+**Ver el tráfico que llega a cada microservicio (ALB) y la latencia en API Gateway:**
+
+1. En el namespace **ApplicationELB**, abra **TargetGroup, LoadBalancer** e identifique el target group de cada servicio (su nombre incluye `logistica`, `inventario` o `ventas`). Métricas disponibles: `RequestCount` (peticiones que llegan al target group), `HTTPCode_Target_5XX_Count` (errores 5xx generados por el servicio) y `TargetResponseTime` (latencia del servicio vista por el ALB; no reemplaza el p99 de JMeter, pero ayuda a correlacionar).
+2. En el namespace **ApiGateway**, abra las métricas por API (**ApiId**) y busque su API. Métricas disponibles: `Latency` (tiempo total de la petición en API Gateway), `IntegrationLatency` (tiempo que tardó el backend en responder) y los errores `4xx` y `5xx`.
+
+**Ajustar el gráfico** (pestaña **Graphed metrics**):
+
+- **Time range:** el intervalo exacto de su prueba. Anote la hora de inicio y de fin de cada ejecución para poder ubicarla después.
+- **Period:** 1 minuto, para ver los cambios con claridad.
+- **Statistic:** `Maximum` o `Average` para `CPUUtilization`, `MemoryUtilization` y `DatabaseConnections`; `Sum` para `RequestCount` y los conteos de errores.
+
+> [!NOTE]
+> Las métricas tardan uno o dos minutos en aparecer y tienen una resolución de un minuto. Las pruebas más cortas de la matriz (5 a 20 segundos de ramp-up) apenas dejan un punto en el gráfico; las de mayor carga, que duran más, son las que muestran con claridad cómo sube el uso de recursos.
 
 Durante cada prueba, y sobre todo en las de mayor carga, tome nota (o captura) de estas métricas para cada uno de los tres servicios de ECS y para la RDS: son la evidencia que necesitará para decir qué servicio degradó primero y cuál fue el cuello de botella.
 
