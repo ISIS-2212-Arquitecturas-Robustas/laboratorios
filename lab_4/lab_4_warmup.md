@@ -2,7 +2,7 @@
 
 ## Contexto
 
-Cheapest pasa de monolito a 3 microservicios (Logística, Inventario, Ventas). Los cambios están en la rama `microservicios` del repositorio `Cheapest-api`. Antes de crear nada en ECS, hay que publicar la imagen Docker de cada servicio en su propio repositorio ECR.
+Cheapest pasa de monolito a 3 microservicios (Logística, Inventario, Ventas). Los cambios están en la rama `microservicios` del repositorio `Cheapest-api`. Cada microservicio se empaqueta como una imagen Docker, y AWS necesita un lugar de donde descargarla cada vez que arranca un contenedor. Ese lugar es **Amazon ECR** (Elastic Container Registry), un registro privado de imágenes Docker dentro de su cuenta de AWS (el equivalente a Docker Hub, pero en AWS). Antes de crear cualquier otra pieza de la infraestructura, hay que publicar la imagen de cada servicio en su propio repositorio de ECR.
 
 ## Tarea 
 
@@ -28,4 +28,4 @@ Y dentro de cada repositorio
 
 ## Cierre de la sesión
 
-Al terminar, cada estudiante debe tener los 3 repositorios ECR creados con su imagen publicada (verificado con las capturas de arriba). Esto es exactamente la sección 4.1 del laboratorio — no hay que rehacerlo después, se sigue directamente con RDS, ECS y API Gateway.
+Al terminar, cada estudiante debe tener los 3 repositorios ECR creados con su imagen publicada (verificado con las capturas de arriba). Esto es exactamente el primer paso del despliegue del laboratorio (publicar las imágenes en ECR): no hay que rehacerlo después, se sigue directamente con la creación de la base de datos, el balanceador de carga, los contenedores y el API Gateway.
