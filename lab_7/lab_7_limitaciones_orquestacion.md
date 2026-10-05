@@ -4,7 +4,7 @@
 
 | Etapa | Resumen | Uso de IA generativa |
 | --- | --- | --- |
-| 1. Experimento y ASRs | Definición del escenario de orquestación síncrona y criterios de quiebre. | Uso acotado para ordenar hipótesis; la priorización de ASRs debe ser propia. |
+| 1. Experimento y ASRs | Hipótesis de diseño, escenarios de calidad vinculados (ASRs), diseño y planeación del experimento sobre la orquestación síncrona y sus criterios de quiebre. | Uso acotado para ordenar hipótesis; la priorización de ASRs debe ser propia. |
 | 2. Análisis arquitectónico | Evaluación del patrón de orquestación síncrona, fan-out y compounding de latencia. | Recomendado para contrastar trade-offs y construir los modelos cuantitativos. |
 | 3. Despliegue en AWS | Publicación de imágenes desde la rama `microservices-2`, configuración de ECS y API Gateway. | Recomendado para asistencia operativa con verificación manual en AWS. |
 | 4. Pruebas de carga en tres fases | Baseline individual → orquestado bajo carga → orquestado con servicio dependiente degradado. | Recomendado para automatizar experimentos y documentar métricas por fase. |
@@ -48,7 +48,17 @@ Este patrón —conocido como **orquestación síncrona**— parece simple y fun
 
 El endpoint nuevo `GET /ventas/resumen-operativo` implementa este patrón: llama secuencialmente a Logística y a Inventario con un **timeout de 8 segundos por llamada**, luego consulta su propia base de datos. El timeout alto es intencional: en microservicios reales, los timeouts generosos son una práctica común para evitar rechazar peticiones válidas en momentos de carga pico. Este laboratorio demuestra que esa configuración, combinada con orquestación síncrona, puede llevar al sistema a un punto de quiebre sin que ningún servicio falle individualmente.
 
-### 1.3 ASRs involucrados
+### 1.3 Hipótesis de diseño
+
+| # | Hipótesis |
+| --- | --- |
+| H1 | **Si** implementamos el resumen operativo como orquestación síncrona por HTTP (Ventas llama a Logística e Inventario en cada petición), **entonces** el endpoint viola ASR-1 (p99 < 2000 ms) a cargas donde cada servicio individual sí lo cumple, **porque** la latencia del orquestador es la suma de las latencias de sus dependientes y el fan-out ($F = L \times N$) acelera la saturación ($\rho_i \to 1$) de cada uno. |
+| H2 | **Si** el orquestador mantiene timeouts generosos (8 s por llamada) durante un pico de demanda (5000 req/min), **entonces** el error % supera el umbral de ASR-2 (≤ 10%), **porque** las peticiones lentas ocupan recursos del orquestador durante todo el timeout y la cola se propaga hacia el cliente. |
+| H3 | **Si** reducimos la capacidad de un servicio dependiente (Inventario con 1 tarea ECS) sin apagarlo, **entonces** el error % del endpoint orquestado excede el 30% de ASR-3, **porque** el acoplamiento temporal hace que la disponibilidad del orquestador dependa de la disponibilidad simultánea de todos sus dependientes. |
+
+> Este laboratorio busca **refutar** el patrón de orquestación síncrona: se espera que los resultados muestren que la arquitectura, por sí sola, produce el punto de quiebre. La alternativa se propone en la Pregunta 3 y se implementa en el Lab 8.
+
+### 1.4 Escenarios de calidad vinculados
 
 | ID | Descripción | Métrica a satisfacer |
 | --- | --- | --- |
@@ -58,11 +68,11 @@ El endpoint nuevo `GET /ventas/resumen-operativo` implementa este patrón: llama
 
 > [!IMPORTANT]
 > **Pregunta 1:**
-> Antes de ejecutar las pruebas, estime numéricamente (usando la fórmula de la sección 1.4) a qué carga en req/s espera que se viole ASR-1.
+> Antes de ejecutar las pruebas, estime numéricamente (usando la fórmula de la sección 1.5) a qué carga en req/s espera que se viole ASR-1.
 > Para su estimación use los p99 individuales medidos en la Fase 1 de las pruebas.
 > Compare luego su estimación con el resultado real y explique la diferencia.
 
-### 1.4 Fan-out y latencia compuesta
+### 1.5 Fan-out y latencia compuesta
 
 El **fan-out** describe cuántas peticiones a servicios dependientes genera cada petición al orquestador. La **latencia compuesta** describe cómo las distribuciones de tiempo de respuesta se acumulan en una cadena síncrona. Estas dos propiedades son las razones estructurales por las que el patrón de orquestación síncrona tiene un límite de escalabilidad más bajo que la suma de sus partes.
 
@@ -104,9 +114,28 @@ En la práctica, bajo carga sostenida, la brecha entre el p99 orquestado y la su
 
 > **Resumen práctico:** con $N=2$ servicios dependientes y $p99_{\text{individual}} = 200\,\text{ms}$ en baseline, el p99 orquestado en baseline es $\geq 400\,\text{ms}$. Bajo carga donde $\rho \approx 0.7$ en cada servicio dependiente, $T_{\text{cargado}} \approx \frac{200}{1-0.7} = 667\,\text{ms}$ por servicio, y el p99 orquestado supera los $1334\,\text{ms}$ — violando ASR-1 antes de llegar a estrés fuerte.
 
-### 1.5 Qué se va a probar
+### 1.6 Diseño del experimento
 
-El experimento tiene tres fases progresivas:
+**¿Cómo se va a validar la hipótesis?** Midiendo cada servicio de forma aislada (referencia), aplicando después la misma matriz de carga al endpoint orquestado y comparando el resultado con la predicción del modelo de fan-out (sección 1.5). Finalmente se reduce la capacidad de un dependiente para evaluar ASR-3.
+
+**¿Qué componentes se van a diseñar o modificar?**
+
+| Componente | Cambio |
+| --- | --- |
+| Ventas | Nuevo endpoint `GET /ventas/resumen-operativo` con llamadas HTTP síncronas y secuenciales a Logística e Inventario (timeout de 8 s por llamada), rama `microservices-2` |
+| ECS (Inventario) | Reducción del `desired count` a 1 tarea en la Fase 3 |
+| API Gateway / ECS | Sin cambios de topología: es la misma arquitectura del Lab 4 |
+
+**¿Qué métricas se van a medir?**
+
+| Métrica | Hipótesis / ASR | Umbral |
+| --- | --- | --- |
+| p99 y p95 por servicio individual y del endpoint orquestado; p99 predicho por el modelo | H1 / ASR-1 | p99 < 2000 ms a 500 req/min |
+| Error % durante pico | H2 / ASR-2 | ≤ 10% a 5000 req/min |
+| Error % con Inventario en 1 tarea | H3 / ASR-3 | ≤ 30% |
+| Throughput y carga (req/s) a la que se quiebra cada ASR | H1–H3 | punto de quiebre |
+
+**Fases del experimento.** El experimento tiene tres fases progresivas:
 
 **Fase 1 — Baseline por servicio individual**
 Medir p99, p95, throughput y error % de cada servicio de forma aislada con la misma matriz de carga. Esto establece la referencia para verificar la fórmula de fan-out.
@@ -117,13 +146,35 @@ Aplicar la misma matriz de carga sobre `GET /ventas/resumen-operativo`. Comparar
 **Fase 3 — Servicio dependiente degradado**
 Reducir el `desired count` de Inventario a 1 tarea en ECS (sin apagarlo, sin inyectar fallos). Observar cómo esta reducción de capacidad impacta el error % del endpoint orquestado. Verificar si ASR-3 se cumple.
 
-> [!NOTE]
-> **Warm-up en clase:** las Preguntas 2 y 3 (esta y la de la sección 2.3) no dependen de datos medidos y están disponibles como una sesión práctica de 40 minutos para trabajar en clase antes de desplegar nada: [`lab_7_warmup.md`](lab_7_warmup.md). Si su profesor ya realizó esta sesión en clase, esas dos preguntas ya están resueltas.
-
 > [!IMPORTANT]
 > **Pregunta 2:**
 > ¿Por qué reducir el `desired count` de Inventario a 1 tarea (sin apagarlo) es un experimento más representativo de una situación real que apagar el servicio por completo?
 > Relacione su respuesta con el concepto de **saturación** en la fórmula de fan-out y con escenarios reales de Cheapest .
+
+### 1.7 Planeación del experimento
+
+**Recursos requeridos**
+
+| Recurso | Detalle |
+| --- | --- |
+| Infraestructura AWS | API Gateway, ECS/Fargate, ECR y RDS desplegados en su cuenta (igual que el Lab 4) |
+| Herramientas locales | Docker, AWS CLI, JMeter y el código de la rama `microservices-2` |
+| Créditos AWS | Ver la nota final; elimine los recursos al terminar |
+
+**Elementos de arquitectura involucrados**
+
+Servicio de Ventas (orquestador), Logística e Inventario (dependientes), API Gateway, RDS y JMeter como generador de carga.
+
+**Esfuerzo estimado** (referencia para planear; puede variar según su experiencia con AWS)
+
+| Etapa | Secciones | Esfuerzo aprox. |
+| --- | --- | --- |
+| Despliegue en AWS | 4 | 1 h |
+| Fase 1: baseline individual | 5.1 | 0,5 h |
+| Fase 2: endpoint orquestado | 5.2 | 0,5 h |
+| Fase 3: servicio degradado | 5.3 | 0,5 h |
+| Análisis y entregables | 6–7 | 1,5 h |
+| **Total** | | **4 h** |
 
 ---
 
@@ -145,7 +196,7 @@ Este cambio no requiere nuevos contenedores ni nuevas rutas de red: el fan-out o
 | API Gateway | Actúa como punto de entrada centralizado y permite observar el tráfico agregado.<br>No puede distinguir el tráfico de fan-out generado por el orquestador del tráfico directo; esto dificulta el diagnóstico de saturación. |
 | Orquestación síncrona | Favorece consistencia de la respuesta al momento de la petición (los datos son actuales).<br>Desfavorece latencia, throughput y resiliencia: el orquestador hereda el p99 más alto de todos sus servicios dependientes y cualquier fallo en cascada. |
 
-### 2.3 Tácticas y sus limitaciones en este escenario
+### 2.3 Tácticas y patrones, y sus limitaciones en este escenario
 
 | Táctica | ¿Por qué no resuelve el problema estructural? |
 | --- | --- |
@@ -214,12 +265,12 @@ Tutoriales de apoyo del Lab 4:
 
 Siga los pasos 4.2, 4.3 y 4.4 del Lab 4 sin modificaciones. **Use los prefijos de ruta reales del backend** (`/logistics/*`, `/inventory/*`, `/ventas/*`, ver sección 4.4 y 4.5 del Lab 4)
 
-La única diferencia en ECS es que la Task Definition de **Ventas** requiere variables de entorno adicionales para los clientes HTTP del nuevo endpoint. Recuerde que, igual que en el Lab 4, no hay ALB: estas URLs apuntan directo a la IP pública de la tarea ECS correspondiente (y deben actualizarse si esa tarea se reinicia, ver advertencia de IP volátil en la sección 4.5 del Lab 4):
+La única diferencia en ECS es que la Task Definition de **Ventas** requiere variables de entorno adicionales para los clientes HTTP del nuevo endpoint. Recuerde que, igual que en el Lab 4, los servicios van detrás del Application Load Balancer (sección 4.3.1 del Lab 4): estas URLs apuntan al DNS del ALB y el puerto del listener del servicio correspondiente, no a la IP de una tarea:
 
 | Variable | Valor | Descripción |
 | --- | --- | --- |
-| `LOGISTICA_BASE_URL` | `http://<IP_TAREA_LOGISTICA>:3001` | Para que Ventas llame a Logistica (nuevo cliente `LogisticaCatalogosClient`) |
-| `INVENTARIO_BASE_URL` | `http://<IP_TAREA_INVENTARIO>:3002` | Para que Ventas llame a Inventario |
+| `LOGISTICA_BASE_URL` | `http://<ALB_DNS>:3001` | Para que Ventas llame a Logistica (nuevo cliente `LogisticaCatalogosClient`) |
+| `INVENTARIO_BASE_URL` | `http://<ALB_DNS>:3002` | Para que Ventas llame a Inventario |
 | `INVENTARIO_TIMEOUT_MS` | `8000` | Timeout de 8 s por llamada a Inventario |
 | `LOGISTICA_TIMEOUT_MS` | `8000` | Timeout de 8 s por llamada a Logística (sobreescribe el default de 3 s) |
 
@@ -246,7 +297,7 @@ Ejecute la matriz sobre los endpoints individuales **de forma aislada** (un Thre
 - `GET /inventory/items?tiendaId=<UUID_TIENDA>`
 - `GET /ventas/ventas?tiendaId=<UUID_TIENDA>`
 
-El objetivo es medir el p99 de cada servicio por separado para alimentar la fórmula de la sección 1.4 y establecer la línea base de comparación.
+El objetivo es medir el p99 de cada servicio por separado para alimentar la fórmula de la sección 1.5 y establecer la línea base de comparación.
 
 ### 5.2 Fase 2 — Carga sobre el endpoint orquestado
 
@@ -305,7 +356,7 @@ Reporte:
 
 - En qué escenario de carga (threads / req/s) se viola ASR-1 por primera vez.
 - Si el quiebre fue gradual (p99 subiendo progresivamente) o abrupto (salto repentino).
-- Si el patrón de quiebre coincide con la predicción del modelo de fan-out de la sección 1.4.
+- Si el patrón de quiebre coincide con la predicción del modelo de fan-out de la sección 1.5.
 
 > [!IMPORTANT]
 > **Pregunta 5:**
@@ -377,6 +428,11 @@ Incluya un análisis de 1 a 2 páginas que responda:
 5. ¿Qué alternativa arquitectónica propondría para entregar el resumen operativo a los tenderos con p99 < 500 ms? ¿Qué trade-offs introduce esa alternativa en el contexto de Cheapest (consistencia, complejidad, costo)?
 6. Compare este laboratorio con el Lab 5: ¿qué es más peligroso para Cheapest — un fallo explícito de un servicio (que dispara alertas inmediatas) o una degradación silenciosa por saturación de fan-out (que puede pasar desapercibida)? Justifique.
 7. Si el equipo de Cheapest decidiera implementar las tácticas del Lab 5 (circuit breaker + graceful degradation) sobre el endpoint de este laboratorio, ¿resolvería el problema de compounding de latencia? ¿Qué problema sí resolvería y cuál quedaría abierto?
+
+### 7.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado. Cada respuesta debe incluir los elementos que pide la pregunta (cálculos, tablas o gráficas) y debe ir más allá de lo superficial.
+
 
 ---
 

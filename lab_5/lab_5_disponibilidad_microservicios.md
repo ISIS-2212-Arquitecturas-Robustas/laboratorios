@@ -4,7 +4,7 @@
 
 | Etapa                                      | Resumen                                                                                                          | Uso de IA generativa                                                                                      |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 1. Contexto del experimento de resiliencia | Modelado del escenario de retry storm y definicion de ASRs de resiliencia y consistencia para Cheapest.            | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
+| 1. Contexto del experimento de resiliencia | Modelado del escenario de retry storm, hipótesis de diseño, escenarios de calidad vinculados (ASRs), diseño y planeación del experimento.            | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
 | 2. Arquitectura y tacticas                 | Analisis de microservicios, patrón sidecar, graceful degradation, circuit breaker y control de recursos.         | Recomendado para comparar parametros y riesgos de configuracion.                                          |
 | 3. Preparacion de infraestructura con IaC  | Despliegue reproducible en AWS mediante CloudFormation y verificacion del stack.                                  | Recomendado para asistir en comandos y troubleshooting de despliegue.                                     |
 | 4. Configuración del sidecar de resiliencia | Implementacion de falla controlada en Inventario y configuración del proxy Envoy en Ventas.                     | Recomendado para soporte de implementacion, revision de parametros y pruebas; validar manualmente resultados. |
@@ -57,7 +57,16 @@ Este escenario es conocido en la industria como **retry storm** y es uno de los 
 
 Un aspecto crítico de este escenario, y que este lab reproduce explícitamente, es que el fallo es **transitorio**: los sistemas de orquestación modernos como ECS detectan tareas poco saludables mediante health checks y las reinician automáticamente. En la práctica, un servicio degradado por un pico de memoria, un pool de conexiones agotado o un spike de CPU puede recuperarse por sí solo en cuestión de segundos o minutos. El servicio de Inventario en este laboratorio simula exactamente eso: se degrada al arrancar y se recupera automáticamente tras `RECOVERY_TIME_MS` milisegundos. Esto hace que el estado **HALF-OPEN** del circuit breaker no sea solo teórico: cuando Inventario se recupera, el circuit breaker lo detecta y vuelve al estado CLOSED, restaurando el flujo normal sin intervención humana.
 
-### 1.3 ASRs involucrados
+### 1.3 Hipótesis de diseño
+
+| # | Hipótesis |
+| --- | --- |
+| H1 | **Si** implementamos un circuit breaker con graceful degradation en el sidecar Envoy de Ventas, **entonces** `POST /ventas` responde HTTP 200 con `pending_stock_confirmation` en p99 < 3000 ms aun con Inventario en falla total, **porque** el circuito abierto corta las llamadas al servicio caído y Ventas responde con un fallback local en lugar de esperar timeouts y propagar el error. |
+| H2 | **Si** configuramos retry con backoff exponencial + jitter en el sidecar (en lugar de reintentos inmediatos), **entonces** el volumen de requests que recibe Inventario no supera 2x la línea base, **porque** el backoff y el jitter dispersan los reintentos en el tiempo y evitan la amplificación sincronizada (retry storm). |
+| H3 | **Si** aplicamos rate limiting (throttling) en API Gateway, **entonces** el tráfico excedente de baja prioridad se rechaza con HTTP 429 sin que el throughput de pedidos válidos caiga más de 10%, **porque** el límite se aplica en el borde, antes de que el tráfico consuma capacidad de los servicios. |
+| H4 | **Si** registramos las ventas degradadas con el patrón Outbox y protegemos Inventario con una clave de idempotencia, **entonces** todo decremento de stock pendiente se entrega exactamente una vez tras la recuperación (PENDING → DELIVERED en < 30 s, sin duplicados), **porque** el Outbox garantiza entrega al menos una vez y la idempotencia descarta los reintentos repetidos. |
+
+### 1.4 Escenarios de calidad vinculados
 
 
 | ID    | Estímulo                                                                                     | Fuente del estímulo                                              | Entorno                                                                  | Artefacto                                                    | Respuesta                                                                                                  | Medida de respuesta                                                                                                                                    |
@@ -74,9 +83,29 @@ Contexto de negocio de cada ASR (motivación, no parte de la especificación for
 - **ASR-3**: Como negocio, quiero que el tráfico de confirmación de pedidos no se vea afectado por picos de tráfico de baja prioridad.
 - **ASR-4**: Como negocio, quiero que toda venta registrada, incluso en modo degradado (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere.
 
-### 1.4 Qué se va a probar
+### 1.5 Diseño del experimento
 
-Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` con Inventario en estado de fallo controlado:
+**¿Cómo se va a validar la hipótesis?** Comparando contra una línea base sin protecciones, bajo la misma matriz de carga y con el mismo fallo controlado en Inventario, y aplicando las tácticas de forma incremental para aislar el efecto de cada una (H1–H4).
+
+**¿Qué componentes se van a diseñar o modificar?**
+
+| Componente | Cambio |
+| --- | --- |
+| Inventario | Inyección de fallo con auto-recuperación (`RECOVERY_TIME_MS`) y endpoint de idempotencia (sección 5.1 y 8.5) |
+| Ventas | Graceful degradation (`pending_stock_confirmation`) y write transaccional con Outbox (secciones 5.4 y 8.4) |
+| Sidecar Envoy (Ventas) | Configuración de timeout, retry con backoff + jitter y circuit breaker (outlier detection) (sección 5.3) |
+| API Gateway | Rate limiting / throttling (sección 7.3) |
+
+**¿Qué métricas se van a medir?**
+
+| Métrica | Hipótesis / ASR | Umbral |
+| --- | --- | --- |
+| p99 de `POST /ventas` y % de respuestas 200 con `pending_stock_confirmation` | H1 / ASR-1 | p99 < 3000 ms |
+| Requests recibidos por Inventario vs. línea base | H2 / ASR-2 | ≤ 2x |
+| Throughput de pedidos válidos y % de respuestas 429 | H3 / ASR-3 | caída ≤ 10% |
+| Tiempo de PENDING → DELIVERED y decrementos duplicados en `item_inventario.cantidad` | H4 / ASR-4 | < 30 s, 0 duplicados |
+
+**Rondas de pruebas.** Se realizan las siguientes rondas de pruebas de carga con JMeter sobre `POST /ventas` con Inventario en estado de fallo controlado:
 
 1. **Baseline (sin protecciones)**: el sidecar no está activo; Ventas llama directamente a Inventario sin timeout, retry ni circuit breaker.
 2. **Con retry + backoff exponencial** (sidecar activado, solo política de retry): el proxy Envoy reintenta automáticamente ante errores 5xx.
@@ -88,6 +117,32 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 > **Pregunta 2:**
 > Si fuera el líder encargado de ejecutar este plan en Cheapest seguiría este orden teniendo en cuenta el riesgo de estos cambios? Describa un plan de migración que mitigue los riesgos asociados.
 > El plan de migración debe incluir: etapas, tiempo estimado por etapa y las tareas a realizar en cada una.
+
+### 1.6 Planeación del experimento
+
+**Recursos requeridos**
+
+| Recurso | Detalle |
+| --- | --- |
+| Infraestructura AWS | Stack de CloudFormation (API Gateway, ECS/Fargate, ECR, RDS, sidecar Envoy) desplegado en su cuenta |
+| Herramientas locales | Docker, AWS CLI, JMeter, cliente PostgreSQL y el backend de la rama `availability` |
+| Créditos AWS | Ver la nota final; elimine el stack al terminar |
+
+**Elementos de arquitectura involucrados**
+
+Servicios de Ventas e Inventario (y Logística como parte del stack), sidecar Envoy, API Gateway, base de datos RDS (tablas `OutboxHttpCall` e `item_inventario`) y JMeter como generador de carga.
+
+**Esfuerzo estimado** (referencia para planear; puede variar según su experiencia con AWS)
+
+| Etapa | Secciones | Esfuerzo aprox. |
+| --- | --- | --- |
+| Preparación de infraestructura (IaC) | 4 | 0,5 h |
+| Sidecar y ajuste de código | 5 | 0,5 h |
+| Parte 1: fallo en cascada | 6 | 0,5 h |
+| Parte 2: tácticas de resiliencia | 7 | 1 h |
+| Parte 3: Outbox e idempotencia | 8 | 1 h |
+| Análisis y entregables | 9–10 | 0,5 h |
+| **Total** | | **4 h** |
 
 ## 2. Arquitectura
 
@@ -110,7 +165,7 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 | Control de recursos (Resource Control) | Favorece estabilidad bajo carga al limitar concurrencia, throughput y consumo por cliente/ruta (throttling, cuotas, aislamiento).<br>Sin una buena calibración, puede rechazar tráfico legítimo y afectar temporalmente la percepción de disponibilidad. |
 | Sidecar | Externaliza responsabilidades transversales (resiliencia, observabilidad, seguridad) a un proceso proxy que corre junto al servicio principal.<br>Permite aplicar y cambiar políticas de resiliencia sin modificar el código de negocio ni redesplegar la aplicación. |
 
-### 2.3 Tácticas
+### 2.3 Tácticas y patrones
 
 | Táctica                                     | Análisis                                                                                                                                                                                                                                                         |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -121,11 +176,11 @@ Se realizan cuatro rondas de pruebas de carga con JMeter sobre `POST /ventas` co
 | Proxy sidecar (Envoy)                   | Permite implementar retry y circuit breaker en la capa de red, sin tocar el código de negocio.<br>El sidecar intercepta el tráfico saliente de Ventas hacia Inventario y aplica las políticas configuradas en su archivo YAML.<br>Introduce un salto de red adicional y requiere que los parámetros del sidecar sean coherentes con los timeouts de la aplicación. |
 
 > [!IMPORTANT]
-> **Pregunta 3:**
+> **Pregunta 3 (parte A — propuesta de parámetros):**
 > Retry, circuit breaker y rate limiting pueden entrar en conflicto si se calibran mal.
 > Proponga un conjunto coherente de parámetros iniciales para Cheapest (timeouts, retries, umbral de apertura, reset timeout, rate y burst) y justifique cómo evitaría inestabilidad sistémica.
 
-### 2.4 Patrones de disponibilidad
+### 2.4 Patrones de disponibilidad (detalle)
 
 #### Sidecar
 
@@ -269,9 +324,6 @@ El template incluye:
 > [!NOTE]
 > Los prefijos de ruta de este laboratorio son **`logistica`/`inventario`**, a diferencia de `logistics`/`inventory usados en el Lab 4. El API Gateway traduce correctamente hacia los prefijos reales del backend (`/logistics/*`, `/inventory/*`); si prueba manualmente con los prefijos en inglés obtendrá 404.
 
-> [!NOTE]
-> **Warm-up en clase:** las secciones 4 a 6 completas (desplegar CloudFormation, calibrar el sidecar Envoy y reproducir el fallo en cascada baseline) están disponibles como una sesión práctica extendida para trabajar en clase: [`lab_5_warmup.md`](lab_5_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Aplicar tácticas de resiliencia**, ya que el baseline y la configuración del sidecar quedaron listos.
-
 ### 4.3 Preparar parámetros
 
 Antes de desplegar, publique las imágenes Docker en ECR y anote los URIs. En este laboratorio hay **cuatro imágenes**: las tres del monorepo más la del sidecar Envoy.
@@ -367,7 +419,7 @@ Realice los siguientes pasos:
 6. (Opcional, recomendado) Pídale a un asistente de IA que le ayude a interpretar algún recurso o configuración que no le quede clara — por ejemplo, pegue un fragmento del template o una captura de la consola y pregunte qué hace ese recurso específico y cómo se relaciona con los demás.
 
 > [!IMPORTANT]
-> **Pregunta 0 (post-despliegue):**
+> **Actividad post-despliegue (evidencia del despliegue, ver sección 10.2):**
 > Elija dos recursos creados por el stack que no haya usado directamente en labs anteriores (por ejemplo, un Target Group, un rol IAM, o una ruta del API Gateway) y explique, en sus propias palabras, qué hacen y por qué son necesarios para que el laboratorio funcione. Acompañe su respuesta con una captura de pantalla de la consola de AWS por cada recurso elegido.
 
 ## 5. Configuración del sidecar y ajuste de código
@@ -434,7 +486,7 @@ Los seis puntos a completar son:
 - `base_ejection_time` < `RECOVERY_TIME_MS` de Inventario, para que el estado HALF-OPEN pueda detectar la recuperación automática del servicio.
 
 > [!IMPORTANT]
-> **Pregunta 3:**
+> **Pregunta 3 (parte B — valores implementados; continúa la parte A de la sección 2.3):**
 > Documente en su entregable los valores que eligió para cada `TODO`, la justificación cuantitativa de cada uno y cómo garantiza que no violan ASR-2.
 
 **Verificar la configuración de Envoy localmente antes de subir a ECR:**
@@ -896,10 +948,11 @@ Compare esta ronda con la Ronda 4 bajo las mismas condiciones de carga para aisl
 Adjunte capturas de:
 
 - Stack CloudFormation en estado `CREATE_COMPLETE`.
+- Actividad post-despliegue (sección 4.7): los dos recursos del stack que eligió, con una captura de la consola por cada uno y su explicación.
 - Task Definition de Ventas mostrando los **dos containers**: `ventas` y `ventas-sidecar`.
 - Servicios ECS de los tres microservicios en estado RUNNING.
 - API Gateway con throttling configurado devolviendo HTTP 429.
-- `envoy.yaml.tmpl` con los valores completados por el equipo (los seis `TODO`).
+- `envoy.yaml.tmpl` con los valores completados por el estudiante (los seis `TODO`).
 - Logs de CloudWatch del container `ventas-sidecar` mostrando: reintentos (acceso log con múltiples líneas por request) y transiciones de estado del circuit breaker (`ejections_active`).
 - Respuesta HTTP 200 con `status: pending_stock_confirmation` capturada en JMeter durante el fallo de Inventario.
 - Summary Report de JMeter para la ronda baseline y la ronda con tácticas combinadas.
@@ -928,6 +981,11 @@ Incluya un análisis de 1 a 2 páginas que responda:
 8. ¿Qué ventajas concretas tuvo desplegar con CloudFormation frente a la configuración manual del Lab 4? ¿En qué escenarios del negocio de Cheapest (ej. expansión a México o Brasil, un incidente que requiera reconstruir el ambiente) sería esta capacidad crítica?
 9. ¿Por qué at-least-once + idempotencia no equivale a exactly-once distribuido? ¿Qué requeriría una garantía de exactly-once real entre dos servicios con bases de datos independientes?
 10. Con base en los datos de la tabla 5a, ¿el patrón Outbox aumenta la latencia de `POST /ventas`? Argumente en qué condiciones ese overhead sería aceptable para Cheapest y en cuáles representaría un riesgo para los ASRs. Considere: tamaño del volumen transaccional, latencia de la base de datos RDS, y si el write adicional en `outbox_http_calls` ocurre dentro o fuera de la transacción principal.
+
+### 10.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado. Cada respuesta debe incluir los elementos que pide la pregunta (tablas, gráficas o diagramas) y debe ir más allá de lo superficial. La Pregunta 3 tiene dos partes (A y B) que se responden y califican juntas.
+
 
 ## Nota final (créditos AWS)
 

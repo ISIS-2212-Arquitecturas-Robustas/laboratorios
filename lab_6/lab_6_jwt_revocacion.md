@@ -4,8 +4,8 @@
 
 | Etapa | Resumen | Uso de IA generativa |
 | --- | --- | --- |
-| 1. Experimento y ASRs de seguridad | Definición del incidente (token theft) y criterios medibles de contención. | Uso acotado para ordenar hipótesis; los umbrales deben ser propios. |
-| 2. Arquitectura y tácticas | JWT en el borde y en servicios, TTL corto y revocación en Cognito. | Recomendado para contrastar trade-offs (UX vs seguridad) y riesgos residuales. |
+| 1. Experimento y ASRs de seguridad | Hipótesis de diseño, escenarios de calidad vinculados (ASRs), diseño y planeación del experimento sobre el incidente (token theft). | Uso acotado para ordenar hipótesis; los umbrales deben ser propios. |
+| 2. Arquitectura, tácticas y patrones | JWT en el borde y en servicios, TTL corto y revocación en Cognito. | Recomendado para contrastar trade-offs (UX vs seguridad) y riesgos residuales. |
 | 3. Preparación en AWS (IaC) | Despliegue reproducible con CloudFormation: microservicios + API Gateway + Cognito. | Recomendado para asistencia operativa; verifique manualmente en AWS. |
 | 4. Implementación de seguridad (código) | Autenticación JWT y RBAC por rol en microservicios (Nest). | Recomendado para soporte de implementación y revisión; validar manualmente. |
 | 5. Ejecución del incidente y contención | Simular robo de refresh token, revocar y medir ventana de exposición. | No recomendado para redactar conclusiones sin evidencia del experimento. |
@@ -59,7 +59,14 @@ Para refrescar conceptos:
 > ¿Qué puede hacer el atacante con un refresh token válido aunque usted cambie la contraseña del usuario?
 > Responda en términos de “capacidad” y “ventana de tiempo”, no en definiciones.
 
-### 1.3 ASRs
+### 1.3 Hipótesis de diseño
+
+| # | Hipótesis |
+| --- | --- |
+| H1 | **Si** implementamos access tokens de vida corta (2–5 min) junto con la revocación del refresh token (o global sign-out) en Cognito, **entonces** un token secuestrado se contiene y se verifica en menos de 2 minutos desde la detección, y el atacante pierde todo acceso al expirar el access token vigente, **porque** la revocación corta la capacidad de re-emisión y el TTL corto acota el tiempo que sobrevive un access token ya emitido (JWT es *stateless* y no puede invalidarse antes de expirar). |
+| H2 | **Si** validamos el JWT en el borde (API Gateway) y de nuevo en cada microservicio, y aplicamos RBAC por `cognito:groups`, **entonces** el 100% de los accesos indebidos se distingue por tipo de falla (sin token o token inválido → 401; token válido sin el grupo requerido → 403) y queda registrado, **porque** la autenticación (¿quién eres?) y la autorización (¿qué puedes hacer?) se evalúan en capas separadas, y cada capa produce su propio código de respuesta. |
+
+### 1.4 Escenarios de calidad vinculados
 
 | ID    | Descripción                                                                                                                                                                                                                                                                                                            |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -72,6 +79,52 @@ Para refrescar conceptos:
 > Elija el tiempo de vida para access token y justifíquelo.
 > Debe incluir: (1) ventana de exposición (tiempo que un token es válido), (2) impacto en la experiencia de usuario y operación, (3) impacto en costo/latencia, (4) justificación basada en el contexto de negocio de Cheapest.
 
+### 1.5 Diseño del experimento
+
+**¿Cómo se va a validar la hipótesis?** Simulando un incidente realista de secuestro de un refresh token (Parte 1) y aplicando la contención desde Cognito (Parte 2), midiendo los tiempos del incidente. Para H2, se ejecuta cada fila de la tabla de políticas de acceso con el token correcto, sin token, con un token inválido y con un rol insuficiente, y se verifica el código de respuesta y su registro en logs.
+
+**¿Qué componentes se van a diseñar o modificar?**
+
+| Componente | Cambio |
+| --- | --- |
+| Amazon Cognito | User Pool, App Client, grupos (`admin`, `operador`) y TTL del access token (sección 4) |
+| API Gateway (HTTP API) | JWT authorizer en el borde |
+| Librería `libs/shared/auth/` | `JwtAuthGuard` (401), `RolesGuard` (403), `@Public()`, `@Roles(...)` y `AuthLoggerMiddleware` en los microservicios (sección 5) |
+
+**¿Qué métricas se van a medir?**
+
+| Métrica | Hipótesis / ASR | Umbral |
+| --- | --- | --- |
+| Tiempo entre detección, revocación y verificación de contención | H1 / ASR-1 | < 2 min |
+| Ventana máxima de exposición (revocación + TTL restante del access token) | H1 / ASR-1 | ≤ TTL configurado |
+| Código HTTP por caso de acceso indebido (sin token, token inválido, rol insuficiente) | H2 / ASR-2 | 401 / 401 / 403 |
+| % de respuestas 401/403 registradas en CloudWatch | H2 / ASR-2 | 100% |
+
+### 1.6 Planeación del experimento
+
+**Recursos requeridos**
+
+| Recurso | Detalle |
+| --- | --- |
+| Infraestructura AWS | Stack de CloudFormation (Cognito, API Gateway, ECS/Fargate, RDS) desplegado en su cuenta |
+| Herramientas locales | AWS CLI, `curl` o Postman, Docker y el backend de la rama `cognito-auth` |
+| Créditos AWS | Elimine el stack al terminar (ver nota al final de la sección 8) |
+
+**Elementos de arquitectura involucrados**
+
+Amazon Cognito (emisor de tokens), API Gateway con JWT authorizer, microservicios de Logística, Inventario y Ventas con la librería de autenticación compartida, y CloudWatch Logs para la evidencia de 401/403.
+
+**Esfuerzo estimado** (referencia para planear; puede variar según su experiencia con AWS)
+
+| Etapa | Secciones | Esfuerzo aprox. |
+| --- | --- | --- |
+| Preparación de infraestructura (IaC) | 4 | 0,5 h |
+| Implementación de JWT + RBAC en microservicios | 5 | 1 h |
+| Parte 1: incidente de secuestro de token | 6 | 0,5 h |
+| Parte 2: contención por revocación | 7 | 0,5 h |
+| Análisis y entregables | 8 | 1,5 h |
+| **Total** | | **4 h** |
+
 ## 2. Arquitectura
 
 ### 2.1 Diagrama de componentes
@@ -79,7 +132,7 @@ Para refrescar conceptos:
 
 Note que AWS Cognito es un servicio autogestionado y será el único cambio frente a la arquitectura del Lab 4.
 
-### 2.2 Tácticas de seguridad aplicadas
+### 2.2 Tácticas y patrones de seguridad aplicados
 
 | Táctica                                                | Qué resuelve                                                     |
 | ------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -285,7 +338,9 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 
 ### 5.3 Tabla de políticas de acceso
 
-| Endpoint | Método | Protección | Rol requerido | 200 | 401 | 403 |
+Las rutas están escritas como se invocan **a través del API Gateway** (`<ApiGatewayUrl>` + ruta). El gateway traduce el prefijo de cada servicio a la ruta interna del contenedor: `/logistica/{proxy+}` → `/logistics/{proxy}`, `/inventario/{proxy+}` → `/inventory/{proxy}` y `/ventas/{proxy+}` → `/ventas/{proxy}`. Si prueba directo contra el ALB o el contenedor, use la ruta interna (por ejemplo `/logistics/pedidos`).
+
+| Endpoint (vía API Gateway) | Método | Protección | Rol requerido | 200 | 401 | 403 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `/logistica/health` | GET | Público | — | ✓ | — | — |
 | `/inventario/health` | GET | Público | — | ✓ | — | — |
@@ -293,8 +348,8 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 | `/ventas/ventas` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
 | `/ventas/ventas` | GET | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
 | `/ventas/ventas/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
-| `/logistics/pedidos` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
-| `/logistics/pedidos/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
+| `/logistica/pedidos` | POST | JWT | `admin` o `operador` | ✓ | sin token / inválido | otro rol |
+| `/logistica/pedidos/:id` | DELETE | JWT | solo `admin` | ✓ | sin token / inválido | `operador` sin `admin` |
 
 ### 5.4 Instrucciones de despliegue
 
@@ -308,9 +363,6 @@ Agregar al archivo `.env` de cada microservicio (ver `.env.example`):
 > **Pregunta 3:**
 > ¿Por qué es peligroso devolver 403 cuando el token está ausente o es inválido?
 > Relacione su respuesta con enumeración de endpoints y debugging operacional.
-
-> [!NOTE]
-> **Warm-up en clase:** la sección 6 (Parte 1 — Incidente: secuestro de token) está disponible como una sesión práctica para trabajar en clase, asumiendo que el stack de la sección 4 ya está desplegado: [`lab_6_warmup.md`](lab_6_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Parte 2 — Contención: revocación rápida**.
 
 ## 6. Parte 1 — Incidente: secuestro de token
 
@@ -354,12 +406,14 @@ Reporte:
 ## 8. Entregables
 
 1. **Tabla de políticas** (mínimo 6 filas): endpoint, método, protegido/público, rol requerido, código esperado (200/401/403).
-2. **Evidencia del incidente**:
+2. **Verificación de JWT + RBAC**: para cada fila de su tabla de políticas, la request real con el código obtenido (200 con el rol correcto, 401 sin token o con token inválido, 403 con un rol insuficiente) y los logs de CloudWatch del `AuthLoggerMiddleware` registrando esos 401/403 (ASR-2).
+3. **Evidencia del incidente**:
+   - Login del usuario de prueba (obtención de `ACCESS_TOKEN` y `REFRESH_TOKEN`).
    - Requests exitosas usando refresh token (antes de revocar).
    - Fallo del refresh tras revocar (error devuelto por Cognito).
    - Request fallida después de expirar el access token (401).
-3. **Cálculo** de ventana máxima de exposición y justificación del TTL.
-4. Respuestas a las preguntas 1–4.
+4. **Cálculo** de ventana máxima de exposición y justificación del TTL.
+5. **Respuestas a las preguntas del laboratorio**: incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 4**, planteadas a lo largo del enunciado. Deben ir más allá de lo superficial.
 
 > Nota: al terminar, elimine el stack para evitar costos:
 >

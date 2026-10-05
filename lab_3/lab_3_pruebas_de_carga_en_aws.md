@@ -169,28 +169,24 @@ Cuando ingrese a la plataforma de AWS Academy podrá observar la sección “Mó
 
 ![](./recursos/Pasted%20image%2020260310214319.png)
 
-Inicie el **Learning Lab** (esto habilita los créditos del curso). Usted debe ver algo así
-![](recursos/Pasted%20image%2020260310214359.png)
-
 Para iniciar el ambiente de AWS siga estos pasos:
 
 1. Presione el botón **"Start Lab"**.
-2. Espere hasta que el indicador de estado cambie a **punto verde**; esto indica que el ambiente ya está listo y puede acceder a la consola de AWS (abriendo el enlace **"AWS"** que aparece junto al indicador).
+2. Espere hasta que el indicador de estado cambie a **punto verde**; esto indica que el ambiente ya está listo y puede acceder a la consola de AWS (abriendo el enlace **"AWS"** que aparece junto al indicador). Usted debe ver algo así
+![](recursos/Pasted%20image%2020260310214359.png)
+
 
 > [!WARNING]
 > **No presione "Reset Lab"** salvo que sea estrictamente necesario (por ejemplo, si el ambiente quedó en un estado irrecuperable). El reseteo del ambiente puede demorar **bastante tiempo** en completarse y durante ese lapso no podrá acceder a los recursos de AWS.
 
 > [!WARNING]
-> Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Usted puede escoger cualquiera de las dos formas, sin embargo **es importante que sepa como usar la UI (consola de AWS) ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.** Se recomienda que use ambas formas de usar AWS al menos una vez y después escoja la que más le convenga.
-
-> [!NOTE]
-> **Warm-up en clase:** las secciones 4.2 y 4.3 (Security Groups + instancia `Cheapest-db`) están disponibles como una sesión práctica de 40 minutos para trabajar en clase: [`lab_3_warmup.md`](lab_3_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **4.4 Crear instancias EC2 para la App**.
+> Para este laboratorio y los siguientes se van a crear en múltiples oportunidades elementos comunes de infraestructura. Para esto usted tendrá disponibles los tutoriales de AWS, estos le presentarán dos formas de crear los recursos, con la herramienta CloudShell o a través de la consola de AWS. Se recomienda que emplee ambas formas de usar AWS al menos una vez. Sin embargo, **es importante que sepa como usar la consola de AWS ya que sus evidencias deben ser capturas de pantalla de la misma en donde se vea la infraestructura desplegada.**
 
 ### 4.2 Configuración de seguridad (Security Groups)
 
 > Nota: use nombres **sin tildes** y sin caracteres especiales.
 
-Cree los siguientes Security Groups (VPC por defecto del lab):
+Cree tres Security Groups con los parámetros indicados en las secciones 4.2.1, 4.2.2 y 4.2.3, para el paso a paso vaya a este sub-recurso:
 - [Tutorial para crear Security Groups en AWS](../tutoriales/crear_security_groups.md)
 
 #### 4.2.1 Security Group 1 — SSH
@@ -210,17 +206,6 @@ Cree los siguientes Security Groups (VPC por defecto del lab):
 | Inbound rule | TCP 5432 desde `Anywhere-IPv4` |
 
 > En un entorno real, 5432 **no** se abre a todo internet. Para el laboratorio lo haremos así por simplicidad.
-
-   > [!IMPORTANT]
-   > **Pregunta 4:**
-   > Proponga un diseño mínimo de seguridad para Cheapest que elimine la exposición pública de infraestructura que debería ser privada.
-   >
-   > Debe incluir al menos:
-   > - origen permitido de tráfico,
-   > - estrategia de segmentación de red
-   >
-   > Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
-   > Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
 
 #### 4.2.3 Security Group 3 — HTTP API (Cheapest)
 
@@ -244,27 +229,36 @@ Usted debe ver algo así
 > - estrategia de segmentación de red
 >
 > Pista: Uno de los principios más importantes de seguridad es *least permissions*, que menciona que un sistema debería tener la cantidad mínima de permisos posibles. Revise qué configuraciones podría modificar para reducir los permisos de la infraestructura.
-> Presente la propuesta con un diagrama de red (subredes, security groups y flujos permitidos/bloqueados).
 
 ### 4.3 Crear instancia EC2 para Base de Datos (PostgreSQL)
 
+Cree una instancia EC2 con los parámetros de la tabla, para el paso a paso siga este sub-recurso:
 - [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md)
-
-Cree una instancia EC2 con los parámetros:
 
 | Parámetro         | Valor                      |
 | ----------------- | -------------------------- |
 | Nombre            | `Cheapest-db`                |
 | AMI               | Ubuntu Server 24.04 LTS    |
 | Tipo de instancia | `t2.medium`                  |
+| Key pair          | `vockey` (o una llave propia, ver nota) |
 | IP pública        | Habilitar                  |
 | Security Groups   | `Cheapest-ssh` + `Cheapest-db` |
 | Almacenamiento    | 8 GB                       |
 
+> [!IMPORTANT]
+> **Key pair (llave SSH):** el archivo `.pem` que se usa más adelante en `ssh -i <archivo>.pem ...` es la llave privada del **key pair** que usted seleccione al crear la instancia. AWS solo le entrega el `.pem` en el momento de crear la llave, y el key pair **no se puede cambiar** después de lanzar la instancia. Tiene dos opciones:
+>
+> - **`vockey` (recomendada):** es el key pair que AWS Academy ya creó en su cuenta. Descargue su llave privada desde la página del Learner Lab en **AWS Details → SSH key → Download PEM** (archivo `labsuser.pem`
+> - **Llave propia:** créela antes de lanzar la instancia (en la consola: **EC2 → Key Pairs → Create key pair**, formato `.pem`; o por CLI con el **Paso 2** del [Tutorial para crear instancias de EC2](../tutoriales/crear_instancia_ec2.md)) y guarde el archivo que se descarga.
+>
+> En Linux/macOS, restrinja los permisos del archivo antes de usarlo, o SSH lo rechazará (`UNPROTECTED PRIVATE KEY FILE`): `chmod 400 labsuser.pem`.
+>
+> Use el **mismo key pair** para `Cheapest-db` y para las tres instancias de app (sección 4.4). Si crea una instancia con **"Proceed without a key pair"**, solo podrá conectarse por EC2 Instance Connect.
+
 > [!NOTE]
 > Evalúe usar la AMI **Amazon Linux con Docker preinstalado** como alternativa a Ubuntu Server 24.04 LTS. Esto reduce el tiempo dedicado a instalar Docker manualmente (ver sección 4.3.2) y le permite enfocarse antes en las pruebas de carga. Si opta por esta AMI, tenga en cuenta que el usuario de conexión SSH suele ser `ec2-user` en lugar de `ubuntu`, y que los comandos de gestión de paquetes (`yum`/`dnf`) difieren de los de Ubuntu (`apt`).
 
-#### 4.3.1 Conexión a la instancia
+#### 4.3.1 Conexión a la instancia de base de datos
 
 **Opción A — EC2 Instance Connect (recomendada):**
 
@@ -277,7 +271,7 @@ Desde la consola web de AWS puede conectarse directamente a la instancia sin nec
 
 **Opción B — SSH externo:**
 
-Conéctese a la instancia desde su terminal usando el archivo `.pem` de la llave asociada:
+Conéctese a la instancia desde su terminal usando el archivo `.pem` del key pair que seleccionó al crearla (por ejemplo `labsuser.pem` si usó `vockey`):
 
 ```bash
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
@@ -286,14 +280,19 @@ ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_DB>
 #### 4.3.2 Ejecutar la base de datos (Cheapest-db)
 
 1. Conéctese por SSH a `Cheapest-db`.
-2. Verifique que Docker está instalado y corriendo ([Tutorial para instalar Docker](../tutoriales/instalar_docker_en_una_maquina_EC2.md)):
+2. Instale Docker. La AMI **Ubuntu Server 24.04 LTS no trae Docker preinstalado**: siga los pasos 1 a 7 del [Tutorial para instalar Docker](../tutoriales/instalar_docker_en_una_maquina_EC2.md).
+
+> [!NOTE]
+> Si usó la AMI de Amazon Linux con Docker preinstalado (nota de la sección 4.3), omita la instalación y continúe con la verificación.
+
+3. Verifique que Docker quedó instalado y el servicio está corriendo (debe mostrar `active (running)`):
 
 ```bash
 sudo docker --version
 sudo service docker status
 ```
 
-3. Levante PostgreSQL con Docker (si no existe el contenedor, créelo; si existe, inícielo):
+4. Levante PostgreSQL con Docker (si no existe el contenedor, créelo; si existe, inícielo):
 
 ```bash
 # Opción A: crear y levantar (primera vez)
@@ -303,7 +302,7 @@ sudo docker run --name cheapest-db  -e POSTGRES_PASSWORD=postgres  -e POSTGRES_D
 sudo docker start cheapest-db
 ```
 
-4. Verifique que está arriba:
+5. Verifique que está arriba:
 
 ```bash
 sudo docker ps
@@ -320,6 +319,7 @@ Cree **tres** instancias EC2, una por cada zona de disponibilidad. Distribuirlas
 | Nombre            | `Cheapest-app-1`               | `Cheapest-app-2`               | `Cheapest-app-3`               |
 | AMI               | Ubuntu Server 24.04 LTS      | Ubuntu Server 24.04 LTS      | Ubuntu Server 24.04 LTS      |
 | Tipo de instancia | `t2.medium`                  | `t2.medium`                  | `t2.medium`                  |
+| Key pair          | `vockey` (el mismo de `Cheapest-db`) | `vockey` (el mismo de `Cheapest-db`) | `vockey` (el mismo de `Cheapest-db`) |
 | IP pública        | Habilitar                    | Habilitar                    | Habilitar                    |
 | Security Groups   | `Cheapest-ssh` + `Cheapest-http` | `Cheapest-ssh` + `Cheapest-http` | `Cheapest-ssh` + `Cheapest-http` |
 | Almacenamiento    | 8 GB                         | 8 GB                         | 8 GB                         |
@@ -327,7 +327,9 @@ Cree **tres** instancias EC2, una por cada zona de disponibilidad. Distribuirlas
 
 Para obtener el `SubnetId` de cada AZ antes de crear cada instancia, siga el **Paso 5** del [Tutorial para crear instancias de EC2 en AWS](../tutoriales/crear_instancia_ec2.md).
 
-#### 4.4.1 Conexión por SSH
+#### 4.4.1 Conexión por SSH a cada instancia EC2
+
+Use el mismo archivo `.pem` de la sección 4.3 (ver nota sobre el key pair). También puede conectarse con EC2 Instance Connect como en la sección 4.3.1.
 
 ```bash
 ssh -i <archivo>.pem ubuntu@<IP_PUBLICA_APP>
@@ -361,7 +363,7 @@ npm -v
 
 #### 4.4.3 Clonar el repositorio del backend
 
-Clone el repositorio del backend de su proyecto (reemplace la URL, y recuerde que estamos trabajando sobre la rama load_tests):
+Clone el repositorio del backend de su proyecto (reemplace la URL, **y recuerde que estamos trabajando sobre la rama load_tests**):
 
 ```bash
 git clone <URL_REPO_BACKEND_Cheapest>
@@ -413,7 +415,7 @@ nano .env
 > Para el laboratorio usaremos la IP privada para conectar la aplicación a la base de datos. Compare el uso de IP privada vs IP pública para la conexión entre App y Base de Datos en este laboratorio.
 >
 > ¿Qué diferencias esperaría en seguridad, latencia, estabilidad y costo operativo para Cheapest, y en qué casos podría justificarse usar cada opción?
-> Apoye la comparación con una tabla de trade-offs.
+> Apoye la comparación con una tabla.
 
 #### 4.4.5 Ejecucuión y seed de datos (si aplica)
 
@@ -443,7 +445,7 @@ En su computador:
 > [!NOTE]
 > Este paso **solo aplica** en los siguientes casos:
 > - Para `Cheapest-db`: cuando la **instancia** fue detenida (stopped) y necesita reiniciar el contenedor de PostgreSQL.
-> - Para las instancias de app: cuando el **proceso de Node** fue detenido (no necesariamente cuando toda la instancia fue detenida). Si el proceso de Node sigue corriendo (por ejemplo, con `nvm use default` activo desde una sesión previa), no es necesario repetir el `npm run start:dev`.
+> - Para las instancias de app: cuando el **proceso de Node** fue detenido (no necesariamente cuando toda la instancia fue detenida). Si el proceso de Node sigue corriendo (por ejemplo, con `nvm use default` activo desde una sesión previa), no es necesario repetir el `npm run start`.
 >
 > Si ninguna instancia o proceso fue detenido, puede omitir este paso y continuar directamente con la sección 4.7.
 
@@ -459,13 +461,8 @@ sudo docker ps
 2. En cada instancia de app, levante la aplicación:
 
 ```bash
-npm run start:dev
+npm run start
 ```
-
-> [!IMPORTANT]
-> **Pregunta 6:**
-> Si una de las tres instancias queda con configuración de entorno distinta (por ejemplo timeout, pool de conexiones o variables de DB), ¿cómo se manifestaría este problema en resultados agregados?
-> Incluya al menos una gráfica de ejemplo (p95/p99/error %) que muestre cómo detectaría visualmente la inconsistencia entre instancias.
 
 ### 4.7 Verificación rápida desde el navegador
 
@@ -543,7 +540,16 @@ Para cada endpoint:
 Luego reporte el primer punto (threads) donde dejan de cumplirse.
 ## 7. Entregables
 
-### 7.1 Tablas de resultados
+### 7.1 Evidencias del despliegue
+
+Adjunte capturas del despliegue de la arquitectura en AWS:
+
+- Las 4 instancias EC2 (`Cheapest-db`, `Cheapest-app-1/2/3`) en estado `running`.
+- Los 3 Security Groups con sus reglas de entrada.
+- El ALB y su target group con las 3 instancias `healthy`.
+- `sudo docker ps` en `Cheapest-db` con el contenedor de PostgreSQL arriba.
+
+### 7.2 Tablas de resultados
 
 Entregue **dos tablas** (una por endpoint):
 
@@ -565,21 +571,12 @@ Use este formato (con **p95 y p99**):
 >
 > De cada ejecución se espera reportar todas las columnas de la tabla (threads, ramp-up, p99, p95, throughput, error %) y **marcar explícitamente** el registro correspondiente al **punto de inflexión** (por ejemplo resaltando la fila o con una nota al pie).
 
-- Marque el registro del **punto de inflexión**.
-### 7.2 Evidencias
-
-Adjunte capturas de pantalla de:
-
-- `Summary Report` por iteración (o al menos de las iteraciones relevantes)
-- La iteración donde **deja de cumplir** REQ1 o REQ2
-
-### 7.3 Evidencias y prompts
+### 7.3 Evidencias de pruebas de carga y prompts
 
 Adjunte evidencias de:
 
 - Configuración de la prueba (JMeter o script).
-- Ejecución de pruebas (capturas de Summary Report o logs del script).
-- Iteración donde **deja de cumplir** algún ASR.
+- Ejecución de pruebas (capturas de Summary y Aggregate Reports o logs del script). Al menos para la iteración donde **deja de cumplir** algún ASR y dos iteraciones relevantes más.
 - **Prompts utilizados** (si usó IA) y el **script final**.
 
 ### 7.4 Análisis breve
@@ -588,10 +585,19 @@ Incluya un análisis (1–2 páginas) que responda:
 
 1. ¿Cuál fue el punto de inflexión y cuál ASR se rompió primero?
 2. Con base en los resultados, ¿el diseño monolítico favorece el cumplimiento de los ASRs? Explique.
-3. ¿Qué cambios de arquitectura (estilos o tácticas) propondría para cumplir los ASRs?
+3. ¿Qué cambios de arquitectura (estilos/tácticas/patrones) propondría para cumplir los ASRs?
 4. ¿El patrón de degradación fue gradual o abrupto? ¿Cuál fue el cuello de botella más probable?
 5. ¿Qué endpoint degradó primero y por qué ocurrió?
-6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicadas a Cheapest**
+6. Existen múltiples algoritmos que se pueden usar para el balanceo de cargas, cada uno responde a características del tráfico que pueda tener el servicio a balancear, número de usuarios y comportamiento de los mismos con los sistemas o incluso características de hardware. Investigue qué algoritmo usa ALB y haga una tabla comparativa en múltiples aspectos con los algoritmos Round-robbin, Hashing por IP, Least conn, Least response. En esta tabla **debe comparar las características de los algoritmos aplicados a Cheapest**
+7. Compare cuantitativamente estos resultados con los del **Lab 2** (monolito local): ¿cómo cambiaron el punto de inflexión, el p99, el throughput y el error % al separar App y DB y replicar la App detrás del ALB? ¿La mejora (o la falta de ella) es coherente con el cuello de botella que identificó?
+
+### 7.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado. Cada respuesta debe incluir los elementos que pide la pregunta (tablas, gráficas o diagramas) y debe ir más allá de lo superficial.
+
+> [!IMPORTANT]
+> **¿A dónde se suben los entregables?**
+> A la Actividad correspondiente en el aula de Bloque Neón de su sección.
 
 ## Nota final (créditos AWS)
 

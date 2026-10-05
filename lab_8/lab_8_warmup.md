@@ -61,4 +61,4 @@ El método `getResumen()` ya hace el `GetItem` de DynamoDB. Verifique que la cla
 
 ## Cierre de la sesión
 
-Al terminar, cada equipo debe tener las Tareas 1.1 a 1.3 y 3.1 a 3.2 completas/revisadas y el pull request o commit listo. Esto es exactamente el código que pide el laboratorio en las secciones 5 y 6 — no hay que rehacerlo después, se sigue directamente con el despliegue y el experimento comparativo de la sección 7.
+Al terminar, cada estudiante debe tener las Tareas 1.1 a 1.3 y 3.1 a 3.2 completas/revisadas y el pull request o commit listo. Esto es exactamente el código que pide el laboratorio en las secciones 5 y 6 — no hay que rehacerlo después, se sigue directamente con el despliegue y el experimento comparativo de la sección 7.

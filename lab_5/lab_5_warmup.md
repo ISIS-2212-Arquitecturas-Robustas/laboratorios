@@ -231,4 +231,4 @@ Registre para cada escenario: p99, error %, throughput total, y throughput recib
 
 ## Cierre de la sesión
 
-Al terminar, cada equipo debe tener: el stack de CloudFormation desplegado y verificado (sección 4), los 6 parámetros del sidecar calibrados y verificados localmente (sección 5), y la tabla de métricas baseline del fallo en cascada sin protecciones (sección 6). Esto es exactamente lo que pide el laboratorio antes de aplicar las tácticas de resiliencia — no hay que rehacerlo después, se sigue directamente con la Parte 2.
+Al terminar, cada estudiante debe tener: el stack de CloudFormation desplegado y verificado (sección 4), los 6 parámetros del sidecar calibrados y verificados localmente (sección 5), y la tabla de métricas baseline del fallo en cascada sin protecciones (sección 6). Esto es exactamente lo que pide el laboratorio antes de aplicar las tácticas de resiliencia — no hay que rehacerlo después, se sigue directamente con la Parte 2.

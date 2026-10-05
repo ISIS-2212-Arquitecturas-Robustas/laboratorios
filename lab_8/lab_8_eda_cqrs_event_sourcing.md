@@ -4,7 +4,7 @@
 
 | Etapa | Resumen | Uso de IA generativa |
 | --- | --- | --- |
-| 1. Experimento y ASRs | Contextualizar EDA como respuesta a las limitaciones del Lab 7 y definir criterios de éxito con los mismos ASRs. | Uso acotado para ordenar hipótesis; la justificación de la arquitectura debe ser propia. |
+| 1. Experimento y ASRs | Contextualizar EDA como respuesta a las limitaciones del Lab 7; hipótesis de diseño, escenarios de calidad vinculados (mismos ASRs), diseño y planeación del experimento. | Uso acotado para ordenar hipótesis; la justificación de la arquitectura debe ser propia. |
 | 2. Arquitectura y conceptos | Análisis de EDA, CQRS y Event Sourcing; trade-offs de consistencia eventual y confiabilidad en la publicación. | Recomendado para contrastar trade-offs de consistencia eventual vs. fuerte. |
 | 3. Infraestructura (CloudFormation) | Despliegue de EventBridge, SQS, DynamoDB en AWS. | Recomendado para asistencia operativa; verifique manualmente en la consola. |
 | 4. Parte 1 - Event Sourcing | Completar el event store de Pedidos y verificar el historial de transiciones. | Recomendado para soporte de implementación; validar comportamiento real. |
@@ -45,7 +45,7 @@
 
 ### 1.2 Contexto de negocio
 
-En el Lab 7, el endpoint `GET /ventas/resumen-operativo` -que llama síncronamente a Logística e Inventario- violó ASR-1 (p99 < 2000 ms) a cargas donde los servicios individuales funcionaban correctamente. La causa estructural fue el **fan-out síncrono**: la latencia del orquestador es la suma de las latencias de sus dependientes, y bajo carga esa suma crece de forma no lineal. La Pregunta 3 del Lab 7 les pidió proponer una alternativa. Este laboratorio implementa esa alternativa.
+En el Lab 7, el endpoint `GET /ventas/resumen-operativo` -que llama síncronamente a Logística e Inventario- violó ASR-1 (p99 < 2000 ms) a cargas donde los servicios individuales funcionaban correctamente. La causa estructural fue el **fan-out síncrono**: la latencia del orquestador es la suma de las latencias de sus dependientes, y bajo carga esa suma crece de forma no lineal. La Pregunta 3 del Lab 7 le pidió proponer una alternativa. Este laboratorio implementa esa alternativa.
 
 Cheapest tiene tres necesidades que la arquitectura síncrona no puede satisfacer simultáneamente:
 
@@ -61,7 +61,16 @@ Cheapest tiene tres necesidades que la arquitectura síncrona no puede satisface
 > Distinga con precisión entre **latencia de consulta** (tiempo que experimenta el tendero) y **latencia de procesamiento del evento** (tiempo que tarda el consumer en actualizar el read model).
 > ¿Qué cambió en la dependencia temporal entre el servicio de Ventas y el de Inventario respecto al Lab 7?
 
-### 1.3 ASRs
+### 1.3 Hipótesis de diseño
+
+| # | Hipótesis |
+| --- | --- |
+| H1 | **Si** implementamos CQRS con un read model pre-computado en DynamoDB, alimentado por eventos `VentaCreada` desde EventBridge y SQS, **entonces** `GET /ventas/resumen-tienda/:tiendaId` responde con p99 < 100 ms bajo cualquier nivel de carga y sin generar requests a Logística ni Inventario, **porque** el fan-out se mueve del tiempo de consulta al tiempo de escritura y cada consulta es un `GetItem` independiente de la carga de los demás servicios. |
+| H2 | **Si** desacoplamos Ventas de Inventario mediante eventos (EDA) en el write path, **entonces** `POST /ventas/ventas` responde 201 y el resumen se sigue sirviendo (error % = 0%) aun con Inventario en `desired count = 0`, **porque** los eventos se acumulan en SQS y se procesan cuando el consumer se recupera, eliminando el acoplamiento temporal. |
+| H3 | **Si** almacenamos los cambios de estado de los Pedidos como eventos inmutables (Event Sourcing), **entonces** el historial completo del pedido y cualquier proyección pueden reconstruirse por re-proyección, **porque** el event store es la fuente de verdad y el estado actual es una función de sus eventos. |
+| H4 | **Si** aceptamos consistencia eventual en el read model, **entonces** el campo `ultimaActualizacion` refleja la última venta en < 10 s bajo carga normal, **porque** el consumer procesa los eventos de SQS de forma asíncrona y a su propio ritmo, a cambio de que la consulta pueda mostrar datos ligeramente obsoletos. |
+
+### 1.4 Escenarios de calidad vinculados
 
 Los ASRs son **idénticos a los del Lab 7**. El objetivo es demostrar que EDA los satisface donde el patrón síncrono falló.
 
@@ -80,7 +89,7 @@ Adicionalmente, EDA introduce una propiedad nueva que la arquitectura síncrona 
 > [!IMPORTANT]
 > **Nótese la tensión entre ASR-1 y ASR-EDA-4.** ASR-1 exige latencia de consulta baja (servida por DynamoDB, independiente del procesamiento de eventos). ASR-EDA-4 exige que los datos sean recientes (depende de la velocidad del consumer). Son propiedades del sistema que viven en partes distintas del flujo y tienen trade-offs distintos.
 
-### 1.4 Por qué EDA cambia el perfil de latencia
+### 1.5 Por qué EDA cambia el perfil de latencia
 
 **Fan-out secuencial — Lab 7 `GET /ventas/resumen-operativo`:**
 
@@ -97,6 +106,54 @@ $$T_{\text{resumen-sync}} \geq \max(T_{\text{logistica}},\; T_{\text{inventario}
 El paralelismo reduce la latencia nominal, pero **no elimina el problema estructural**: la respuesta sigue acotada por el servicio más lento. Bajo carga, cuando $\rho_i \to 1$ en cualquier dependiente, $T_i$ crece de forma no lineal (cola M/M/1) y el endpoint absorbe ese crecimiento aunque el otro servicio esté sano. Un servicio saturado contamina la latencia del endpoint completo, sin importar si las llamadas son secuenciales o paralelas.
 
 Ambos patrones comparten la misma debilidad estructural: el **fan-out en tiempo de consulta** acopla temporalmente al orquestador con sus dependientes. EDA rompe ese acoplamiento moviendo el fan-out al tiempo de escritura, como se verá en el experimento de la Sección 7.
+
+### 1.6 Diseño del experimento
+
+**¿Cómo se va a validar la hipótesis?** Con un experimento comparativo de control y tratamiento (sección 7): dos endpoints que responden la misma pregunta sobre la misma infraestructura, donde la única variable que cambia es *cuándo* ocurre el fan-out (consulta vs. escritura). Adicionalmente, se verifica funcionalmente el Event Sourcing (Parte 1) y el CQRS Read Model (Parte 2), y se prueba el comportamiento ante la caída de Inventario.
+
+**¿Qué componentes se van a diseñar o modificar?**
+
+| Componente | Cambio |
+| --- | --- |
+| Logística | Event store de Pedidos (`eventos_pedido`) e historial de transiciones (sección 5) |
+| Ventas | Publicación de `VentaCreada` en EventBridge y endpoints `resumen-tienda` (EDA) y `resumen-tienda-sync` (control) |
+| Consumer (Inventario) | Lectura desde SQS y actualización del read model en DynamoDB (sección 6) |
+| EventBridge, SQS, DynamoDB | Infraestructura desplegada con CloudFormation (sección 4) |
+
+**¿Qué métricas se van a medir?**
+
+| Métrica | Hipótesis / ASR | Umbral |
+| --- | --- | --- |
+| p99, p95, throughput y error % de `resumen-tienda` vs. `resumen-tienda-sync` por nivel de carga | H1 / ASR-1, ASR-2 | p99 < 2000 ms a 500 req/min; error % ≤ 10% a 5000 req/min |
+| `RequestCount` en los Target Groups de Logística e Inventario durante las pruebas | H1 | 0 requests por consulta EDA |
+| Respuestas de `POST` y de ambos `GET`, y mensajes acumulados en SQS con Inventario en `desired count = 0` | H2 / ASR-3 | error % = 0% en el read path EDA |
+| Historial de versiones de un Pedido en `eventos_pedido` | H3 | eventos ordenados por versión |
+| Diferencia entre `ultimaActualizacion` y la última venta | H4 / ASR-EDA-4 | < 10 s |
+
+### 1.7 Planeación del experimento
+
+**Recursos requeridos**
+
+| Recurso | Detalle |
+| --- | --- |
+| Infraestructura AWS | Stack de CloudFormation con ECS/Fargate, EventBridge, SQS, DynamoDB y RDS en su cuenta |
+| Herramientas locales | Docker, AWS CLI, JMeter y el código de la rama del laboratorio |
+| Créditos AWS | Elimine el stack al terminar para evitar costos |
+
+**Elementos de arquitectura involucrados**
+
+Servicios de Ventas, Logística e Inventario (consumer), PostgreSQL (write model y event store), EventBridge y SQS (bus y cola de eventos), DynamoDB (read model) y JMeter como generador de carga.
+
+**Esfuerzo estimado** (referencia para planear; puede variar según su experiencia con AWS)
+
+| Etapa | Secciones | Esfuerzo aprox. |
+| --- | --- | --- |
+| Preparación de infraestructura (IaC) | 4 | 0,5 h |
+| Parte 1: Event Sourcing | 5 | 0,5 h |
+| Parte 2: CQRS Read Model | 6 | 0,5 h |
+| Experimento comparativo | 7 | 1,5 h |
+| Análisis y entregables | 8 | 1 h |
+| **Total** | | **4 h** |
 
 ---
 
@@ -181,7 +238,7 @@ sequenceDiagram
     Logística-->>Operador: [{v:1, PedidoCreado}, {v:2, PedidoCambioEstado}, ...]
 ```
 
-### 2.3 Estilos de arquitectura
+### 2.3 Tácticas y patrones (estilos de arquitectura aplicados)
 
 #### Event-Driven Architecture (EDA)
 
@@ -421,9 +478,6 @@ GET <ApiGatewayUrl>/logistics/pedidos/<pedidoId>/historial
 ```
 
 ---
-
-> [!NOTE]
-> **Warm-up en clase:** las secciones 5 y 6 (Tareas 1.1-1.3 y 3.1-3.2 — completar y revisar el código de Event Sourcing y CQRS) están disponibles como una sesión práctica de 40 minutos para trabajar en clase, sin necesidad de tener el stack desplegado: [`lab_8_warmup.md`](lab_8_warmup.md). Si su profesor ya realizó esta sesión en clase, puede saltar directamente a la sección **7. Experimento comparativo**.
 
 ## 5. Parte 1 - Event Sourcing: historial de Pedidos
 
@@ -682,11 +736,7 @@ Adjunte capturas de:
 - ECS → Inventario con `desired count = 0` durante la prueba de resiliencia (Pregunta 4).
 - ECS → Ventas respondiendo 201 a `POST /ventas/ventas` mientras Inventario está en `desired count = 0`.
 
-### 8.4 Respuestas a las preguntas
-
-Incluya las respuestas a las Preguntas 1–5 en el informe.
-
-### 8.5 Análisis (2–3 páginas)
+### 8.4 Análisis (2–3 páginas)
 
 Responda:
 
@@ -694,7 +744,11 @@ Responda:
 2. ¿El endpoint EDA satisface ASR-3 con Inventario en `desired count = 0`? ¿El endpoint síncrono lo satisfacía con Inventario en `desired count = 1`? Compare ambos resultados.
 3. ¿Qué sacrificó Cheapest al adoptar EDA para el resumen? Nombre dos escenarios de negocio concretos donde la **consistencia eventual** sería un problema real para Cheapest.
 4. ¿En qué punto el overhead operativo de EDA (EventBridge + SQS + DynamoDB + Event Sourcing) deja de valer la pena? ¿Cuándo no recomendaría este patrón? Considere también el riesgo de at-most-once delivery: ¿qué nivel de pérdida de eventos sería tolerable para Cheapest?
-5. Responda la Pregunta 5 (escenario de fallo). ¿Qué limitación de EDA revela ese escenario y cómo se mitigaría en producción?
+5. Con base en su respuesta a la Pregunta 5 (escenario de fallo), ¿qué limitación de EDA revela ese escenario y cómo se mitigaría en producción?
+
+### 8.5 Respuestas a las preguntas del laboratorio
+
+Incluya en el informe las respuestas argumentadas a la **Pregunta 1 a la Pregunta 5**, planteadas a lo largo del enunciado (incluidas todas las sub-preguntas numeradas). Deben ir más allá de lo superficial.
 
 ---
 
