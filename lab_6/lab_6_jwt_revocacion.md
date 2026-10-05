@@ -219,9 +219,18 @@ Este lab incluye un template de CloudFormation basado en el Lab 4, extendido con
 
 Antes de desplegar, publique las imágenes Docker en ECR desde la rama `cognito-auth`.
 
+Siga el [tutorial para subir imágenes a ECR](../tutoriales/subir_imagenes%20_a_ecr.md). Lo único que cambia para este laboratorio es:
+
+- **Rama:** `cognito-auth`.
+- **Imágenes:** como vimos en el [diagrama de componentes](#21-diagrama-de-componentes), se necesitan tres, una por servicio (`logistica`, `inventario` y `ventas`). Repita los pasos del tutorial para cada una.
+- **Repositorios:** `cheapest-logistica`, `cheapest-inventario` y `cheapest-ventas`.
+- **Tag:** `1.0.0`.
+
 ### 4.1 Desplegar el stack
 
 Desde la carpeta `lab_6/recursos/`:
+
+Reemplace cada `<URI_ECR_...>` por la URI de la imagen que publicó para ese servicio (el formato de la URI se explica en el [paso 4 del tutorial de ECR](../tutoriales/subir_imagenes%20_a_ecr.md#8-paso-4-etiquetar-la-imagen-con-la-uri-de-ecr)):
 
 ```bash
 aws cloudformation deploy \
@@ -231,6 +240,19 @@ aws cloudformation deploy \
     LogisticaImageUri=<URI_ECR_LOGISTICA> \
     InventarioImageUri=<URI_ECR_INVENTARIO> \
     VentasImageUri=<URI_ECR_VENTAS> \
+    DBPassword=<PASSWORD>
+```
+
+Por ejemplo, con los repositorios y el tag `1.0.0` de la sección anterior:
+
+```bash
+aws cloudformation deploy \
+  --stack-name Cheapest-lab6-jwt \
+  --template-file cloudformation_template.yaml \
+  --parameter-overrides \
+    LogisticaImageUri=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cheapest-logistica:1.0.0 \
+    InventarioImageUri=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cheapest-inventario:1.0.0 \
+    VentasImageUri=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cheapest-ventas:1.0.0 \
     DBPassword=<PASSWORD>
 ```
 
