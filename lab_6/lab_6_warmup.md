@@ -13,7 +13,7 @@ Este warm-up asume que el stack de CloudFormation del Lab 6 (sección 4 del enun
 
 ## Prerrequisitos (antes de empezar)
 
-1. Tener AWS CLI instalada y configurada (`aws configure`) apuntando a la misma cuenta/región donde se desplegó el stack. [Aqui tiene que ir la referencia a la nota instalar_brew.md y mas especificamente a la seccion donde se descarga esta aplicacion]
+1. Tener AWS CLI instalada y configurada (`aws configure`) apuntando a la misma cuenta/región donde se desplegó el stack.
 2. Tener `jq` instalado (permite extraer los tokens del JSON de respuesta sin copiar/pegar a mano). Verifiquen con:
    ```bash
    jq --version
@@ -24,8 +24,6 @@ Este warm-up asume que el stack de CloudFormation del Lab 6 (sección 4 del enun
    export USER_POOL_ID="<CognitoUserPoolId>"
    export APP_CLIENT_ID="<CognitoUserPoolClientId>"
    ```
-TODO [Colocar referencia de instalar_brew.md]
-[Falta agregar como se instala awscli en windows, para esto puedes agregar los pasos aqui (mencionar que app abrir en windows y el comando que se tiene que colocar, yo encontre el siguiente: irm https://awscli.amazonaws.com/v2/install.ps1 | iex)]
 
 Si tienen dudas sobre algún comando, la referencia completa (con más opciones) está en `recursos/auth_cli.md`.
 

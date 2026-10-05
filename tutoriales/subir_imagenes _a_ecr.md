@@ -75,36 +75,12 @@ REPO_NAME=cheapest-inventario
 IMAGE_TAG=0.0.1
 ```
 
-Para no tener que escribir estos valores en cada comando, ejecute lo siguiente en su CloudShell para dejarlos guardados como variables de la sesión:
+Recuerde cambiar estos valores por sus valores reales.
 
-```bash
-REGION=us-east-1
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-```
-
-> [!CAUTION]
-> Estas variables solo existen mientras dure la sesión de CloudShell. Si cierra CloudShell o la sesión se desconecta, `$REGION` y `$ACCOUNT_ID` quedarán vacías y tendrá que volver a ejecutar estos comandos (o reemplazar los valores manualmente) antes de continuar con el resto del tutorial.
-
-**¿Cómo identificar el ID de su cuenta?**
-
-Su Account ID se encuentra en la parte superior derecha de la consola de AWS, como se muestra en el recuadro rojo de la siguiente imagen. En el recuadro azul puede ver el resultado de ejecutar `ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)`:
-
-![](./recursos/Account_ID.png)
+Su Account ID se encuentra en la parte superior derecha de la consola de AWS.
 
 > [!IMPORTANT]
 > El Account ID se usa sin guiones (`-`). Si lo copia desde la consola con guiones, elimínelos antes de usarlo.
-
-Recuerde cambiar estos valores por sus valores reales.
-
-Para verificar que las variables quedaron correctamente inicializadas, ejecute:
-
-```bash
-echo "Región: $REGION | Cuenta: $ACCOUNT_ID"
-```
-
-Le debe aparecer algo similar a lo mostrado en la siguiente imagen:
-
-![](./recursos/resultado_echo.png)
 
 ## 5. Paso 1: crear el repositorio en Amazon ECR
 
@@ -175,7 +151,7 @@ Para subir la imagen a ECR, debe etiquetarla con la URI completa del repositorio
 > Si no recuerda el nombre exacto de su repositorio, puede consultarlo con:
 >
 > ```bash
-> aws ecr describe-repositories --region $REGION --query "repositories[].repositoryName"
+> aws ecr describe-repositories --region us-east-1 --query "repositories[].repositoryName"
 > ```
 >
 > ![](./recursos/repositories_names.png)
