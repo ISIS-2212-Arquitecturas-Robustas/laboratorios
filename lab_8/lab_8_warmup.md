@@ -6,7 +6,7 @@ El código vive en la rama `cheapest-eda` del repositorio `Cheapest-api`. La ent
 
 ## Tarea 
 
-### 5. Parte 1 - Event Sourcing: historial de Pedidos
+### Parte 1 - Event Sourcing: historial de Pedidos
 
 #### Tarea 1.1 - Completar `EventoPedidoRepository`
 
@@ -42,7 +42,7 @@ El endpoint `GET /logistics/pedidos/:id/historial` ya está registrado en `Pedid
 
 Con el código completo, esta es la verificación esperada (guárdenla para correrla apenas tengan el stack desplegado): crear un pedido, avanzar su estado tres veces con `PATCH`, y consultar `/historial` — la respuesta debe mostrar **4 eventos** en orden: `PedidoCreado` (versión 1) + 3 `PedidoCambioEstado` (versiones 2, 3, 4).
 
-### 6. Parte 2 - CQRS Read Model
+### Parte 2 - CQRS Read Model
 
 #### Tarea 3.1 - Revisar `updateResumenTienda()` en `VentaCreadaConsumer`
 
@@ -61,4 +61,4 @@ El método `getResumen()` ya hace el `GetItem` de DynamoDB. Verifique que la cla
 
 ## Cierre de la sesión
 
-Al terminar, cada estudiante debe tener las Tareas 1.1 a 1.3 y 3.1 a 3.2 completas/revisadas y el pull request o commit listo. Esto es exactamente el código que pide el laboratorio en las secciones 5 y 6 — no hay que rehacerlo después, se sigue directamente con el despliegue y el experimento comparativo de la sección 7.
+Al terminar, cada estudiante debe tener las Tareas 1.1 a 1.3 y 3.1 a 3.2 completas/revisadas y el pull request o commit listo. Esto es exactamente el código que pide el laboratorio al inicio de su ejecución (completar el Event Sourcing y revisar el modelo de lectura) — no hay que rehacerlo después, se sigue directamente con la publicación de imágenes, el despliegue y el experimento comparativo.

@@ -34,15 +34,15 @@ aws cognito-idp admin-set-user-password \
   --username tendero1@example.com \
   --password 'Lab6-Password#2026' \
   --permanent
+```
 
-Opcional: asignar el usuario a un grupo (para RBAC por `cognito:groups`):
+Asignar el usuario a un grupo (para RBAC por `cognito:groups`):
 
 ```bash
 aws cognito-idp admin-add-user-to-group \
   --user-pool-id "$USER_POOL_ID" \
   --username tendero1@example.com \
   --group-name operador
-```
 ```
 
 ## 2. Login (obtener access + refresh)

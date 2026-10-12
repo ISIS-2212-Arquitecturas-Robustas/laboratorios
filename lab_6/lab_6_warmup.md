@@ -5,7 +5,7 @@
 - **Access token**: credencial de corta vida que viaja en cada request (`Authorization: Bearer`). Su verificación es local (firma, issuer, audience); mientras no expire, un servicio que confía en su firma lo acepta.
 - **Refresh token**: credencial de larga vida que **no** se usa para llamar APIs; solo sirve para pedir nuevos access tokens.
 
-Este warm-up asume que el stack de CloudFormation del Lab 6 (sección 4 del enunciado) **ya está desplegado**. Necesitarán los Outputs del stack:
+Este warm-up asume que el stack de CloudFormation del Lab 6 (el paso de despliegue del stack del enunciado) **ya está desplegado**. Necesitarán los Outputs del stack:
 
 - `ApiGatewayUrl`
 - `CognitoUserPoolId`
@@ -29,7 +29,7 @@ Si tienen dudas sobre algún comando, la referencia completa (con más opciones)
 
 ## Tarea práctica
 
-### 6. Parte 1 — Incidente: secuestro de token
+### Incidente: secuestro de token
 
 Este ejercicio simula que un atacante obtiene un **refresh token** de un usuario. Van a hacer, en orden, los 4 pasos siguientes. Cada paso indica el comando exacto a ejecutar y qué deben capturar como evidencia.
 
@@ -128,4 +128,4 @@ Al terminar los 4 pasos, cada estudiante debe tener:
 - Evidencia de la llamada exitosa al endpoint protegido con `ACCESS_TOKEN` (Paso 3).
 - Evidencia de que el "atacante" pudo emitir nuevos access tokens repetidamente usando `REFRESH_TOKEN`, y que cada uno de esos tokens funcionó contra el endpoint protegido (Paso 4).
 
-Esto es exactamente la sección "6. Parte 1 — Incidente" del laboratorio — **no hay que rehacerlo después**, se sigue directamente con la contención (revocación) en la Parte 2 (sección 7 del enunciado, `lab_6_jwt_revocacion.md`).
+Esto es exactamente el incidente de secuestro del refresh token que pide el laboratorio en la realización de pruebas — **no hay que rehacerlo después**, se sigue directamente con la contención por revocación del enunciado (`lab_6_jwt_revocacion.md`).

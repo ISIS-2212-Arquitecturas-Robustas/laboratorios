@@ -22,36 +22,15 @@
 
 ## Índice
 
-- [Lab 1 - Fundamentos de Nest](#lab-1---fundamentos-de-nest)
-  - [Objetivos](#objetivos)
-  - [Índice](#índice)
-  - [1. Introducción a Nest](#1-introducción-a-nest)
-  - [2. Componentes principales de Nest](#2-componentes-principales-de-nest)
-    - [2.1 Middleware](#21-middleware)
-    - [2.2 Controladores (Controllers)](#22-controladores-controllers)
-    - [2.3 Providers](#23-providers)
-    - [2.4 Módulos (Modules)](#24-módulos-modules)
-  - [3. Arquitectura que seguiremos en el curso](#3-arquitectura-que-seguiremos-en-el-curso)
-  - [4. Inyección de dependencias](#4-inyección-de-dependencias)
-    - [¿Cómo funciona?](#cómo-funciona)
-    - [Ejemplo concreto](#ejemplo-concreto)
-    - [¿Por qué esto importa?](#por-qué-esto-importa)
-  - [5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Cheapest](#5-creación-de-un-crud-en-nest-construyendo-un-crud-para-la-aplicación-de-Cheapest)
-    - [5.1 Vista de Información y Funcional de Cheapest](#51-vista-de-información-y-funcional-de-Cheapest)
-    - [Instalación del ambiente de desarrollo](#instalación-del-ambiente-de-desarrollo)
-      - [Requisitos previos](#requisitos-previos)
-      - [Instalación del CLI de Nest](#instalación-del-cli-de-nest)
-      - [Creación del proyecto](#creación-del-proyecto)
-      - [Instalación de dependencias necesarias](#instalación-de-dependencias-necesarias)
-      - [Configuración de base de datos](#configuración-de-base-de-datos)
-    - [Paso 0 — Módulo de datasources](#paso-0--módulo-de-datasources)
-      - [Componentes principales:](#componentes-principales)
-    - [Paso 1 — Definir la entidad](#paso-1--definir-la-entidad)
-    - [Paso 2 — Repositorio (persistencia)](#paso-2--repositorio-persistencia)
-    - [Paso 3 — Servicio (lógica de aplicación)](#paso-3--servicio-lógica-de-aplicación)
-    - [Paso 4 — Controller (rutas HTTP)](#paso-4--controller-rutas-http)
-    - [Paso 5 — Wiring en el módulo](#paso-5--wiring-en-el-módulo)
-  - [Entregables](#entregables)
+- [Etapas del laboratorio](#etapas-del-laboratorio)
+- [Objetivos](#objetivos)
+- [Índice](#índice)
+- [1. Introducción a Nest](#1-introducción-a-nest)
+- [2. Componentes principales de Nest](#2-componentes-principales-de-nest)
+- [3. Arquitectura que seguiremos en el curso](#3-arquitectura-que-seguiremos-en-el-curso)
+- [4. Inyección de dependencias](#4-inyección-de-dependencias)
+- [5. Creación de un CRUD en Nest. Construyendo un CRUD para la aplicación de Cheapest](#5-creación-de-un-crud-en-nest-construyendo-un-crud-para-la-aplicación-de-cheapest)
+- [Entregables](#entregables)
 
 ---
 
@@ -71,7 +50,7 @@ Nest como framework solo distingue 3 capas de responsabilidad, middlewares, cont
 4. Providers de infraestructura (repositorios, monitoreo, almacenamiento, colas)
 
 > [!NOTE]
-> Estos 4 niveles **no** son una capa adicional que agrega Nest, sino una decisión arquitectónica desde las 3 capas nativas del framework (Middleware, Controllers, Providers) que usaremos en este curso para bajar el acoplamiento. En las subsecciones 2.1–2.4 a continuación, `Service` y `Providers de infraestructura` (niveles 3 y 4) se explican juntos bajo el título **2.3 Providers**, ya que ambos son, desde la perspectiva de Nest, providers gestionados por el mismo contenedor de inyección de dependencias. Adicionalmente se agrega la subsección **2.4 Módulos**, que no es una capa de responsabilidad de negocio sino el mecanismo organizacional que agrupa Middleware, Controllers y Providers dentro de un mismo contexto funcional.
+> Estos 4 niveles **no** son una capa adicional que agrega Nest, sino una decisión arquitectónica desde las 3 capas nativas del framework (Middleware, Controllers, Providers) que usaremos en este curso para bajar el acoplamiento. A continuación, `Service` y `Providers de infraestructura` (niveles 3 y 4) se explican juntos bajo el título **Providers**, ya que ambos son, desde la perspectiva de Nest, providers gestionados por el mismo contenedor de inyección de dependencias. Después se explican los **Módulos**, que no son una capa de responsabilidad de negocio sino el mecanismo organizacional que agrupa Middleware, Controllers y Providers dentro de un mismo contexto funcional.
 
 ### 2.1 Middleware
 El middleware es la capa que ejecuta antes de que la petición llegue al controlador.
@@ -215,9 +194,21 @@ const moduleRef = await Test.createTestingModule({
 Se recomienda revisar la documentación oficial para profundizar en providers personalizados y scopes:
 [https://docs.nestjs.com/fundamentals/custom-providers](https://docs.nestjs.com/fundamentals/custom-providers)
 
+### Alcance (scope) de un provider
+
+Cuando Nest crea un provider, también decide **cuántas instancias** de esa clase existen y cuánto tiempo viven. A esto se le llama *scope* (alcance) y hay tres opciones:
+
+| Scope | Comportamiento |
+| --- | --- |
+| Singleton (por defecto) | Nest crea **una sola instancia** al arrancar la aplicación y la comparte entre todas las clases que la piden y entre todas las peticiones. |
+| Request | Nest crea **una instancia nueva por cada petición HTTP** que llega, y la descarta cuando la petición termina. |
+| Transient | Nest crea **una instancia nueva para cada clase** que la pide; las instancias no se comparten. |
+
+El scope se declara en el decorador, por ejemplo `@Injectable({ scope: Scope.REQUEST })`. Si no se indica nada, el provider es singleton.
+
 ### ¿Qué genera el CLI de Nest al crear un módulo?
 
-Antes de avanzar al Capítulo 5, es útil saber qué produce el CLI de Nest cuando se generan un módulo y un servicio con los comandos:
+Antes de construir el CRUD, es útil saber qué produce el CLI de Nest (su herramienta de línea de comandos, que instalará al preparar el ambiente de desarrollo) cuando se generan un módulo y un servicio con los comandos:
 
 ```bash
 nest generate module logistica
@@ -257,7 +248,7 @@ Por último podemos identificar cada uno de estos subdominios como componentes, 
 *Figura 2. Diagrama de componentes y conectores de Cheapest. Cada componente (Inventario, Inteligencia de negocio, Ventas, Logística/pedidos/operaciones, Identificación y autenticación, Fiado) corresponde a un subdominio y se mapeará a un módulo de Nest.*
 
 > [!NOTE]
-> **Diagrama de dominio vs. diagrama de componentes:** en el [diagrama de subdominios](recursos/Subdominios.png), la entidad `Producto` aparece coloreada dentro del subdominio de **Ventas**. Sin embargo, en la implementación (y en el entregable 2.1) `Producto` se construye dentro del módulo de **Logística** (`LogisticaModule`), junto con `Catalogo`. Esta decisión se toma porque, en términos de comportamiento y ciclo de vida, `Producto` está más acoplado a la gestión de catálogo (qué productos existen, sus atributos, su disponibilidad) que a la lógica de venta en sí misma; `Venta` seguirá viviendo conceptualmente en el subdominio de Ventas. Tenga esto en cuenta al leer el diagrama de dominio: no todos los elementos se implementan en el subdominio con el que están coloreados, y donde exista esta discrepancia, priorice lo indicado en el enunciado del entregable sobre el color del diagrama.
+> **Diagrama de dominio vs. diagrama de componentes:** en el [diagrama de subdominios](recursos/Subdominios.png), la entidad `Producto` aparece coloreada dentro del subdominio de **Ventas**. Sin embargo, en la implementación `Producto` se construye dentro del módulo de **Logística** (`LogisticaModule`), junto con `Catalogo`. Esta decisión se toma porque, en términos de comportamiento y ciclo de vida, `Producto` está más acoplado a la gestión de catálogo (qué productos existen, sus atributos, su disponibilidad) que a la lógica de venta en sí misma; `Venta` seguirá viviendo conceptualmente en el subdominio de Ventas. Tenga esto en cuenta al leer el diagrama de dominio: no todos los elementos se implementan en el subdominio con el que están coloreados, y donde exista esta discrepancia, priorice lo que le pide este enunciado sobre el color del diagrama.
 
 A continuación se resume cómo los elementos del modelado (dominio y componentes) se traducen a artefactos concretos en el código Nest:
 
@@ -282,7 +273,7 @@ Con esta organización en mente, vamos a crear el CRUD de Catálogo pertenecient
 - `Client` (mock): simula la verificación de la tienda remota.
 
 > [!NOTE]
-> **¿Qué es un DTO?** Un DTO (*Data Transfer Object*) es una clase simple cuyo único propósito es definir la forma de los datos que entran o salen de la aplicación (p. ej. el cuerpo de un `POST`), sin contener lógica de negocio. En Nest, los DTOs se combinan con `class-validator` para declarar, con decoradores, qué reglas debe cumplir cada campo (`@IsUUID()`, `@IsString()`, etc.). Se usan DTOs en lugar de exponer directamente las `Entity` para no acoplar el contrato HTTP a la estructura de la base de datos y para poder validar la entrada antes de que llegue a la lógica de negocio. Verá DTOs concretos como `CreateCatalogoDto` más adelante, en el Paso 4.
+> **¿Qué es un DTO?** Un DTO (*Data Transfer Object*) es una clase simple cuyo único propósito es definir la forma de los datos que entran o salen de la aplicación (p. ej. el cuerpo de un `POST`), sin contener lógica de negocio. En Nest, los DTOs se combinan con `class-validator` para declarar, con decoradores, qué reglas debe cumplir cada campo (`@IsUUID()`, `@IsString()`, etc.). Se usan DTOs en lugar de exponer directamente las `Entity` para no acoplar el contrato HTTP a la estructura de la base de datos y para poder validar la entrada antes de que llegue a la lógica de negocio. Verá un DTO concreto, `CreateCatalogoDto`, cuando construyamos el controlador.
 
 ### Instalación del ambiente de desarrollo
 Antes de iniciar el laboratorio es necesario preparar el entorno de trabajo.
@@ -341,7 +332,7 @@ Además de `src/`, el CLI genera varios archivos y carpetas a nivel de proyecto 
 
 Para este laboratorio se utilizará:
 
-- **TypeORM**: ORM (*Object-Relational Mapper*) para manejar la persistencia con PostgreSQL. Ver la nota sobre TypeORM en el Paso 1.
+- **TypeORM**: ORM (*Object-Relational Mapper*) para manejar la persistencia con PostgreSQL. Un ORM es una librería que traduce entre las clases de un lenguaje de programación y las tablas de una base de datos relacional, para no escribir SQL a mano en las operaciones más comunes.
 - **PostgreSQL (`pg`)**: driver/cliente de Node.js para conectarse a una base de datos PostgreSQL; TypeORM lo usa internamente para ejecutar las queries.
 - **class-validator**: permite anotar propiedades de una clase (un DTO) con decoradores de validación (`@IsUUID()`, `@IsString()`, `@MaxLength()`, etc.), reglas que luego `ValidationPipe` evalúa automáticamente en cada request.
 - **class-transformer**: transforma objetos planos (por ejemplo, el JSON recibido en un request) en instancias de una clase, y viceversa (ej. parsear un string de fecha en un objeto `Date`). `ValidationPipe` lo usa internamente cuando se configura con `{ transform: true }`.
@@ -407,10 +398,10 @@ http://localhost:3000
 Usted tiene en este momento las herramientas necesarias para levantar un proyecto desde cero, configurar la base de datos y ejecutar la aplicación. Para los siguientes pasos **no seguimos trabajando sobre el proyecto `cheapest-backend` que acabamos de crear**; en su lugar vamos a trabajar con un proyecto ya creado con esta configuración, el cual se encuentra en el [repositorio de Cheapest-api](https://github.com/ISIS-2212-Arquitecturas-Robustas/Cheapest-api), en la rama `main`.
 
 > [!IMPORTANT]
-> Debe hacer un **fork** de este repositorio a su cuenta de GitHub (ver la sección [Estandarización del repositorio de entrega](#estandarización-del-repositorio-de-entrega) en Entregables) y luego clonar **su fork**, no el repositorio original:
+> Debe hacer un **fork** de este repositorio a su cuenta de GitHub (una copia del repositorio bajo su usuario, sobre la que usted puede escribir) y luego clonar **su fork**, no el repositorio original:
 >
 > ```bash
-> git clone https://github.com/ISIS-2212-Arquitecturas-Robustas/cheapest-api.git
+> git clone https://github.com/<SU_USUARIO_DE_GITHUB>/cheapest-api.git
 > cd cheapest-api
 > git checkout main
 > npm install
@@ -458,7 +449,7 @@ src/
 ```
 
 > [!NOTE]
-> El subdominio de **Identificación y autenticación** (`Tienda`) **todavía no existe** como módulo en el repositorio — es justamente lo que usted debe crear como parte del **Entregable 2.2** (`IdentificacionModule`), siguiendo la misma organización interna (`controllers/`, `services/`, `repositories/entities/`, `dtos/`) que ya ven en `logistica/`, `inventario/` y `ventas/`.
+> El subdominio de **Identificación y autenticación** (`Tienda`) **todavía no existe** como módulo en el repositorio — es justamente lo que usted debe crear como parte de los entregables de este laboratorio (`IdentificacionModule`), siguiendo la misma organización interna (`controllers/`, `services/`, `repositories/entities/`, `dtos/`) que ya ven en `logistica/`, `inventario/` y `ventas/`.
 
 ### Paso 0 — Módulo de datasources
 
@@ -813,6 +804,8 @@ export class CreateCatalogoDto {
 ```
 
 El DTO además de tener los tipos que debe transportar, una serie de decoradores que van a señalar las validaciones que debe cumplir una instancia de esta clase que llegue en la petición
+
+Hasta aquí ha visto dos mecanismos de Nest que se ejecutan alrededor de un controller: el **Middleware** (antes de llegar al controller) y los **Pipes** (justo antes de que el dato llegue al método). Nest ofrece otros dos que no se usan en este CRUD: los **Guards**, que deciden si una petición puede continuar o no (por ejemplo, según quién la hace), y los **Interceptors**, que envuelven la ejecución del método para, por ejemplo, transformar la respuesta o medir cuánto tardó.
 
 > [!IMPORTANT]
 > **Pregunta 4:**
