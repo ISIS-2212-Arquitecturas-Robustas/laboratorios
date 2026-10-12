@@ -227,6 +227,8 @@ Los conectores que se miden son el HTTP entre el generador de carga y API Gatewa
 
 *Diagrama de despliegue. Cada servicio de ECS indica la imagen del contenedor, la CPU y la memoria de cada tarea, y el número de instancias (tareas) con el que arranca: 1 por microservicio.*
 
+Al terminar el despliegue, una petición recorrerá este camino: su computador → API Gateway (URL pública) → ALB (un puerto por microservicio) → contenedor del microservicio en ECS → base de datos en RDS.
+
 #### 4.5.3 Esfuerzo estimado
 
 Referencia para planear; puede variar según su experiencia con AWS.
@@ -259,6 +261,18 @@ Antes de iniciar el despliegue, revise la guía de migración. Los cambios de c�
 - [Guia de migracion de monolito a microservicios](./guia_migracion_monolito_microservicios.md)
 
 El despliegue se hace en este orden: (1) publicar la imagen de cada microservicio, (2) crear la base de datos y cargarle datos, (3) crear el balanceador de carga, (4) crear los servicios que ejecutan los contenedores, (5) exponerlos por la puerta de entrada y (6) verificar.
+
+**Lleve una bitácora de valores.** Cada pieza que cree le devuelve un identificador que necesitará más adelante. Anótelos a medida que avanza:
+
+| Valor | Dónde lo obtiene | Para qué lo necesitará |
+| --- | --- | --- |
+| URI de las tres imágenes | Al publicar las imágenes en ECR | Para indicarle a ECS qué imagen ejecutar |
+| ID de la VPC y de dos subredes en zonas distintas | Al crear la base de datos | Para la base de datos, el ALB y los servicios de ECS |
+| ID del Security Group de las tareas de ECS | Lo crea usted antes de la base de datos | Para dar acceso a la base de datos y al ALB, y para crear los servicios de ECS |
+| ID del Security Group de la base de datos (`<SG_RDS_ID>`) | Al crear la base de datos | Para cargar los datos base |
+| Endpoint de la base de datos (`DB_HOST`) y contraseña | Al crear la base de datos | Para cargar los datos base y para las variables de entorno de los servicios |
+| DNS del ALB (`<ALB_DNS>`) y ARN de cada target group (`<TG_ARN>`) | Al crear el ALB | Para registrar los servicios de ECS y para configurar API Gateway |
+| URL de invocación de API Gateway | Al configurar API Gateway | Para probar los servicios y, después, para JMeter |
 
 #### Paso 1: publicar las imágenes en ECR
 
@@ -671,13 +685,45 @@ Para saber si una prueba cumple o no, compare las métricas que registró en JMe
 
 Si algún ASR se incumple, hay que determinar qué recurso se saturó primero: las tareas de ECS de algún servicio, la base de datos compartida o API Gateway.
 
-**Cómo ver las métricas de la infraestructura (CloudWatch).** CloudWatch es el servicio de AWS que recoge las métricas de los demás servicios. Para este laboratorio basta con consultarlas desde la consola de cada servicio:
+**Cómo ver las métricas de la infraestructura (CloudWatch).** JMeter le dice cómo ve el sistema un cliente (latencia, throughput, errores), pero no qué pieza se está quedando sin capacidad. Para eso está **Amazon CloudWatch**, el servicio de observabilidad de AWS para ver métricas (series de tiempo), logs y alarmas. Todas las piezas que desplegó le envían métricas automáticamente, sin configurar nada. En este laboratorio lo usará para observar cuánta CPU y memoria usan las tareas de cada servicio de ECS y cuánta CPU y cuántas conexiones usa la base de datos RDS durante cada corrida.
 
-- **Tareas de ECS:** consola de ECS → clúster `Cheapest-cluster` → seleccione el servicio → pestaña **Health and metrics**. Muestra el uso de CPU y de memoria del servicio.
-- **Base de datos RDS:** consola de RDS → **Databases** → `Cheapest-rds` → pestaña **Monitoring**. Revise `CPUUtilization` (uso de CPU) y `DatabaseConnections` (conexiones abiertas).
-- **API Gateway:** consola de API Gateway → `Cheapest-ms-api` → **Metrics**. Revise el número de peticiones, los errores 4xx y 5xx, y la latencia.
+**Abrir CloudWatch (consola de AWS):**
 
-Ajuste el rango de tiempo de las gráficas al intervalo exacto de cada corrida.
+1. Verifique la región: arriba a la derecha seleccione la misma región donde desplegó la infraestructura (por ejemplo, **us-east-1**).
+2. En la consola de AWS use el buscador y abra **CloudWatch**.
+3. En el menú izquierdo: **Metrics** → **All metrics**.
+
+**Ver el uso de recursos de cada microservicio (ECS):**
+
+1. En **All metrics** seleccione el namespace **ECS**.
+2. Abra **ClusterName, ServiceName**.
+3. Para cada uno de los tres servicios (`svc-Cheapest-logistica`, `svc-Cheapest-inventario` y `svc-Cheapest-ventas`) marque estas métricas:
+   - `CPUUtilization` (porcentaje de la CPU asignada a las tareas del servicio que se está usando)
+   - `MemoryUtilization` (porcentaje de la memoria asignada que se está usando)
+
+**Ver el uso de recursos de la base de datos (RDS):**
+
+1. En **All metrics** seleccione el namespace **RDS**.
+2. Abra las métricas por instancia (**DBInstanceIdentifier**) y busque `Cheapest-rds`.
+3. Marque estas métricas:
+   - `CPUUtilization` (porcentaje de CPU de la instancia)
+   - `DatabaseConnections` (número de conexiones abiertas contra la base de datos)
+
+**Ver el tráfico que llega a cada microservicio (ALB) y la latencia en API Gateway:**
+
+1. En el namespace **ApplicationELB**, abra **TargetGroup, LoadBalancer** e identifique el target group de cada servicio (su nombre incluye `logistica`, `inventario` o `ventas`). Métricas disponibles: `RequestCount` (peticiones que llegan al target group), `HTTPCode_Target_5XX_Count` (errores 5xx generados por el servicio) y `TargetResponseTime` (latencia del servicio vista por el ALB; no reemplaza el p99 de JMeter, pero ayuda a correlacionar).
+2. En el namespace **ApiGateway**, abra las métricas por API (**ApiId**) y busque su API. Métricas disponibles: `Latency` (tiempo total de la petición en API Gateway), `IntegrationLatency` (tiempo que tardó el backend en responder) y los errores `4xx` y `5xx`.
+
+**Ajustar el gráfico** (pestaña **Graphed metrics**):
+
+- **Time range:** el intervalo exacto de cada corrida, con la hora de inicio y de fin que anotó al ejecutarla.
+- **Period:** 1 minuto, para ver los cambios con claridad.
+- **Statistic:** `Maximum` o `Average` para `CPUUtilization`, `MemoryUtilization` y `DatabaseConnections`; `Sum` para `RequestCount` y los conteos de errores.
+
+> [!NOTE]
+> Las métricas tardan uno o dos minutos en aparecer y tienen una resolución de un minuto. Las pruebas más cortas de la matriz (5 a 20 segundos de ramp-up) apenas dejan un punto en el gráfico; las de mayor carga, que duran más, son las que muestran con claridad cómo sube el uso de recursos.
+
+Para cada corrida, y sobre todo para las de mayor carga, tome captura de estas métricas para cada uno de los tres servicios de ECS y para la base de datos RDS: son la evidencia que necesitará para decir qué servicio degradó primero y cuál fue el cuello de botella.
 
 ### 6.6 Corrida con escalamiento
 
@@ -800,7 +846,7 @@ Evidencias de las pruebas de carga:
 
 - Configuración de la prueba: los Thread Groups GET y POST en simultáneo (o el script) con la distribución GET/POST que escogió.
 - Ejecución de pruebas (capturas de Summary Report y Aggregate Report, o registros del script). Al menos para la corrida donde **deja de cumplirse** algún ASR y dos corridas relevantes más.
-- Gráficas de CloudWatch de las tareas de ECS y de la base de datos RDS durante esas corridas.
+- Gráficas de CloudWatch durante esas corridas: CPU y memoria de las tareas de cada servicio de ECS, y CPU y conexiones de la base de datos RDS.
 - El servicio de ECS escalado a 2 tareas durante la corrida con escalamiento.
 - **Prompts utilizados** (si usó IA) y el **script final** (si aplica).
 
