@@ -725,27 +725,8 @@ Resources:
       RouteKey: 'GET /ventas/health'
       Target: !Sub 'integrations/${VentasHealthIntegration}'
 
-  # Ruta propia para el catálogo: el experimento E6 (cliente defectuoso) inunda esta ruta y
-  # necesita poder limitarla por separado (throttling por ruta) sin limitar POST /ventas/ventas.
-  # Al ser más específica que ANY /ventas/{proxy+}, API Gateway la elige primero.
-  VentasCatalogoIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref CheapestHttpApi
-      IntegrationType: HTTP_PROXY
-      IntegrationMethod: GET
-      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/productos-externos'
-      PayloadFormatVersion: '1.0'
-
-  VentasCatalogoRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref CheapestHttpApi
-      RouteKey: 'GET /ventas/productos-externos'
-      Target: !Sub 'integrations/${VentasCatalogoIntegration}'
-
   # Stage del lab. Los límites por defecto son altos (sin efecto práctico); en el experimento E6
-  # se configuran manualmente desde la consola: primero para todo el stage y luego por ruta.
+  # (tormenta de reintentos) se ajustan manualmente desde la consola o la CLI.
   ApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:

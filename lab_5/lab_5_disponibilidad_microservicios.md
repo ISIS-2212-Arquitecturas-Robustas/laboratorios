@@ -42,7 +42,7 @@ Para eso se introduce explícitamente una dependencia HTTP entre servicios: **Ve
 
 Los lunes por la mañana, los tenderos de Cheapest realizan sus reabastecimientos semanales. En estos picos, el servicio de **Inventario**, que valida disponibilidad de stock antes de confirmar un pedido, recibe una carga muy superior a la normal y se degrada. Sin protecciones, el servicio de **Ventas** (que depende de Inventario) empieza a fallar en cadena: los tenderos no pueden confirmar pedidos, las apps móviles reintentan automáticamente, y ese volumen de reintentos amplifica la carga sobre un servicio ya degradado. El resultado: un sistema que se colapsa a sí mismo.
 
-Este escenario es conocido en la industria como **retry storm** y es uno de los patrones de fallo descritos en el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash.
+Este escenario es conocido en la industria como **retry storm** y es uno de los patrones de fallo descritos en el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash. En este laboratorio la tormenta se reproduce a propósito en el experimento E6: se combina un Inventario lento con un grupo de apps cliente que reintentan sin backoff, y se mide si las tácticas logran apagarla.
 
 El equipo de Cheapest no quiere esperar al próximo lunes para saber si sus tácticas funcionan. Va a hacer lo que hacen los equipos que operan sistemas en producción: un ***game day***, una sesión planeada en la que se le inyectan fallos al sistema a propósito, con tráfico bajo y controlado, para comprobar que se comporta como se diseñó **antes** de que el fallo ocurra de verdad. Esa práctica se llama **ingeniería del caos** (*chaos engineering*), y la popularizó Netflix con Chaos Monkey, una herramienta que apagaba al azar servidores de producción para obligar a los equipos a diseñar servicios que toleraran esas caídas.
 
@@ -105,7 +105,7 @@ Todas las medidas se toman con el tráfico de estado estable de la sección 6.2 
 | ----- | -------- | ------------------- | ------- | --------- | --------- | ------------------- |
 | ASR-1 | Inventario responde muy lento o con errores en la consulta de disponibilidad. | Servicio de Inventario, del cual depende Ventas. | Operación normal con tráfico de estado estable. | Servicio de Ventas (endpoint `POST /ventas/ventas`). | Ventas registra el pedido con graceful degradation en lugar de propagar la lentitud o el error, y vuelve a la operación normal cuando Inventario se recupera. | Pasados los primeros 30 s desde la inyección, la disponibilidad percibida de `POST /ventas/ventas` es ≥ 99 % en **cada** ventana de 10 s, con p99 < 3000 ms. El circuito vuelve a CLOSED (ventas confirmadas sin `pending`) a más tardar 60 s después de que el fallo se retira. |
 | ASR-2 | Los reintentos automáticos se activan ante las fallas de Inventario. | Política de retry del sidecar Envoy ante errores 5xx de Inventario. | Inventario degradado, reintentos activos. | Servicio de Inventario. | Los reintentos no deben amplificar desproporcionadamente la carga recibida por Inventario. | El factor de amplificación (llamadas de disponibilidad que recibe Inventario por cada venta enviada, frente al grupo de control) es ≤ 2. La fórmula está en la sección 4.4.5. |
-| ASR-3 | Un cliente defectuoso inunda el sistema con consultas de catálogo de baja prioridad (300 req/s durante 60 s). | Una app cliente con un bug que consulta el catálogo en un ciclo sin pausa. | Operación normal con tráfico de estado estable. | API Gateway / servicio de Ventas (confirmación de pedidos). | El rate limiter rechaza el tráfico excedente sin afectar la confirmación de pedidos. | Durante la ráfaga, la disponibilidad percibida de las ventas del generador de tráfico cae a lo sumo 1 punto porcentual respecto al estado estable, y el tráfico excedente recibe HTTP 429. |
+| ASR-3 | Mientras Inventario está lento, 50 apps cliente reintentan de inmediato, sin backoff, cada pedido que no responde en 3 s (*retry storm*). | Una versión de la app de tenderos con un bug en su política de reintentos. | Inventario degradado, con tráfico de estado estable de los demás tenderos. | API Gateway, sidecar de Ventas y servicio de Ventas (`POST /ventas/ventas`). | La tormenta no se sostiene: las tácticas cortan el ciclo de reintentos y los demás tenderos siguen confirmando pedidos. | Pasados los primeros 30 s de la tormenta, las apps defectuosas necesitan en promedio ≤ 2 intentos por pedido, y la disponibilidad percibida de las ventas del generador de tráfico cumple la medida del ASR-1. |
 | ASR-4 | Inventario se cae por completo y luego vuelve, después de que se registraron ventas con graceful degradation. | Caída y reemplazo de la tarea de Inventario. | Transición de graceful degradation a operación normal. | Mecanismo de Outbox (Ventas) + endpoint de idempotencia (Inventario). | Toda venta registrada con graceful degradation entrega su decremento de stock exactamente una vez, aunque Ventas se reinicie mientras hay entregas pendientes. | Contadas desde que Inventario vuelve a responder `/health` (T_rec), todas las filas de `outbox_http_calls` en PENDING pasan a DELIVERED en < 30 s; ningún `items_inventario.cantidad` refleja decrementos duplicados, y las filas PENDING sobreviven a un reinicio de la tarea de Ventas. |
 | ASR-5 | La tarea de Inventario se detiene abruptamente. | Fallo del proceso o de la máquina que lo ejecuta. | Operación normal con tráfico de estado estable. | Servicio ECS de Inventario, su balanceador y el servicio de Ventas. | ECS reemplaza la tarea sin intervención humana y, mientras tanto, Ventas sigue confirmando pedidos con graceful degradation. | MTTR ≤ 5 min, medido desde que la tarea se detiene hasta que `GET /inventario/health` vuelve a responder 200 y el target está `healthy`. Durante ese tiempo, la disponibilidad percibida de `POST /ventas/ventas` cumple la medida del ASR-1. |
 
@@ -113,7 +113,7 @@ Contexto de negocio de cada ASR (motivación, no parte de la especificación for
 
 - **ASR-1**: Como tendero, quiero poder confirmar un pedido incluso cuando el servicio de Inventario esté degradado. Un pedido con stock no confirmado es preferible a un error, o a una app que se queda pensando 10 segundos.
 - **ASR-2**: Como negocio, quiero que los reintentos automáticos ante fallos no amplifiquen la carga sobre servicios ya degradados, para evitar empeorar el incidente.
-- **ASR-3**: Como negocio, quiero que un cliente que se comporta mal no le quite capacidad a la confirmación de pedidos de los demás.
+- **ASR-3**: Como negocio, quiero que un bug en la política de reintentos de una versión de la app no convierta una degradación de Inventario en una caída total, ni le quite capacidad a la confirmación de pedidos de los demás tenderos.
 - **ASR-4**: Como negocio, quiero que toda venta registrada, incluso con graceful degradation (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere.
 - **ASR-5**: Como negocio, quiero que la caída de una tarea se resuelva sola en minutos, sin que alguien de guardia tenga que intervenir un lunes a las 7 a. m.
 
@@ -256,7 +256,7 @@ Por eso en este laboratorio:
 | | Prueba de carga (Labs 2-4) | Experimento de caos (este laboratorio) |
 | --- | --- | --- |
 | Variable que se manipula | Número de usuarios o peticiones por segundo | El fallo: qué componente falla, cómo y por cuánto tiempo |
-| Carga | Creciente, hasta saturar | **Baja y constante** (2 ventas/s), igual en todos los experimentos |
+| Carga | Creciente, hasta saturar | **Baja y constante** (2 ventas/s), igual en todos los experimentos. En E6 se agrega tráfico, pero es el fallo inyectado (apps que reintentan mal), no una carga creciente |
 | Pregunta | ¿Cuánta carga aguanta? | ¿Se mantiene el estado estable cuando algo falla? ¿Cuánto tarda en detectarlo y en recuperarse? |
 | Métricas principales | Throughput, p95/p99 por nivel de carga | Disponibilidad percibida en el tiempo, TTD, TTR, radio de impacto, consistencia de los datos |
 | Resultado típico | Una curva carga vs. latencia | Una **línea de tiempo** con el momento de la inyección, la desviación y la recuperación |
@@ -265,7 +265,7 @@ Un experimento de caos sigue cuatro pasos:
 
 1. **Definir el estado estable** con una métrica de negocio medible (aquí, disponibilidad percibida y p99 de las ventas del generador de tráfico).
 2. **Formular la hipótesis** de que el estado estable se mantiene (o se degrada de forma acotada) en el grupo experimental, frente al grupo de control.
-3. **Inyectar el fallo** de forma controlada: un solo fallo a la vez, con duración definida y con una condición de aborto.
+3. **Inyectar el fallo** de forma controlada: un solo fallo a la vez (salvo cuando el escenario es justamente la combinación de dos, como en E6), con duración definida y con una condición de aborto.
 4. **Comparar** el estado estable antes, durante y después del fallo, y entre configuraciones. Lo que se busca es la diferencia.
 
 #### 4.4.2 Catálogo de experimentos
@@ -280,7 +280,7 @@ El catálogo define **qué fallo** se inyecta en cada experimento y **qué confi
 | E3 | Caída de la tarea de Inventario | `aws ecs stop-task` | Sidecar completo | ASR-4, ASR-5 |
 | E4 | Caída del sidecar de Ventas, y caída de la tarea de Ventas con entregas del Outbox pendientes | Endpoint de caos de Ventas (apaga Envoy) y `aws ecs stop-task` | Sidecar completo | Exploratorio (sin ASR): ¿qué tan grave es el sidecar como punto de fallo? ASR-4 (persistencia del Outbox) |
 | E5 | Reinicio de la base de datos RDS que comparten los tres servicios | `aws rds reboot-db-instance` | Sidecar completo | Exploratorio (sin ASR): radio de impacto de un punto único de fallo |
-| E6 | Cliente defectuoso: ráfaga de 300 consultas de catálogo por segundo durante 60 s | JMeter (es el único uso de JMeter en el laboratorio) | Sin throttling · throttling del stage · throttling de la ruta del catálogo | ASR-3 |
+| E6 | *Retry storm*: Inventario lento + 50 apps cliente que reintentan sin backoff | Endpoint de caos (`mode: latency`) + `recursos/tormenta_reintentos.sh` | Sin sidecar (control) · sin sidecar con throttling del stage · completa · (opcional) sin sidecar con clientes con backoff | ASR-3 |
 
 En los experimentos **exploratorios** no hay un ASR que cumplir: el objetivo es descubrir el comportamiento del sistema. Igual debe escribir una hipótesis (qué cree que va a pasar y por qué) antes de ejecutarlos.
 
@@ -311,7 +311,7 @@ Antes de ejecutar cada experimento, complete su ficha. Las fichas se entregan en
 | Inventario | Endpoint de inyección de fallos en caliente (`/inventory/chaos`: latencia o errores, con duración) sobre la consulta de disponibilidad, y endpoint que recibe los descuentos de stock con clave de idempotencia. |
 | Ventas | Graceful degradation (`pending_stock_confirmation`) cuando Inventario no está disponible, escritura transaccional de la venta junto con su fila de Outbox, endpoint de observación del Outbox (`/ventas/outbox/resumen`) y endpoint para apagar el sidecar (`/ventas/chaos/sidecar`). |
 | Sidecar Envoy (en la tarea de Ventas) | Configuración del timeout, de los reintentos con backoff y jitter, y del circuit breaker (los seis `???` que usted completa). |
-| API Gateway | Rate limiting sobre el stage `lab` y sobre la ruta `GET /ventas/productos-externos`. |
+| API Gateway | Rate limiting sobre el stage `lab`. |
 
 #### 4.4.5 ¿Qué métricas se van a medir?
 
@@ -325,7 +325,9 @@ Antes de ejecutar cada experimento, complete su ficha. Las fichas se entregan en
 | Radio de impacto | Qué endpoints del generador de tráfico se desviaron del estado estable | Todos | CSV del generador de tráfico (endpoints `venta`, `inventario_item`, `catalogo`, `logistica_health`) |
 | Factor de amplificación | Fórmula abajo | ASR-2 | Contador `llamadasDisponibilidad` del endpoint de caos y CSV del generador de tráfico |
 | Reconciliación del Outbox | Desde T_rec hasta que no quedan filas PENDING; decrementos duplicados | ASR-4 | `GET /ventas/outbox/resumen`, `GET /inventario/items/{id}` |
-| Respuestas 429 | Porcentaje de la ráfaga y del generador de tráfico rechazado por API Gateway | ASR-3 | JMeter y CSV del generador de tráfico |
+| Intentos por pedido | Peticiones enviadas por las apps defectuosas ÷ pedidos lógicos, durante la tormenta | ASR-3 | CSV y resumen de `tormenta_reintentos.sh` |
+| Pedidos duplicados | Ventas registradas que nadie recibió: Δ filas totales del Outbox − (pedidos completados por la tormenta + ventas 201 del generador de tráfico) | ASR-3 (consistencia) | `GET /ventas/outbox/resumen` antes y después, CSV de los dos scripts |
+| Respuestas 429 | Porcentaje de las peticiones de la tormenta y del generador de tráfico rechazado por API Gateway | ASR-3 | CSV de los dos scripts |
 
 **Cómo calcular el factor de amplificación (ASR-2).** El endpoint de caos de Inventario cuenta cuántas consultas de disponibilidad le llegan, reintentos incluidos (campo `llamadasDisponibilidad` de `GET {BASE_URL}/inventario/chaos`). Léalo justo antes de inyectar el fallo y justo después de retirarlo; la diferencia son las llamadas que recibió Inventario durante el fallo. Divídala por el número de ventas que el generador de tráfico envió en ese mismo intervalo:
 
@@ -342,8 +344,8 @@ Sin sidecar cada venta genera exactamente una consulta, así que el grupo de con
 | Recurso | Detalle |
 | --- | --- |
 | Infraestructura AWS | Stack de CloudFormation (API Gateway, ECS/Fargate, RDS, balanceadores y sidecar Envoy) desplegado en su cuenta, más los repositorios de ECR con las imágenes |
-| Herramientas locales | Docker, AWS CLI, `curl`, Python 3, JMeter (solo para E6), un cliente de PostgreSQL y el backend de la rama `availability` |
-| Herramientas del laboratorio | `recursos/generador_trafico.sh` (tráfico de estado estable) y `recursos/ventanas.py` (resumen por ventanas de tiempo) |
+| Herramientas locales | Docker, AWS CLI, `curl`, Python 3, un cliente de PostgreSQL y el backend de la rama `availability` |
+| Herramientas del laboratorio | `recursos/generador_trafico.sh` (tráfico de estado estable), `recursos/ventanas.py` (resumen por ventanas de tiempo) y `recursos/tormenta_reintentos.sh` (apps cliente con reintentos defectuosos, E6) |
 | Datos de prueba | Script de seed de la rama `availability` (`npm run db:seed`) |
 | Créditos AWS | Elimine el stack al terminar |
 
@@ -354,7 +356,7 @@ Sin sidecar cada venta genera exactamente una consulta, así que el grupo de con
 | ----------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Ingeniería del caos                 | Principios de chaos engineering               | [Principles of Chaos Engineering](https://principlesofchaos.org/)                                                 |
 | Infraestructura como Código        | AWS CloudFormation                            | [¿Qué es AWS CloudFormation?](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/Welcome.html)     |
-| Gateway de entrada + Rate Limiting | Amazon API Gateway (throttling por stage y por ruta) | [¿Qué es Amazon API Gateway?](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/welcome.html) · [Throttling en HTTP APIs](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/http-api-throttling.html) |
+| Gateway de entrada + Rate Limiting | Amazon API Gateway (throttling por stage) | [¿Qué es Amazon API Gateway?](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/welcome.html) · [Throttling en HTTP APIs](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/http-api-throttling.html) |
 | Orquestación de contenedores       | Amazon ECS (Fargate)                          | [¿Qué es Amazon ECS?](https://docs.aws.amazon.com/es_es/AmazonECS/latest/developerguide/Welcome.html) · [AWS Fargate](https://docs.aws.amazon.com/es_es/AmazonECS/latest/userguide/what-is-fargate.html) |
 | Registro de imágenes               | Amazon ECR                                    | [¿Qué es Amazon ECR?](https://docs.aws.amazon.com/es_es/AmazonECR/latest/userguide/what-is-ecr.html)                 |
 | Base de datos relacional           | Amazon RDS (PostgreSQL)                       | [¿Qué es Amazon RDS?](https://docs.aws.amazon.com/es_es/AmazonRDS/latest/UserGuide/Welcome.html)                     |
@@ -363,7 +365,6 @@ Sin sidecar cada venta genera exactamente una consulta, así que el grupo de con
 | Lenguaje                           | TypeScript                                    | [Handbook de TypeScript](https://www.typescriptlang.org/docs/handbook/intro.html)                                     |
 | ORM                                | TypeORM                                       | [Documentación de TypeORM](https://typeorm.io/)                                                                       |
 | Proxy sidecar                       | Envoy Proxy                                  | [¿Qué es Envoy?](https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy) · [Patrón Sidecar](https://learn.microsoft.com/es-es/azure/architecture/patterns/sidecar) |
-| Generador de ráfaga (solo E6)      | Apache JMeter                                 | [Guía de introducción a JMeter](https://jmeter.apache.org/usermanual/get-started.html)                                |
 
 > [!IMPORTANT]
 > **Sugerencia de prompt para IA:** *"Actúo como estudiante de arquitectura de software. Explícame qué hace [servicio de AWS], qué problema arquitectónico resuelve, qué recursos concretos crea cuando lo despliego con CloudFormation, y qué riesgos de disponibilidad o costo debería tener en cuenta al usarlo en un sistema de microservicios como el de este laboratorio."* Use esto como punto de partida, no como respuesta final: valide lo que la IA le diga contra la documentación oficial y contra lo que observe en su propio despliegue.
@@ -374,7 +375,7 @@ Servicios de Ventas e Inventario (y Logística como parte del stack), sidecar En
 
 ![Diagrama de despliegue del laboratorio](./recursos/diagrama_componentes.png)
 
-*Figura 1. Vista de despliegue del laboratorio: API Gateway enruta hacia los servicios de Logística, Inventario y Ventas corriendo en ECS/Fargate; el sidecar Envoy corre como segundo contenedor dentro de la misma tarea de Ventas e intercepta el tráfico hacia Inventario. En este laboratorio el generador de tráfico de estado estable corre en el computador del estudiante (y JMeter solo en E6).*
+*Figura 1. Vista de despliegue del laboratorio: API Gateway enruta hacia los servicios de Logística, Inventario y Ventas corriendo en ECS/Fargate; el sidecar Envoy corre como segundo contenedor dentro de la misma tarea de Ventas e intercepta el tráfico hacia Inventario. En este laboratorio el generador de tráfico de estado estable corre en el computador del estudiante (y, en E6, también la tormenta de reintentos).*
 
 > [!NOTE]
 > Note que el sidecar se despliega como un contenedor adicional dentro de la misma tarea ECS que Ventas, y el tráfico entre Ventas e Inventario pasa a través del proxy Envoy. Esto permite implementar las tácticas de resiliencia sin modificar el código de negocio de Ventas, y ajustar los parámetros de retry y circuit breaker sin necesidad de redesplegar la aplicación.
@@ -390,7 +391,7 @@ Referencia para planear; puede variar según su experiencia con AWS. Buena parte
 | Fichas de los siete experimentos (diseño) | 1 h |
 | E0 a E2 (incluye las revisiones de Ventas sin sidecar y solo con reintentos) | 1,5 h |
 | E3 a E5 (caídas, Outbox e idempotencia, reinicio de la RDS) | 1,25 h |
-| E6 (ráfaga y throttling) | 0,5 h |
+| E6 (tormenta de reintentos y throttling) | 0,5 h |
 | Análisis y entregables | 1,75 h |
 | **Total** | **8 h-persona** |
 
@@ -470,7 +471,7 @@ El valor que retorna es la **`BASE_URL`** que se usa en el resto del laboratorio
 BASE_URL=https://<API_ID>.execute-api.us-east-1.amazonaws.com/lab
 ```
 
-Todas las peticiones que haga desde su computador (`curl`, el generador de tráfico o JMeter) contra AWS pasan por API Gateway y usan estas rutas:
+Todas las peticiones que haga desde su computador (`curl` y los scripts del laboratorio) contra AWS pasan por API Gateway y usan estas rutas:
 
 | Para qué | Método y ruta completa |
 | --- | --- |
@@ -837,7 +838,7 @@ En la sección anterior dejó desplegado el stack, configurado el sidecar y revi
 | **Umbral de apertura del circuito** (`consecutive_5xx`) | El mismo archivo `envoy.yaml.tmpl`, sección `outlier_detection`. | Bajo: el circuito abre rápido, incluso por fallos pasajeros. Alto: tarda en abrir y el fallo se propaga más tiempo. |
 | **Tiempo que el circuito permanece abierto** (`base_ejection_time`) | El mismo archivo `envoy.yaml.tmpl`, sección `outlier_detection`. | Corto: prueba con frecuencia si Inventario se recuperó. Largo: Ventas tarda en notar la recuperación. |
 | **Timeout de Ventas hacia el sidecar** (`INVENTARIO_TIMEOUT_MS`) | Variable de entorno del contenedor `ventas` (procedimiento A). El template la deja en `9000`. | Debe ser mayor que el timeout total del sidecar; si es menor, Ventas aborta antes de que Envoy termine sus reintentos. |
-| **Límite de peticiones** (*Rate* y *Burst*) | API Gateway → `Cheapest-ms-api` → stage `lab`: límite por defecto del stage o límite de una ruta (E6). | Un límite bajo protege a los servicios, pero rechaza peticiones legítimas; un límite de stage no distingue tipos de tráfico. |
+| **Límite de peticiones** (*Rate* y *Burst*) | API Gateway → `Cheapest-ms-api` → stage `lab` (E6). | Un límite bajo protege a los servicios, pero rechaza peticiones legítimas; un límite de stage no distingue clientes ni tipos de tráfico. |
 | **Detección del balanceador** (`HealthCheckIntervalSeconds`, umbrales de sano/no sano) y **número de tareas** (`DesiredCount`) | Template de CloudFormation (target groups y servicios ECS). **No los modifique** durante el laboratorio: son lo que mide en E3 y E4. | Determinan cuánto tarda el sistema en notar una tarea caída y si hay otra que atienda mientras tanto. Úselos en su decisión arquitectónica (sección 7.4). |
 
 #### Procedimiento A — Crear una nueva revisión de una task definition
@@ -926,7 +927,7 @@ python3 lab_5/recursos/ventanas.py e1_completa.csv
 El script imprime, por ventana y por endpoint, el número de peticiones, la disponibilidad percibida (2xx en menos de 3 s), el % de `pending` y el p99, y guarda la tabla en `e1_completa_ventanas.csv` para graficar la línea de tiempo en una hoja de cálculo. Identificar el estado estable, el TTD y el TTR a partir de esa tabla es parte de su análisis.
 
 > [!IMPORTANT]
-> **Un fallo a la vez.** Antes de empezar un experimento, verifique que el anterior terminó: fallo apagado, circuito cerrado (una venta sin `pending`), tareas en `RUNNING` y sin filas PENDING en `GET $BASE_URL/ventas/outbox/resumen`. Si mezcla dos fallos, no podrá atribuirle el resultado a ninguno.
+> **Un fallo a la vez** (E6 combina dos a propósito). Antes de empezar un experimento, verifique que el anterior terminó: fallo apagado, circuito cerrado (una venta sin `pending`), tareas en `RUNNING` y sin filas PENDING en `GET $BASE_URL/ventas/outbox/resumen`. Si mezcla dos fallos, no podrá atribuirle el resultado a ninguno.
 
 ### 6.3 Ambiente local (opcional)
 
@@ -1216,44 +1217,48 @@ Los tres servicios usan la misma instancia RDS. Un reinicio es un evento de oper
 > Con base en lo que observó en E4 y E5, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala, aun si las tácticas del laboratorio cumplen sus ASRs?
 > Responda identificando al menos dos clases de fallos que estas tácticas no resuelven por sí solas, sustentadas con sus datos, y qué capacidad adicional haría falta. Si la capacidad que propone es una capa de control de tráfico centralizada como Aperture de DoorDash, desarrolle esa comparación en la sección 7.4.2 y aquí solo refiérase a ella, sin repetirla.
 
-### 6.10 E6 — Cliente defectuoso
+### 6.10 E6 — Tormenta de reintentos (*retry storm*)
 
-**Configuraciones:** sin throttling (el stage tal como lo creó CloudFormation), throttling del stage y throttling de la ruta del catálogo.
+**Configuraciones:** sin sidecar (grupo de control), sin sidecar con throttling del stage, y completa. Opcional: sin sidecar con clientes que sí usan backoff.
 
-Aquí el fallo no es de un componente sino de un **cliente**: una versión de la app con un bug consulta el catálogo en un ciclo sin pausa. Es el único experimento que necesita generar mucho tráfico, y ese tráfico **es el fallo inyectado**: el generador de tráfico sigue midiendo el estado estable de las ventas legítimas, como en los demás experimentos.
+Este experimento reproduce el escenario del lunes por la mañana. Combina dos fallos inyectados a la vez: **Inventario lento** y una **versión defectuosa de la app** que reintenta de inmediato cada pedido que no le responde en 3 s. Es el único experimento con dos fallos simultáneos, porque la tormenta solo existe cuando se juntan los dos. El script `recursos/tormenta_reintentos.sh` simula esas apps: cada una envía un pedido y, si no recibe un 2xx a tiempo, **abandona la petición y la reenvía**; después de un pedido exitoso espera 5 s antes del siguiente. Con el sistema sano es tráfico normal.
 
-**Ráfaga (JMeter).** Cree un Thread Group con:
+> [!IMPORTANT]
+> Una petición que el cliente abandona **no se cancela en el servidor**: Ventas la sigue procesando y, si termina, registra la venta. Mida cuántas ventas se registraron (filas totales del Outbox) frente a cuántos pedidos pidieron realmente los tenderos.
 
-| Elemento de JMeter | Configuración |
-| --- | --- |
-| Thread Group | 150 threads, ramp-up 5 s, Loop Count **Infinite**, marque **Specify Thread lifetime** con **Duration** = 60 s |
-| Constant Throughput Timer (dentro del Thread Group) | **Target throughput (in samples per minute)** = `18000` (300 req/s × 60) y **Calculate Throughput based on** = *all active threads* |
-| HTTP Request | `GET {BASE_URL}/ventas/productos-externos` |
-| Listener | *Summary Report* (o *Aggregate Report*), para contar las respuestas 429 |
-
-**Configurar el throttling.** Use la consola (**API Gateway → `Cheapest-ms-api` → Protect → Throttling**, stage `lab`) o la CLI. El `API_ID` es la primera parte de su `BASE_URL`.
+**Configurar el throttling del stage** (solo para esa configuración). Use la consola (**API Gateway → `Cheapest-ms-api` → Protect → Throttling**, stage `lab`) o la CLI; el `API_ID` es la primera parte de su `BASE_URL`. Al terminar, devuelva el stage a sus valores sin efecto.
 
 ```bash
-# Throttling del stage: aplica a todas las rutas
 aws apigatewayv2 update-stage --api-id <API_ID> --stage-name lab \
-  --default-route-settings ThrottlingRateLimit=100,ThrottlingBurstLimit=200
-
-# Throttling de la ruta del catálogo: devuelva primero el stage a sus valores sin efecto
+  --default-route-settings ThrottlingRateLimit=10,ThrottlingBurstLimit=20
+# Al terminar:
 aws apigatewayv2 update-stage --api-id <API_ID> --stage-name lab \
-  --default-route-settings ThrottlingRateLimit=1000,ThrottlingBurstLimit=5000 \
-  --route-settings '{"GET /ventas/productos-externos": {"ThrottlingRateLimit": 50, "ThrottlingBurstLimit": 100}}'
+  --default-route-settings ThrottlingRateLimit=1000,ThrottlingBurstLimit=5000
 ```
 
-Los valores de la CLI son un punto de partida: si en la Pregunta 3 propuso otros, use los suyos y justifíquelos.
+Los valores son un punto de partida: si en la Pregunta 3 propuso otros, use los suyos y justifíquelos frente al tráfico que genera la tormenta.
 
-**Para cada configuración:** prepare el sistema, arranque el generador de tráfico y, pasados 2 minutos, lance la ráfaga (T_inj). La ráfaga termina sola a los 60 s (T_rem). Observe 3 minutos más.
+**Para cada configuración:**
+
+1. Prepare el sistema, arranque el generador de tráfico y anote el total de filas del Outbox (`PENDING + DELIVERED + FAILED` de `GET $BASE_URL/ventas/outbox/resumen`) y el contador `llamadasDisponibilidad`.
+2. Pasados 2 minutos, inyecte la latencia en Inventario y, de inmediato, lance la tormenta en otra terminal (T_inj):
+   ```bash
+   curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+     -d '{"mode": "latency", "delayMs": 5000, "durationMs": 150000}'
+   BASE_URL=$BASE_URL CLIENTES=50 DURACION=120 ./lab_5/recursos/tormenta_reintentos.sh e6_sin_sidecar.csv
+   ```
+   Para la configuración opcional con backoff, agregue `BACKOFF=1` al comando de la tormenta.
+3. La tormenta termina sola a los 120 s e imprime un resumen (pedidos, intentos por pedido, peticiones abandonadas, 429). El fallo de Inventario se retira a los 150 s (T_rem). Observe 3 minutos más.
+4. Vuelva a leer el total de filas del Outbox y el contador, y detenga el generador de tráfico.
 
 **Qué observar:**
 
-- ¿Qué porcentaje de la ráfaga recibió 429 en cada configuración?
-- ¿Qué le pasó a la disponibilidad percibida de las **ventas** del generador de tráfico en cada configuración? ¿Alguna venta legítima recibió 429?
-- ¿Qué le pasó a las consultas de catálogo de el propio generador de tráfico? ¿Es eso aceptable?
-- ¿Qué configuración cumple el ASR-3, y por qué la otra no?
+- ¿Cuántos intentos por pedido necesitaron las apps defectuosas en cada configuración, y cuántos pedidos lograron completar?
+- ¿Cuántas llamadas recibió Inventario por cada pedido lógico? Compárelo con E1, que tenía el mismo fallo pero sin tormenta.
+- ¿Cuántas ventas se registraron frente a los pedidos que realmente se hicieron? ¿De dónde salen las ventas sobrantes y qué significan para un tendero?
+- ¿Qué le pasó a la disponibilidad de las ventas del generador de tráfico, los otros tenderos, en cada configuración? ¿Recibieron 429?
+- Con throttling, ¿qué hicieron las apps defectuosas al recibir 429? ¿El throttling apagó la tormenta o solo la contuvo en el borde?
+- Con la configuración completa, ¿por qué la tormenta se apaga sola? ¿Qué táctica rompe el ciclo de reintentos?
 
 ### 6.11 Cómo leer los resultados
 
@@ -1320,13 +1325,14 @@ Describa, sin interpretar todavía, lo que observó en cada experimento y config
 | E3 Parte 2 — caída de Inventario | | | | | | |
 | E4 Parte 2 — reinicio de Ventas | | | | N/A | N/A | N/A |
 
-**e. E6:**
+**e. E6 (tormenta de reintentos):**
 
-| Configuración | Rate / Burst | % de la ráfaga con 429 | Disponibilidad de las ventas del generador de tráfico durante la ráfaga | Ventas del generador de tráfico con 429 | Consultas de catálogo del generador de tráfico con 429 |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Sin throttling | | | | | |
-| Throttling del stage | | | | | |
-| Throttling de la ruta | | | | | |
+| Configuración | Intentos por pedido | Pedidos completados / pedidos lógicos | Llamadas a Inventario por pedido | Ventas registradas | Pedidos duplicados | Disponibilidad del generador de tráfico (mínima por ventana tras 30 s) | 429 (tormenta / generador) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Sin sidecar | | | | | | | N/A |
+| Sin sidecar + throttling del stage (rate / burst: …) | | | | | | | |
+| Completa | | | | | | | N/A |
+| (Opcional) Sin sidecar, clientes con backoff | | | | | | | N/A |
 
 Reporte también los seis valores que escogió en `envoy.yaml.tmpl`.
 
@@ -1340,7 +1346,7 @@ Para cada ASR, compare lo medido con su medida de respuesta e indique si se cump
 
 - **ASR-1** (con Inventario lento o con errores, disponibilidad ≥ 99 % por ventana tras 30 s, p99 < 3000 ms, y CLOSED a más tardar 60 s después del retiro del fallo). ¿Qué configuración lo cumple en E1 y en E2? ¿Qué diferencia operativa tiene para un tendero recibir una respuesta lenta, un error o `pending_stock_confirmation`? ¿Bajo qué condiciones la degradación es aceptable para el negocio?
 - **ASR-2** (factor de amplificación ≤ 2). ¿Por qué el reintento sin backoff ni jitter puede empeorar una situación de fallo? ¿En qué fase de E2 los reintentos ayudaron y en cuál solo amplificaron? Relacione la respuesta con el escenario de Cheapest (tenderos reintentando pedidos en el pico del lunes).
-- **ASR-3** (la ráfaga no le quita más de 1 punto de disponibilidad a las ventas). ¿Por qué una configuración de throttling lo cumple y la otra no? ¿Por qué el rate limiting en API Gateway protege mejor ante un cliente defectuoso que un límite implementado dentro del propio servicio?
+- **ASR-3** (durante la tormenta, ≤ 2 intentos por pedido tras 30 s y el generador de tráfico cumple el ASR-1). ¿Qué configuración apaga la tormenta y cuál solo la contiene? ¿Por qué el throttling del stage protege al backend pero no a los demás tenderos? ¿Qué parte del problema solo se resuelve en el cliente (backoff, respetar un 429) y qué parte en el servidor? ¿Qué haría falta para que los pedidos que el cliente reintenta no se registren dos veces?
 - **ASR-4** (reconciliación en < 30 s desde T_rec, sin duplicados, y las entregas pendientes sobreviven al reinicio de Ventas). ¿Qué mecanismo garantiza cada una de las tres partes? Si alguna fila quedó en FAILED, ¿qué significa para el negocio y quién debería atenderla?
 - **ASR-5** (MTTR ≤ 5 min ante la caída de la tarea de Inventario). ¿Qué etapa dominó el MTTR? ¿Qué parámetros del template la acortarían, y a qué costo?
 - **Paso de OPEN a HALF-OPEN.** Con los tiempos que midió en E1 y E2 (cuándo se abrió el circuito, cada cuánto hubo peticiones de prueba y cuánto tardó en volver a CLOSED después de T_rem), ¿cuánto tiempo debería permanecer el circuito en OPEN antes de pasar a HALF-OPEN (`base_ejection_time`)? ¿Qué riesgos hay en pasar a HALF-OPEN demasiado pronto frente a demasiado tarde? Aquí se analiza lo que midió; la justificación del valor que configuró va en la Pregunta 3, parte B.
@@ -1406,11 +1412,11 @@ Adjunte capturas de:
 - Respuestas de E3 Parte 1: la cantidad bajando dos veces sin clave, y el HTTP 409 al repetir con la misma `X-Idempotency-Key`.
 - Eventos del servicio `svc-Cheapest-ventas` durante E4 (tarea reemplazada al apagar el sidecar) y el resumen del Outbox antes y después del reinicio de Ventas.
 - Estados de la instancia RDS durante E5 y la tabla de `ventanas.py` de ese experimento.
-- Configuración de throttling del stage y de la ruta en API Gateway, y el Summary Report de JMeter de E6 con las respuestas 429.
+- Configuración de throttling del stage en API Gateway y el resumen de `tormenta_reintentos.sh` de cada configuración de E6 (con las respuestas 429 cuando aplique).
 
 Adjunte también:
 
-- Los CSV del generador de tráfico de cada experimento (o un enlace a ellos).
+- Los CSV del generador de tráfico y de la tormenta de cada experimento (o un enlace a ellos).
 - Los prompts utilizados (si usó IA).
 - Los scripts adicionales que haya escrito (si aplica).
 
