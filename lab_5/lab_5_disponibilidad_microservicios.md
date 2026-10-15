@@ -1,4 +1,4 @@
-# Lab 5 — Disponibilidad en Microservicios: Circuit Breaker, Retry, Rate Limiting, Outbox e Idempotencia
+# Lab 5 — Disponibilidad en Microservicios: experimentos de caos con Circuit Breaker, Retry, Rate Limiting, Outbox e Idempotencia
 
 ## 1. Índice
 
@@ -15,45 +15,57 @@
 
 | Etapa                                      | Resumen                                                                                                          | Uso de IA generativa                                                                                      |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 1. Contexto del experimento de resiliencia | Modelado del escenario en el que los reintentos automáticos tumban un servicio que ya estaba degradado (*retry storm*), hipótesis de diseño, escenarios de calidad vinculados (ASRs), diseño y planeación del experimento. | Uso acotado para comprender patrones de falla; el criterio de negocio debe ser propio.                    |
-| 2. Arquitectura y tacticas                 | Analisis de las tacticas de disponibilidad del laboratorio: un contenedor auxiliar que intercepta las llamadas entre servicios (sidecar), graceful degradation en lugar de errores, corte de llamadas a un servicio caido (circuit breaker) y control de recursos. | Recomendado para comparar parametros y riesgos de configuracion.                                          |
-| 3. Preparacion de infraestructura con IaC  | Despliegue reproducible en AWS a partir de un archivo que describe toda la infraestructura (infraestructura como codigo, con CloudFormation) y verificacion del despliegue. | Recomendado para asistir en comandos y troubleshooting de despliegue.                                     |
-| 4. Configuración del sidecar de resiliencia | Implementacion de falla controlada en Inventario y configuración del sidecar (el proxy Envoy) en Ventas.                     | Recomendado para soporte de implementacion, revision de parametros y pruebas; validar manualmente resultados. |
-| 5. Ejecucion de experimentos y analisis    | Comparacion de la linea base sin protecciones contra cada tactica, y evaluacion de su impacto en los ASRs.                          | No recomendado para redactar conclusiones sin evidencia empirica del laboratorio.                         |
-| 6. Consistencia bajo fallo: Outbox e Idempotencia | Demostración del problema de inconsistencia de datos y su solución con dos patrones: Outbox (entrega garantizada de una operación pendiente) e idempotencia (una operación repetida no se aplica dos veces).   | Recomendado para soporte de implementacion; validar manualmente el experimento.                           |
+| 1. Contexto y diseño de los experimentos de caos | Modelado del escenario de fallo (un servicio del que dependen otros se degrada o se cae), escenarios de calidad (ASRs) y diseño de cada experimento: estado estable, hipótesis, fallo a inyectar, radio de impacto esperado y condición de aborto. | Uso acotado para comprender patrones de falla; las hipótesis y el criterio de negocio deben ser propios.   |
+| 2. Arquitectura y tácticas                 | Análisis de las tácticas de disponibilidad del laboratorio: un contenedor auxiliar que intercepta las llamadas entre servicios (sidecar), graceful degradation en lugar de errores, corte de llamadas a un servicio caído (circuit breaker), recuperación automática de tareas y control de recursos. | Recomendado para comparar parámetros y riesgos de configuración.                                          |
+| 3. Preparación de infraestructura con IaC  | Despliegue reproducible en AWS a partir de un archivo que describe toda la infraestructura (infraestructura como código, con CloudFormation) y verificación del despliegue. | Recomendado para asistir en comandos y troubleshooting de despliegue.                                     |
+| 4. Configuración del sidecar de resiliencia | Configuración del sidecar (el proxy Envoy) en Ventas y reconocimiento de las herramientas para inyectar fallos.          | Recomendado para soporte de implementación, revisión de parámetros y pruebas; validar manualmente resultados. |
+| 5. Ejecución de los experimentos de caos   | Inyección de fallos controlados con tráfico de estado estable, medición de detección y recuperación (TTD, TTR, MTTR) y comparación de cada táctica contra un grupo de control sin protecciones. | No recomendado para redactar conclusiones sin evidencia empírica del laboratorio.                         |
+| 6. Consistencia bajo fallo: Outbox e Idempotencia | Demostración, dentro de los experimentos de caída, del problema de inconsistencia de datos y de su solución con dos patrones: Outbox (entrega garantizada de una operación pendiente) e idempotencia (una operación repetida no se aplica dos veces). | Recomendado para soporte de implementación; validar manualmente el experimento.                           |
 
 ## 3. Objetivos
 
-- Reproducir experimentalmente un **fallo en cascada** (un servicio que falla arrastra a los que dependen de él) provocado por un *retry storm* (una avalancha de reintentos automáticos), tal como ocurre en sistemas en producción reales.
+- Entender que **no todo experimento de arquitectura es una prueba de carga**: para el atributo de disponibilidad, la variable que se manipula es el **fallo**, no la carga.
+- Diseñar y ejecutar **experimentos de ingeniería del caos**: definir el estado estable del sistema, formular una hipótesis, inyectar un fallo controlado, limitar su radio de impacto y observar si el sistema se desvía y cómo se recupera.
+- Medir los **tiempos de detección y de recuperación** (TTD, TTR y MTTR) de cada mecanismo de resiliencia: circuit breaker, reemplazo automático de tareas de ECS y reconciliación del Outbox.
 - Implementar tres tácticas de resiliencia a nivel de infraestructura: reintentos con espera creciente entre intentos (*retry* con *backoff* exponencial), corte de llamadas a un servicio caído con *graceful degradation* (*circuit breaker*) y límite de peticiones por segundo (*rate limiting*).
 - Desplegar la infraestructura del laboratorio usando Infraestructura como Código (describir la infraestructura en un archivo, en lugar de crearla a mano) con AWS CloudFormation.
-- Evaluar el impacto de cada táctica sobre los ASRs del negocio de Cheapest mediante pruebas de carga.
-- Demostrar que la resiliencia de infraestructura (circuit breaker, retry) no garantiza consistencia de datos, e implementar los patrones **Outbox** e **Idempotencia** para cerrar esa brecha.
-- Reflexionar sobre las limitaciones de las tácticas locales frente a enfoques de resiliencia distribuida centralizada.
+- Demostrar que la resiliencia de infraestructura (circuit breaker, retry) no garantiza consistencia de datos, y verificar que los patrones **Outbox** e **Idempotencia** cierran esa brecha.
+- Descubrir, con evidencia, los puntos de fallo que ninguna de estas tácticas cubre (el propio sidecar y la base de datos compartida), y reflexionar sobre las limitaciones de las tácticas locales frente a enfoques de resiliencia distribuida centralizada.
 
 ## 4. Planeación del laboratorio
 
-En el Lab 4 usted desplegó Cheapest como tres microservicios (Logística, Inventario y Ventas) y midió su escalabilidad. Hasta ahora todos los servicios funcionaban; el único problema era la carga. En este laboratorio se estudia qué pasa cuando **uno de los servicios falla** y los demás dependen de él.
+En el Lab 4 usted desplegó Cheapest como tres microservicios (Logística, Inventario y Ventas) y midió su escalabilidad con pruebas de carga: la pregunta era *¿cuánta carga aguanta?*. En este laboratorio la pregunta es otra: **¿qué pasa cuando algo falla?** Los servicios fallan aunque la carga sea baja: una tarea se reinicia, una dependencia se pone lenta, la base de datos se reinicia por mantenimiento. Para estudiar eso no sirve subir la carga; hay que **provocar el fallo de forma controlada** y observar al sistema mientras lo sufre.
 
 Para eso se introduce explícitamente una dependencia HTTP entre servicios: **Ventas llama a Inventario** para verificar que hay stock antes de registrar una venta. Esta dependencia es el punto de fallo que se va a explorar: **si Inventario se degrada, sin protecciones Ventas también falla.**
 
 **Contexto de negocio.**
 
-Los lunes por la mañana, los tenderos de Cheapest realizan sus reabastecimientos semanales. En estos picos, el servicio de **Inventario**, que valida disponibilidad de stock antes de confirmar un pedido, recibe una carga muy superior a la normal. Sin protecciones, el servicio de **Ventas** (que depende de Inventario) empieza a fallar en cadena: los tenderos no pueden confirmar pedidos, las apps móviles reintentán automáticamente, y ese volumen de reintentos amplifica la carga sobre un servicio ya degradado. El resultado: un sistema que se colapsa a sí mismo.
+Los lunes por la mañana, los tenderos de Cheapest realizan sus reabastecimientos semanales. En estos picos, el servicio de **Inventario**, que valida disponibilidad de stock antes de confirmar un pedido, recibe una carga muy superior a la normal y se degrada. Sin protecciones, el servicio de **Ventas** (que depende de Inventario) empieza a fallar en cadena: los tenderos no pueden confirmar pedidos, las apps móviles reintentan automáticamente, y ese volumen de reintentos amplifica la carga sobre un servicio ya degradado. El resultado: un sistema que se colapsa a sí mismo.
 
-Este escenario es conocido en la industria como **retry storm** y es uno de los patrones de fallo descritos en el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash.
+Este escenario es conocido en la industria como **retry storm** y es uno de los patrones de fallo descritos en el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash. En este laboratorio la tormenta se reproduce a propósito en el experimento E6: se combina un Inventario lento con un grupo de apps cliente que reintentan sin backoff, y se mide si las tácticas logran apagarla.
+
+El equipo de Cheapest no quiere esperar al próximo lunes para saber si sus tácticas funcionan. Va a hacer lo que hacen los equipos que operan sistemas en producción: un ***game day***, una sesión planeada en la que se le inyectan fallos al sistema a propósito, con tráfico bajo y controlado, para comprobar que se comporta como se diseñó **antes** de que el fallo ocurra de verdad. Esa práctica se llama **ingeniería del caos** (*chaos engineering*), y la popularizó Netflix con Chaos Monkey, una herramienta que apagaba al azar servidores de producción para obligar a los equipos a diseñar servicios que toleraran esas caídas.
 
 > [!IMPORTANT]
 > **Pregunta 1:**
 > En Cheapest, ¿qué decisión de producto y operación debería tomarse primero cuando aparece un retry storm: proteger disponibilidad percibida (graceful degradation) o proteger consistencia estricta (rechazar operaciones)?
 > Argumente su respuesta considerando impacto en tenderos, riesgo financiero y costo de reconciliación posterior.
 
-Un aspecto crítico de este escenario, y que este lab reproduce explícitamente, es que el fallo es **transitorio**: los sistemas de orquestación modernos como ECS detectan tareas poco saludables mediante health checks y las reinician automáticamente. En la práctica, un servicio degradado por un pico de memoria, un pool de conexiones agotado o un spike de CPU puede recuperarse por sí solo en cuestión de segundos o minutos. El servicio de Inventario en este laboratorio simula exactamente eso: se degrada al arrancar y se recupera automáticamente tras `RECOVERY_TIME_MS` milisegundos. Esto hace que el estado **HALF-OPEN** del circuit breaker no sea solo teórico: cuando Inventario se recupera, el circuit breaker lo detecta y vuelve al estado CLOSED, restaurando el flujo normal sin intervención humana.
+Un aspecto crítico de este escenario es que el fallo suele ser **transitorio**: un servicio degradado por un pico de memoria, un pool de conexiones agotado o un spike de CPU puede recuperarse por sí solo en segundos o minutos, y los orquestadores como ECS reemplazan automáticamente las tareas que dejan de responder. Por eso en este laboratorio los fallos de Inventario se inyectan con una **duración**: al cumplirse, el fallo se retira solo. Esto hace que el estado **HALF-OPEN** del circuit breaker no sea solo teórico: cuando Inventario se recupera, el circuit breaker lo detecta y vuelve al estado CLOSED, restaurando el flujo normal sin intervención humana. Medir **cuánto tarda** cada mecanismo en detectar el fallo y en volver a la normalidad es una de las metas del laboratorio.
 
-**Conceptos que se presentan en este laboratorio.** Cada uno se explica con más detalle, y con su aplicación en Cheapest, en la parte de tácticas y patrones.
+**Conceptos que se presentan en este laboratorio.** Cada uno se explica con más detalle, y con su aplicación en Cheapest, en la parte de tácticas y patrones y en el diseño del experimento.
 
 | Concepto | Qué es |
 | --- | --- |
+| Ingeniería del caos (*chaos engineering*) | Disciplina que consiste en experimentar sobre un sistema inyectándole fallos controlados para ganar confianza en su capacidad de soportar condiciones adversas. Un experimento de caos compara el comportamiento del sistema con y sin el fallo. |
+| *Game day* | Sesión planeada en la que un equipo ejecuta experimentos de caos sobre su sistema y observa la respuesta. Este laboratorio es un *game day* de Cheapest. |
+| Estado estable (*steady state*) | Comportamiento normal y medible del sistema, expresado con una métrica de negocio (aquí, la disponibilidad percibida y la latencia de las ventas con tráfico bajo y constante). La hipótesis de un experimento de caos dice si ese estado se mantiene cuando se inyecta el fallo. |
+| Inyección de fallos | Provocar a propósito un fallo concreto (latencia, errores, caída de un proceso) en un punto definido del sistema, durante un tiempo definido. |
+| Radio de impacto (*blast radius*) | Qué partes del sistema (servicios, endpoints, usuarios) resultan afectadas por un fallo. Se predice antes del experimento y se mide durante. |
+| Condición de aborto | Criterio, definido antes de empezar, que obliga a detener el experimento y revertir el fallo (por ejemplo, "si la disponibilidad de las ventas cae por debajo de X durante más de Y segundos"). En producción es lo que impide que un experimento se convierta en un incidente. |
+| Grupo de control | Configuración contra la que se compara un experimento. Aquí, el sistema sin sidecar: sin reintentos ni circuit breaker. |
+| TTD (*time to detect*) | Tiempo entre la inyección del fallo y el momento en que un mecanismo lo detecta (por ejemplo, el circuito se abre o el balanceador marca el destino como no sano). |
+| TTR y MTTR (*time to recover* / *mean time to recover*) | Tiempo entre el retiro (o la ocurrencia) del fallo y la vuelta al estado estable. El MTTR es el promedio de varios TTR. |
 | Fallo en cascada (*cascading failure*) | Un servicio que falla hace fallar a los servicios que dependen de él, y estos a los que dependen de ellos. |
 | Timeout | Tiempo máximo que un servicio espera la respuesta de otro antes de darla por fallida. |
 | Reintento (*retry*) | Volver a enviar automáticamente una petición que falló. |
@@ -66,39 +78,44 @@ Un aspecto crítico de este escenario, y que este lab reproduce explícitamente,
 | Proxy | Programa intermediario por el que pasan las peticiones entre dos servicios, y que puede aplicarles reglas (reintentar, cortar, registrar). |
 | Sidecar | Contenedor auxiliar que se despliega junto al contenedor de un servicio, dentro de la misma tarea de ECS, y que se encarga de asuntos transversales (aquí, la resiliencia de las llamadas a Inventario) sin tocar el código del servicio. |
 | Envoy | El proxy de código abierto que se usa como sidecar en este laboratorio. A su implementación del circuit breaker la llama *outlier detection*. |
+| Health check | Petición periódica que el balanceador (ALB) le hace a cada tarea (`GET /health`) para decidir si le sigue enviando tráfico. ECS reemplaza las tareas que se detienen o que el balanceador marca como no sanas. |
 | Infraestructura como Código (IaC) | Describir la infraestructura en un archivo de texto que se puede versionar y ejecutar, en lugar de crearla a mano en la consola. |
 | CloudFormation | El servicio de AWS para infraestructura como código. El archivo que describe los recursos se llama **template** y el conjunto de recursos que crea a partir de él se llama **stack**. |
 | Outbox | Patrón en el que una operación que hay que enviarle a otro servicio se guarda primero en una tabla local, en la misma transacción que el dato de negocio, y un proceso aparte la envía después hasta que logra entregarla. |
 | Idempotencia | Propiedad de una operación que produce el mismo resultado aunque se ejecute varias veces. Se logra con una **clave de idempotencia**: un identificador que le permite al receptor reconocer una operación que ya procesó. |
-| Línea base (*baseline*) | Medición del sistema sin ninguna protección, contra la que se compara cada táctica. |
 
 > [!NOTE]
 > **Nombres:** En el código se usan los nombres de las entidades (`OutboxHttpCall`, `ProcessedCall`) y en SQL los de las tablas (`outbox_http_calls`, `processed_calls`, `items_inventario`). Las columnas están en *camelCase* y en SQL van entre comillas dobles (`"createdAt"`).
 
 ### 4.1 Hipótesis de diseño
 
-| # | Hipótesis |
-| --- | --- |
-| H1 | **Si** implementamos un circuit breaker con graceful degradation en el sidecar Envoy de Ventas, **entonces** `POST /ventas/ventas` responde HTTP 201 con `pending_stock_confirmation` en p99 < 3000 ms aun con Inventario en falla total, **porque** el circuito abierto corta las llamadas al servicio caído y Ventas responde con un fallback local en lugar de esperar timeouts y propagar el error. |
-| H2 | **Si** configuramos retry con backoff exponencial + jitter en el sidecar (en lugar de reintentos inmediatos), **entonces** el volumen de requests que recibe Inventario no supera 2x la línea base, **porque** el backoff y el jitter dispersan los reintentos en el tiempo y evitan la amplificación sincronizada (retry storm). |
-| H3 | **Si** aplicamos rate limiting (throttling) en API Gateway, **entonces** el tráfico excedente de baja prioridad se rechaza con HTTP 429 sin que el throughput de pedidos válidos caiga más de 10%, **porque** el límite se aplica en el borde, antes de que el tráfico consuma capacidad de los servicios. |
-| H4 | **Si** registramos las ventas hechas con graceful degradation con el patrón Outbox y protegemos Inventario con una clave de idempotencia, **entonces** todo decremento de stock pendiente se entrega exactamente una vez tras la recuperación (PENDING → DELIVERED en < 30 s, sin duplicados) y la escritura adicional no sube el p99 de `POST /ventas/ventas` en más de 50 ms, **porque** el Outbox garantiza entrega al menos una vez dentro de la misma transacción de la venta y la idempotencia descarta los reintentos repetidos. |
+En este laboratorio **usted escribe las hipótesis**. Cada experimento del catálogo (sección 4.4.2) tiene la suya, y la debe redactar en su ficha **antes** de ejecutarlo, sin mirar los resultados. Una hipótesis de caos afirma qué le pasa al **estado estable** cuando se inyecta un fallo, y por qué:
+
+> **Si** inyectamos *[fallo concreto, dónde y por cuánto tiempo]* con *[configuración de tácticas]*, **entonces** *[métrica del estado estable]* *[se mantiene / se degrada a lo sumo hasta …]* y vuelve al estado estable en *[TTR esperado]*, **porque** *[mecanismo de la táctica que lo explica]*.
+
+Ejemplo de **forma** (sobre un sistema distinto al del laboratorio): *"Si apagamos una de las dos réplicas del servicio de pagos durante 2 minutos, entonces la tasa de pagos exitosos se mantiene por encima del 99 % y la latencia p99 sube a lo sumo a 800 ms, porque el balanceador deja de enviar tráfico a la réplica caída tras dos health checks fallidos."*
+
+Una hipótesis refutada **no** es un mal resultado: es exactamente lo que un experimento de caos busca descubrir antes que los usuarios. Se califica el rigor del diseño y la honestidad del análisis, no que la hipótesis se cumpla.
 
 ### 4.2 Escenarios de calidad vinculados
 
-| ID    | Estímulo                                                                                     | Fuente del estímulo                                              | Entorno                                                                  | Artefacto                                                    | Respuesta                                                                                                  | Medida de respuesta                                                                                                                                    |
-| ----- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ASR-1 | El servicio de Inventario deja de responder correctamente (falla total / timeouts sostenidos). | Servicio de Inventario, del cual depende Ventas.                   | Operación normal, pico de tráfico de reabastecimiento (lunes en la mañana). | Servicio de Ventas (endpoint `POST /ventas/ventas`).            | Ventas registra el pedido con graceful degradation en lugar de propagar el error al tendero.                          | Durante fallo total de Inventario, Ventas responde HTTP 201 con `status: pending_stock_confirmation` en p99 < 3000 ms. El p99 se calcula sobre **todas** las peticiones de cada fila de la matriz de carga, incluidas las que ocurren antes de que se abra el circuito. |
-| ASR-2 | Los clientes (o el sidecar) reintentan automáticamente las llamadas fallidas hacia Inventario. | Política de retry del sidecar Envoy ante errores 5xx de Inventario. | Inventario degradado, reintentos activos.                                   | Servicio de Inventario.                                          | Los reintentos no deben amplificar desproporcionadamente la carga recibida por Inventario.                      | El factor de amplificación (llamadas de disponibilidad que recibe Inventario en la ronda con reintentos ÷ las que recibe en la línea base, con la misma matriz de carga) es ≤ 2. La fórmula está en la sección 4.4.3. |
-| ASR-3 | Un pico de tráfico de baja prioridad (ej. consultas de catálogo masivas) llega al sistema.     | Clientes externos generando tráfico de baja prioridad.               | Operación normal, con tráfico mixto de alta y baja prioridad.               | API Gateway / servicio de Ventas (confirmación de pedidos).     | El rate limiter rechaza el tráfico excedente sin afectar la confirmación de pedidos.                            | El rate limiter rechaza el tráfico excedente con HTTP 429 sin que el throughput de pedidos válidos caiga más de un 10% respecto a la línea base.         |
-| ASR-4 | Inventario se recupera tras un período de caída durante el cual se registraron ventas con graceful degradation. | Recuperación del servicio de Inventario.                             | Transición de graceful degradation a operación normal.                                 | Mecanismo de Outbox (Ventas) + endpoint de idempotencia (Inventario). | Toda venta registrada con graceful degradation entrega su decremento de stock exactamente una vez, sin duplicados.     | (a) Contadas desde que Inventario vuelve a responder `/health`, todas las filas de `outbox_http_calls` en estado PENDING pasan a DELIVERED en < 30 s, y ningún `items_inventario.cantidad` refleja decrementos duplicados. (b) Con Inventario sano, el p99 de `POST /ventas/ventas` con Outbox no supera en más de 50 ms el p99 sin Outbox. |
+Todas las medidas se toman con el tráfico de estado estable de la sección 6.2 (un generador de tráfico que envía 2 ventas por segundo), **no** con una prueba de carga. Una respuesta **útil** es una respuesta 2xx (incluidas las 201 con `pending_stock_confirmation`) que llega en menos de 3 s; la **disponibilidad percibida** de una ventana de 10 s es el porcentaje de respuestas útiles en esa ventana.
+
+| ID    | Estímulo | Fuente del estímulo | Entorno | Artefacto | Respuesta | Medida de respuesta |
+| ----- | -------- | ------------------- | ------- | --------- | --------- | ------------------- |
+| ASR-1 | Inventario responde muy lento o con errores en la consulta de disponibilidad. | Servicio de Inventario, del cual depende Ventas. | Operación normal con tráfico de estado estable. | Servicio de Ventas (endpoint `POST /ventas/ventas`). | Ventas registra el pedido con graceful degradation en lugar de propagar la lentitud o el error, y vuelve a la operación normal cuando Inventario se recupera. | Pasados los primeros 30 s desde la inyección, la disponibilidad percibida de `POST /ventas/ventas` es ≥ 99 % en **cada** ventana de 10 s, con p99 < 3000 ms. El circuito vuelve a CLOSED (ventas confirmadas sin `pending`) a más tardar 60 s después de que el fallo se retira. |
+| ASR-2 | Los reintentos automáticos se activan ante las fallas de Inventario. | Política de retry del sidecar Envoy ante errores 5xx de Inventario. | Inventario degradado, reintentos activos. | Servicio de Inventario. | Los reintentos no deben amplificar desproporcionadamente la carga recibida por Inventario. | El factor de amplificación (llamadas de disponibilidad que recibe Inventario por cada venta enviada, frente al grupo de control) es ≤ 2. La fórmula está en la sección 4.4.5. |
+| ASR-3 | Mientras Inventario está lento, 50 apps cliente reintentan de inmediato, sin backoff, cada pedido que no responde en 3 s (*retry storm*). | Una versión de la app de tenderos con un bug en su política de reintentos. | Inventario degradado, con tráfico de estado estable de los demás tenderos. | API Gateway, sidecar de Ventas y servicio de Ventas (`POST /ventas/ventas`). | La tormenta no se sostiene: las tácticas cortan el ciclo de reintentos y los demás tenderos siguen confirmando pedidos. | Pasados los primeros 30 s de la tormenta, las apps defectuosas necesitan en promedio ≤ 2 intentos por pedido, y la disponibilidad percibida de las ventas del generador de tráfico cumple la medida del ASR-1. |
+| ASR-4 | Inventario se cae por completo y luego vuelve, después de que se registraron ventas con graceful degradation. | Caída y reemplazo de la tarea de Inventario. | Transición de graceful degradation a operación normal. | Mecanismo de Outbox (Ventas) + endpoint de idempotencia (Inventario). | Toda venta registrada con graceful degradation entrega su decremento de stock exactamente una vez, aunque Ventas se reinicie mientras hay entregas pendientes. | Contadas desde que Inventario vuelve a responder `/health` (T_rec), todas las filas de `outbox_http_calls` en PENDING pasan a DELIVERED en < 30 s; ningún `items_inventario.cantidad` refleja decrementos duplicados, y las filas PENDING sobreviven a un reinicio de la tarea de Ventas. |
+| ASR-5 | La tarea de Inventario se detiene abruptamente. | Fallo del proceso o de la máquina que lo ejecuta. | Operación normal con tráfico de estado estable. | Servicio ECS de Inventario, su balanceador y el servicio de Ventas. | ECS reemplaza la tarea sin intervención humana y, mientras tanto, Ventas sigue confirmando pedidos con graceful degradation. | MTTR ≤ 5 min, medido desde que la tarea se detiene hasta que `GET /inventario/health` vuelve a responder 200 y el target está `healthy`. Durante ese tiempo, la disponibilidad percibida de `POST /ventas/ventas` cumple la medida del ASR-1. |
 
 Contexto de negocio de cada ASR (motivación, no parte de la especificación formal):
 
-- **ASR-1**: Como tendero, quiero poder confirmar un pedido incluso cuando el servicio de Inventario esté degradado. Un pedido con stock no confirmado es preferible a un error que me impida completar la compra.
+- **ASR-1**: Como tendero, quiero poder confirmar un pedido incluso cuando el servicio de Inventario esté degradado. Un pedido con stock no confirmado es preferible a un error, o a una app que se queda pensando 10 segundos.
 - **ASR-2**: Como negocio, quiero que los reintentos automáticos ante fallos no amplifiquen la carga sobre servicios ya degradados, para evitar empeorar el incidente.
-- **ASR-3**: Como negocio, quiero que el tráfico de confirmación de pedidos no se vea afectado por picos de tráfico de baja prioridad.
-- **ASR-4**: Como negocio, quiero que toda venta registrada, incluso con graceful degradation (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere, sin que ese mecanismo vuelva lenta la confirmación de pedidos.
+- **ASR-3**: Como negocio, quiero que un bug en la política de reintentos de una versión de la app no convierta una degradación de Inventario en una caída total, ni le quite capacidad a la confirmación de pedidos de los demás tenderos.
+- **ASR-4**: Como negocio, quiero que toda venta registrada, incluso con graceful degradation (`pending_stock_confirmation`), tenga su decremento de stock entregado exactamente una vez cuando Inventario se recupere.
+- **ASR-5**: Como negocio, quiero que la caída de una tarea se resuelva sola en minutos, sin que alguien de guardia tenga que intervenir un lunes a las 7 a. m.
 
 ### 4.3 Tácticas y patrones
 
@@ -117,6 +134,8 @@ En este laboratorio las tácticas de disponibilidad se implementan en el sidecar
 1. **Separación de responsabilidades**: el código de negocio de Ventas no debería saber si el circuito está abierto o cerrado; eso es una política de infraestructura.
 2. **Cambios sin redespliegue del servicio**: ajustar `num_retries` o `base_ejection_time` solo requiere actualizar la config del sidecar y reiniciarlo, sin tocar ni recompilar la aplicación.
 3. **Consistencia cross-lenguaje**: si mañana Ventas se reescribe en Go o Python, el sidecar sigue funcionando igual, sin reimplementar la lógica de retry en cada SDK.
+
+**El sidecar también es un componente que puede fallar.** Al agregarlo, la tarea de Ventas pasa a tener dos contenedores, y en el template ambos están marcados como esenciales (`Essential: true`). Qué le pasa a Ventas cuando el sidecar se cae es una de las preguntas que responde el experimento E4.
 
 **Relación entre sidecar y graceful degradation**
 
@@ -159,7 +178,7 @@ El circuit breaker y la graceful degradation mantienen a Ventas disponible, pero
 - **Outbox:** en la misma transacción en la que Ventas guarda la venta, guarda también una fila en una tabla local (`outbox_http_calls`, entidad `OutboxHttpCall`) que representa "hay que descontar este stock en Inventario". Un proceso en segundo plano lee esa tabla cada 2 segundos y envía la petición a Inventario hasta que logra entregarla. La garantía es de entrega **al menos una vez** (*at-least-once*).
 - **Idempotencia:** como "al menos una vez" significa que la misma petición puede llegar repetida, Inventario recibe con cada petición una clave de idempotencia y guarda las claves que ya procesó. Si llega una clave repetida, no vuelve a descontar.
 
-Juntos logran que cada venta descuente el stock exactamente una vez. Verá ambos patrones en detalle, sobre el código, en la última ronda de pruebas.
+Juntos logran que cada venta descuente el stock exactamente una vez. Verá ambos patrones en detalle, sobre el código, en el experimento E3.
 
 #### 4.3.2 Tácticas de arquitectura
 
@@ -168,8 +187,9 @@ Juntos logran que cada venta descuente el stock exactamente una vez. Verá ambos
 | Reintentos con backoff exponencial + jitter | Favorece la recuperación automática ante fallos transitorios.<br>Sin backoff ni jitter, los reintentos sincronizados pueden amplificar la carga (thundering herd), agravando el incidente en lugar de resolverlo.                                                |
 | Circuit Breaker (CLOSED / OPEN / HALF-OPEN) | Favorece disponibilidad del servicio cliente al dejar de enviar requests a un servicio que ya está fallando.<br>Desfavorece consistencia inmediata: el estado OPEN implica que algunas operaciones retornan una respuesta de graceful degradation en lugar de resultados reales. |
 | Graceful degradation (fallback)             | Favorece experiencia de usuario y disponibilidad percibida: el sistema sigue aceptando pedidos con graceful degradation.<br>Introduce complejidad en la lógica de negocio para manejar el estado `pending_stock_confirmation`.                                          |
-| Rate Limiting (API Gateway throttling)      | Favorece protección de servicios backend ante picos de tráfico y retry storms.<br>Puede afectar a usuarios legítimos si los límites no están bien calibrados para los patrones reales de la demanda.                                                             |
-| Proxy sidecar (Envoy)                   | Permite implementar retry y circuit breaker en la capa de red, sin tocar el código de negocio.<br>El sidecar intercepta el tráfico saliente de Ventas hacia Inventario y aplica las políticas configuradas en su archivo YAML.<br>Introduce un salto de red adicional y requiere que los parámetros del sidecar sean coherentes con los timeouts de la aplicación. |
+| Detección y recuperación automática (health checks + reemplazo de tareas de ECS) | Favorece la recuperación sin intervención humana: el balanceador deja de enviar tráfico a una tarea que no responde `/health` y ECS lanza una tarea nueva.<br>El tiempo de recuperación depende de la frecuencia de los health checks, del tiempo de arranque de la tarea y de cuántas réplicas hay; un `/health` que no revisa las dependencias (por ejemplo, la base de datos) puede reportar sana una tarea que no sirve. |
+| Rate Limiting (API Gateway throttling)      | Favorece protección de servicios backend ante picos de tráfico y retry storms.<br>Puede afectar a usuarios legítimos si los límites no están bien calibrados o si no distinguen entre clientes o tipos de tráfico.                                                             |
+| Proxy sidecar (Envoy)                   | Permite implementar retry y circuit breaker en la capa de red, sin tocar el código de negocio.<br>El sidecar intercepta el tráfico saliente de Ventas hacia Inventario y aplica las políticas configuradas en su archivo YAML.<br>Introduce un salto de red adicional, un componente más que puede fallar, y requiere que los parámetros del sidecar sean coherentes con los timeouts de la aplicación. |
 
 ##### Retries (reintentos)
 
@@ -193,7 +213,7 @@ intento 3 -> exito o error final
 
 **Por qué importa**
 
-- Mejora disponibilidad cuando el fallo es breve.
+- Mejora disponibilidad cuando el fallo es breve o intermitente.
 - Si el fallo es persistente, los retries solo amplifican carga y empeoran el incidente.
 
 ##### Graceful Degradation
@@ -219,7 +239,7 @@ La **graceful degradation** es una decision de negocio: el servicio devuelve una
 
 | Estilo | Análisis |
 | --- | --- |
-| Microservicios | Favorece aislamiento de fallos por servicio y despliegue independiente.<br>Sin tácticas de resiliencia, la comunicación HTTP entre servicios introduce puntos de fallo en cadena. |
+| Microservicios | Favorece aislamiento de fallos por servicio y despliegue independiente.<br>Sin tácticas de resiliencia, la comunicación HTTP entre servicios introduce puntos de fallo en cadena. Los servicios que comparten una misma base de datos no están aislados frente a la caída de esa base. |
 | API Gateway | Actúa como punto de control centralizado para rate limiting y throttling.<br>Protege los servicios upstream de picos de tráfico que superan su capacidad. |
 | Graceful degradation | Favorece continuidad operativa durante incidentes: el sistema entrega respuestas útiles aunque parciales en lugar de fallar completamente.<br>Requiere acuerdos de negocio claros sobre qué funcionalidades pueden degradarse sin romper la experiencia crítica del tendero. |
 | Control de recursos (Resource Control) | Favorece estabilidad bajo carga al limitar concurrencia, throughput y consumo por cliente/ruta (throttling, cuotas, aislamiento).<br>Sin una buena calibración, puede rechazar tráfico legítimo y afectar temporalmente la percepción de disponibilidad. |
@@ -227,57 +247,95 @@ La **graceful degradation** es una decision de negocio: el servicio devuelve una
 
 ### 4.4 Diseño del experimento
 
-#### 4.4.1 ¿Cómo se va a validar la hipótesis?
+#### 4.4.1 ¿Por qué no es una prueba de carga?
 
-Comparando contra una línea base sin protecciones, bajo la misma matriz de carga y con el mismo fallo controlado en Inventario. Las rondas son **acumulativas**: cada una conserva las tácticas de la ronda anterior y agrega una nueva. El efecto de cada táctica se aísla comparando cada ronda con la **inmediatamente anterior** (por ejemplo, el efecto del circuit breaker es la diferencia entre la Ronda 3 y la Ronda 2).
+En los laboratorios anteriores el experimento consistía en subir la carga y observar en qué punto el sistema dejaba de cumplir su ASR: la **variable independiente era la carga**. Para la disponibilidad, esa estrategia tiene dos problemas. Primero, los fallos que más afectan la disponibilidad (una tarea que se cae, una dependencia que se pone lenta, una base de datos que se reinicia) **no dependen de la carga**: ocurren igual a las 3 a. m. con un tendero conectado. Segundo, una prueba de carga mezcla dos causas: si el sistema falla, no se sabe si fue por el fallo o por la saturación.
 
-Se realizan cinco rondas. Las cuatro primeras son pruebas de carga con JMeter sobre `POST /ventas/ventas` en AWS, con Inventario en estado de fallo controlado; la quinta se ejecuta en su computador (ver sección 6.7):
+Por eso en este laboratorio:
 
-| Ronda | Sidecar | Reintentos | Circuit breaker | Rate limiting | Outbox e idempotencia |
-| --- | --- | --- | --- | --- | --- |
-| 1. Línea base | No | No | No | No | Activo en el código, no se evalúa |
-| 2. Reintentos | Sí | Sí | No | No | Activo en el código, no se evalúa |
-| 3. Circuit breaker | Sí | Sí | Sí | No | Activo en el código, no se evalúa |
-| 4. Tácticas combinadas | Sí | Sí | Sí | Sí | Activo en el código, no se evalúa |
-| 5. Outbox e idempotencia | Sí | Sí | Sí | No aplica (local) | Se evalúa |
+| | Prueba de carga (Labs 2-4) | Experimento de caos (este laboratorio) |
+| --- | --- | --- |
+| Variable que se manipula | Número de usuarios o peticiones por segundo | El fallo: qué componente falla, cómo y por cuánto tiempo |
+| Carga | Creciente, hasta saturar | **Baja y constante** (2 ventas/s), igual en todos los experimentos. En E6 se agrega tráfico, pero es el fallo inyectado (apps que reintentan mal), no una carga creciente |
+| Pregunta | ¿Cuánta carga aguanta? | ¿Se mantiene el estado estable cuando algo falla? ¿Cuánto tarda en detectarlo y en recuperarse? |
+| Métricas principales | Throughput, p95/p99 por nivel de carga | Disponibilidad percibida en el tiempo, TTD, TTR, radio de impacto, consistencia de los datos |
+| Resultado típico | Una curva carga vs. latencia | Una **línea de tiempo** con el momento de la inyección, la desviación y la recuperación |
 
-1. **Línea base (sin protecciones)**: la tarea de Ventas no tiene sidecar; Ventas llama directamente al balanceador de Inventario, sin reintentos ni circuit breaker.
-2. **Reintentos con backoff exponencial**: se agrega el sidecar solo con la política de reintentos; el proxy Envoy reintenta automáticamente ante errores 5xx.
-3. **Circuit breaker y graceful degradation**: el mismo sidecar con la *outlier detection* activada. Los reintentos siguen activos. Envoy abre el circuito y Ventas retorna `pending_stock_confirmation`.
-4. **Tácticas combinadas**: la configuración de la Ronda 3 más rate limiting en API Gateway.
-5. **Outbox e idempotencia**: con Inventario caído se crean ventas que retornan `pending_stock_confirmation`; se restaura Inventario y se observa la reconciliación automática vía Outbox. Se valida que una petición repetida con la misma clave no produce decrementos dobles.
+Un experimento de caos sigue cuatro pasos:
+
+1. **Definir el estado estable** con una métrica de negocio medible (aquí, disponibilidad percibida y p99 de las ventas del generador de tráfico).
+2. **Formular la hipótesis** de que el estado estable se mantiene (o se degrada de forma acotada) en el grupo experimental, frente al grupo de control.
+3. **Inyectar el fallo** de forma controlada: un solo fallo a la vez (salvo cuando el escenario es justamente la combinación de dos, como en E6), con duración definida y con una condición de aborto.
+4. **Comparar** el estado estable antes, durante y después del fallo, y entre configuraciones. Lo que se busca es la diferencia.
+
+#### 4.4.2 Catálogo de experimentos
+
+El catálogo define **qué fallo** se inyecta en cada experimento y **qué configuraciones** se comparan. Cómo inyectar cada fallo está en la sección 6. El resto del diseño (hipótesis, radio de impacto esperado, condición de aborto, duración, qué métricas confirman o refutan la hipótesis) lo define usted en la ficha de cada experimento.
+
+| # | Fallo inyectado | Cómo se inyecta | Configuraciones a comparar | ASR |
+| --- | --- | --- | --- | --- |
+| E0 | Ninguno: medición del estado estable | — | Sidecar completo | Define el estado estable de los demás experimentos |
+| E1 | Inventario lento: cada consulta de disponibilidad tarda 5 s | Endpoint de caos de Inventario (`mode: latency`) | Sin sidecar (control) · solo reintentos · reintentos + circuit breaker | ASR-1, ASR-2 |
+| E2 | Inventario con errores: 500 intermitentes (30 % de las consultas) y luego totales (100 %) | Endpoint de caos de Inventario (`mode: error`) | Sin sidecar (control) · solo reintentos · reintentos + circuit breaker | ASR-1, ASR-2 |
+| E3 | Caída de la tarea de Inventario | `aws ecs stop-task` | Sidecar completo | ASR-4, ASR-5 |
+| E4 | Caída del sidecar de Ventas, y caída de la tarea de Ventas con entregas del Outbox pendientes | Endpoint de caos de Ventas (apaga Envoy) y `aws ecs stop-task` | Sidecar completo | Exploratorio (sin ASR): ¿qué tan grave es el sidecar como punto de fallo? ASR-4 (persistencia del Outbox) |
+| E5 | Reinicio de la base de datos RDS que comparten los tres servicios | `aws rds reboot-db-instance` | Sidecar completo | Exploratorio (sin ASR): radio de impacto de un punto único de fallo |
+| E6 | *Retry storm*: Inventario lento + 50 apps cliente que reintentan sin backoff | Endpoint de caos (`mode: latency`) + `recursos/tormenta_reintentos.sh` | Sin sidecar (control) · sin sidecar con throttling del stage · completa · (opcional) sin sidecar con clientes con backoff | ASR-3 |
+
+En los experimentos **exploratorios** no hay un ASR que cumplir: el objetivo es descubrir el comportamiento del sistema. Igual debe escribir una hipótesis (qué cree que va a pasar y por qué) antes de ejecutarlos.
 
 > [!IMPORTANT]
 > **Pregunta 2:**
-> Si usted fuera el líder encargado de llevar estas tácticas a producción en Cheapest, ¿las adoptaría en el mismo orden de las rondas (reintentos, circuit breaker, rate limiting, Outbox e idempotencia), teniendo en cuenta el riesgo de cada cambio? Describa un plan de migración que mitigue los riesgos asociados.
+> Si usted fuera el líder encargado de llevar estas tácticas a producción en Cheapest, ¿las adoptaría en el mismo orden en que se presentan (reintentos, circuit breaker, rate limiting, Outbox e idempotencia), teniendo en cuenta el riesgo de cada cambio? Describa un plan de migración que mitigue los riesgos asociados.
 > El plan de migración debe incluir: etapas, tiempo estimado por etapa y las tareas a realizar en cada una.
 
-#### 4.4.2 ¿Qué componentes se van a diseñar o modificar?
+#### 4.4.3 Ficha de cada experimento
+
+Antes de ejecutar cada experimento, complete su ficha. Las fichas se entregan en el informe (sección 7.1) y se califican: un experimento sin ficha previa no es un experimento, es una prueba al azar.
+
+| Campo | Qué debe contener |
+| --- | --- |
+| Experimento y configuración | Número del catálogo y configuración de tácticas (revisión de la task definition de Ventas e imagen del sidecar). |
+| Estado estable | Métricas y valores que considera "normales", tomados de su E0 (disponibilidad percibida, p99, % de `pending`). |
+| Hipótesis | En el formato de la sección 4.1. |
+| Fallo inyectado | Qué, dónde, con qué parámetros (por ejemplo `delayMs`, `errorRate`, `durationMs`) y durante cuánto tiempo. |
+| Radio de impacto esperado | Qué endpoints, servicios o datos espera que se afecten, y cuáles no. |
+| Condición de aborto | Cuándo detendría el experimento y revertiría el fallo antes de tiempo. |
+| Métricas y fuente | Qué va a medir para confirmar o refutar la hipótesis, y de dónde sale cada dato (generador de tráfico, endpoint de caos, logs del sidecar, CloudWatch, eventos de ECS). |
+| Reversión | Cómo devuelve el sistema al estado inicial al terminar. |
+
+#### 4.4.4 ¿Qué componentes se van a diseñar o modificar?
 
 | Componente | Cambio |
 | --- | --- |
-| Inventario | Inyección de un fallo que se recupera solo después de un tiempo (`FAULT_DELAY_MS`, `RECOVERY_TIME_MS`) y endpoint que recibe los descuentos de stock con clave de idempotencia. |
-| Ventas | Graceful degradation (`pending_stock_confirmation`) cuando Inventario no está disponible, y escritura transaccional de la venta junto con su fila de Outbox. |
-| Sidecar Envoy (en la tarea de Ventas) | Configuración del timeout, de los reintentos con backoff y jitter, y del circuit breaker. |
+| Inventario | Endpoint de inyección de fallos en caliente (`/inventory/chaos`: latencia o errores, con duración) sobre la consulta de disponibilidad, y endpoint que recibe los descuentos de stock con clave de idempotencia. |
+| Ventas | Graceful degradation (`pending_stock_confirmation`) cuando Inventario no está disponible, escritura transaccional de la venta junto con su fila de Outbox, endpoint de observación del Outbox (`/ventas/outbox/resumen`) y endpoint para apagar el sidecar (`/ventas/chaos/sidecar`). |
+| Sidecar Envoy (en la tarea de Ventas) | Configuración del timeout, de los reintentos con backoff y jitter, y del circuit breaker (los seis `???` que usted completa). |
 | API Gateway | Rate limiting sobre el stage `lab`. |
 
-#### 4.4.3 ¿Qué métricas se van a medir?
+#### 4.4.5 ¿Qué métricas se van a medir?
 
-| Métrica | Hipótesis / ASR | Umbral | Dónde se mide |
+| Métrica | Definición | ASR | Dónde se mide |
 | --- | --- | --- | --- |
-| p99 de `POST /ventas/ventas` (sobre todas las peticiones de cada fila de la matriz) y % de respuestas 201 con `pending_stock_confirmation` | H1 / ASR-1 | p99 < 3000 ms | JMeter (Summary/Aggregate Report) |
-| Factor de amplificación de las llamadas a Inventario (fórmula abajo) | H2 / ASR-2 | ≤ 2 | CloudWatch: `RequestCount` del target group de Inventario, y JMeter |
-| Throughput de pedidos válidos y % de respuestas 429 | H3 / ASR-3 | caída ≤ 10% | JMeter |
-| Tiempo de PENDING → DELIVERED (contado desde que Inventario vuelve a responder `/health`) y decrementos duplicados en `items_inventario.cantidad` | H4 / ASR-4 (a) | < 30 s, 0 duplicados | SQL sobre `outbox_http_calls` e `items_inventario` |
-| Diferencia de p99 de `POST /ventas/ventas` con y sin Outbox, con Inventario sano | H4 / ASR-4 (b) | ≤ 50 ms | JMeter |
+| Disponibilidad percibida | Respuestas útiles (2xx en < 3 s, incluidas las `pending`) ÷ total, por ventana de 10 s | ASR-1, ASR-3, ASR-5 | CSV del generador de tráfico, resumido con `ventanas.py` (sección 6.2) |
+| p99 del generador de tráfico | Percentil 99 de la latencia de las ventas, por ventana de 10 s | ASR-1 | CSV del generador de tráfico |
+| % de `pending` | Ventas registradas con graceful degradation ÷ total, por ventana | ASR-1 (y consistencia) | CSV del generador de tráfico |
+| TTD | Desde la inyección (T_inj) hasta que el mecanismo detecta el fallo: primera respuesta `503 UH` del sidecar (circuito OPEN) o primer `UnHealthyHostCount` > 0 del balanceador | ASR-1, ASR-5 | Logs del sidecar, CloudWatch |
+| TTR | Desde el retiro del fallo (T_rem) o la caída hasta la vuelta al estado estable (primera ventana sin `pending` y con la disponibilidad de E0) | ASR-1, ASR-5 | CSV del generador de tráfico, eventos de ECS |
+| Radio de impacto | Qué endpoints del generador de tráfico se desviaron del estado estable | Todos | CSV del generador de tráfico (endpoints `venta`, `inventario_item`, `catalogo`, `logistica_health`) |
+| Factor de amplificación | Fórmula abajo | ASR-2 | Contador `llamadasDisponibilidad` del endpoint de caos y CSV del generador de tráfico |
+| Reconciliación del Outbox | Desde T_rec hasta que no quedan filas PENDING; decrementos duplicados | ASR-4 | `GET /ventas/outbox/resumen`, `GET /inventario/items/{id}` |
+| Intentos por pedido | Peticiones enviadas por las apps defectuosas ÷ pedidos lógicos, durante la tormenta | ASR-3 | CSV y resumen de `tormenta_reintentos.sh` |
+| Pedidos duplicados | Ventas registradas que nadie recibió: Δ filas totales del Outbox − (pedidos completados por la tormenta + ventas 201 del generador de tráfico) | ASR-3 (consistencia) | `GET /ventas/outbox/resumen` antes y después, CSV de los dos scripts |
+| Respuestas 429 | Porcentaje de las peticiones de la tormenta y del generador de tráfico rechazado por API Gateway | ASR-3 | CSV de los dos scripts |
 
-**Cómo calcular el factor de amplificación (ASR-2).** El target group de Inventario recibe dos tipos de llamadas: las de disponibilidad (`GET /inventory/items/disponibilidad/...`), que son las que se reintentan, y una llamada del Outbox (`POST /inventory/ventas/desde-outbox`) por cada venta registrada, que no tiene que ver con los reintentos. Por eso hay que restar las segundas:
+**Cómo calcular el factor de amplificación (ASR-2).** El endpoint de caos de Inventario cuenta cuántas consultas de disponibilidad le llegan, reintentos incluidos (campo `llamadasDisponibilidad` de `GET {BASE_URL}/inventario/chaos`). Léalo justo antes de inyectar el fallo y justo después de retirarlo; la diferencia son las llamadas que recibió Inventario durante el fallo. Divídala por el número de ventas que el generador de tráfico envió en ese mismo intervalo:
 
-$$\text{llamadas de disponibilidad} = \text{RequestCount}_{\text{Inventario}} - \text{ventas registradas (respuestas 201)}$$
+$$\text{llamadas por venta} = \frac{\Delta\,\text{llamadasDisponibilidad}}{\text{ventas enviadas por el generador de tráfico entre las dos lecturas}}$$
 
-$$\text{factor} = \frac{\text{llamadas de disponibilidad en la ronda}}{\text{llamadas de disponibilidad en la línea base}}$$
+$$\text{factor} = \frac{\text{llamadas por venta con la configuración evaluada}}{\text{llamadas por venta en el grupo de control (sin sidecar)}}$$
 
-Ejemplo: la matriz completa envía 50 + 200 + 500 + 1500 = 2250 ventas. Si en la línea base CloudWatch suma 4400 peticiones a Inventario y JMeter registró 2200 respuestas 201, hubo 4400 − 2200 = 2200 llamadas de disponibilidad. Si en la ronda de reintentos CloudWatch suma 6300 y hubo 2100 respuestas 201, hubo 4200 llamadas de disponibilidad: factor = 4200 / 2200 ≈ 1,9, que cumple el ASR-2. Como cota teórica, cada venta genera como máximo `1 + num_retries` llamadas de disponibilidad, así que con `num_retries = 2` el peor caso es 3 y el ASR-2 no se cumpliría.
+Sin sidecar cada venta genera exactamente una consulta, así que el grupo de control da 1 llamada por venta. Ejemplo: si con reintentos el contador subió 470 mientras el generador de tráfico envió 240 ventas, hay 1,96 llamadas por venta y el factor es 1,96, que cumple el ASR-2. Como cota teórica, cada venta genera como máximo `1 + num_retries` consultas; el circuit breaker, en cambio, **reduce** el factor, porque con el circuito OPEN las consultas no llegan a Inventario.
 
 ### 4.5 Planeación del experimento
 
@@ -286,7 +344,8 @@ Ejemplo: la matriz completa envía 50 + 200 + 500 + 1500 = 2250 ventas. Si en la
 | Recurso | Detalle |
 | --- | --- |
 | Infraestructura AWS | Stack de CloudFormation (API Gateway, ECS/Fargate, RDS, balanceadores y sidecar Envoy) desplegado en su cuenta, más los repositorios de ECR con las imágenes |
-| Herramientas locales | Docker, AWS CLI, JMeter, un cliente de PostgreSQL y el backend de la rama `availability` |
+| Herramientas locales | Docker, AWS CLI, `curl`, Python 3, un cliente de PostgreSQL y el backend de la rama `availability` |
+| Herramientas del laboratorio | `recursos/generador_trafico.sh` (tráfico de estado estable), `recursos/ventanas.py` (resumen por ventanas de tiempo) y `recursos/tormenta_reintentos.sh` (apps cliente con reintentos defectuosos, E6) |
 | Datos de prueba | Script de seed de la rama `availability` (`npm run db:seed`) |
 | Créditos AWS | Elimine el stack al terminar |
 
@@ -295,8 +354,9 @@ Ejemplo: la matriz completa envía 50 + 200 + 500 + 1500 = 2250 ventas. Si en la
 
 | Categoría                          | Tecnologías                                | Recurso para entender qué hace                                                                                     |
 | ----------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Ingeniería del caos                 | Principios de chaos engineering               | [Principles of Chaos Engineering](https://principlesofchaos.org/)                                                 |
 | Infraestructura como Código        | AWS CloudFormation                            | [¿Qué es AWS CloudFormation?](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/Welcome.html)     |
-| Gateway de entrada + Rate Limiting | Amazon API Gateway (throttling por stage)     | [¿Qué es Amazon API Gateway?](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/welcome.html)       |
+| Gateway de entrada + Rate Limiting | Amazon API Gateway (throttling por stage) | [¿Qué es Amazon API Gateway?](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/welcome.html) · [Throttling en HTTP APIs](https://docs.aws.amazon.com/es_es/apigateway/latest/developerguide/http-api-throttling.html) |
 | Orquestación de contenedores       | Amazon ECS (Fargate)                          | [¿Qué es Amazon ECS?](https://docs.aws.amazon.com/es_es/AmazonECS/latest/developerguide/Welcome.html) · [AWS Fargate](https://docs.aws.amazon.com/es_es/AmazonECS/latest/userguide/what-is-fargate.html) |
 | Registro de imágenes               | Amazon ECR                                    | [¿Qué es Amazon ECR?](https://docs.aws.amazon.com/es_es/AmazonECR/latest/userguide/what-is-ecr.html)                 |
 | Base de datos relacional           | Amazon RDS (PostgreSQL)                       | [¿Qué es Amazon RDS?](https://docs.aws.amazon.com/es_es/AmazonRDS/latest/UserGuide/Welcome.html)                     |
@@ -305,35 +365,34 @@ Ejemplo: la matriz completa envía 50 + 200 + 500 + 1500 = 2250 ventas. Si en la
 | Lenguaje                           | TypeScript                                    | [Handbook de TypeScript](https://www.typescriptlang.org/docs/handbook/intro.html)                                     |
 | ORM                                | TypeORM                                       | [Documentación de TypeORM](https://typeorm.io/)                                                                       |
 | Proxy sidecar                       | Envoy Proxy                                  | [¿Qué es Envoy?](https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy) · [Patrón Sidecar](https://learn.microsoft.com/es-es/azure/architecture/patterns/sidecar) |
-| Pruebas de carga                   | Apache JMeter                                 | [Guía de introducción a JMeter](https://jmeter.apache.org/usermanual/get-started.html)                                |
 
 > [!IMPORTANT]
 > **Sugerencia de prompt para IA:** *"Actúo como estudiante de arquitectura de software. Explícame qué hace [servicio de AWS], qué problema arquitectónico resuelve, qué recursos concretos crea cuando lo despliego con CloudFormation, y qué riesgos de disponibilidad o costo debería tener en cuenta al usarlo en un sistema de microservicios como el de este laboratorio."* Use esto como punto de partida, no como respuesta final: valide lo que la IA le diga contra la documentación oficial y contra lo que observe en su propio despliegue.
 
 #### 4.5.2 Elementos de arquitectura involucrados
 
-Servicios de Ventas e Inventario (y Logística como parte del stack), sidecar Envoy, API Gateway, base de datos RDS (tablas `outbox_http_calls` e `items_inventario`) y JMeter como generador de carga. El conector que se estudia es la llamada HTTP de Ventas a Inventario.
+Servicios de Ventas e Inventario (y Logística como parte del stack), sidecar Envoy, API Gateway, balanceadores con sus health checks, el servicio ECS que reemplaza tareas, la base de datos RDS compartida (tablas `outbox_http_calls` e `items_inventario`) y el generador de tráfico de estado estable. El conector que se estudia es la llamada HTTP de Ventas a Inventario.
 
-![Diagrama de despliegue y pruebas de carga](./recursos/diagrama_componentes.png)
+![Diagrama de despliegue del laboratorio](./recursos/diagrama_componentes.png)
 
-*Figura 1. Vista de despliegue del laboratorio: API Gateway enruta hacia los servicios de Logística, Inventario y Ventas corriendo en ECS/Fargate; el sidecar Envoy corre como segundo contenedor dentro de la misma tarea de Ventas e intercepta el tráfico hacia Inventario; JMeter genera la carga de pruebas desde el computador del estudiante.*
+*Figura 1. Vista de despliegue del laboratorio: API Gateway enruta hacia los servicios de Logística, Inventario y Ventas corriendo en ECS/Fargate; el sidecar Envoy corre como segundo contenedor dentro de la misma tarea de Ventas e intercepta el tráfico hacia Inventario. En este laboratorio el generador de tráfico de estado estable corre en el computador del estudiante (y, en E6, también la tormenta de reintentos).*
 
 > [!NOTE]
 > Note que el sidecar se despliega como un contenedor adicional dentro de la misma tarea ECS que Ventas, y el tráfico entre Ventas e Inventario pasa a través del proxy Envoy. Esto permite implementar las tácticas de resiliencia sin modificar el código de negocio de Ventas, y ajustar los parámetros de retry y circuit breaker sin necesidad de redesplegar la aplicación.
 
 #### 4.5.3 Esfuerzo estimado
 
-Referencia para planear; puede variar según su experiencia con AWS. Buena parte del tiempo es espera: la creación del stack (la RDS sola tarda entre 10 y 15 minutos), los despliegues de cada nueva revisión de ECS y la ventana de fallo de 10 minutos de Inventario en cada una de las rondas 1 a 4. Planee el laboratorio en al menos dos sesiones de trabajo.
+Referencia para planear; puede variar según su experiencia con AWS. Buena parte del tiempo es espera: la creación del stack (la RDS sola tarda entre 10 y 15 minutos) y los despliegues de cada nueva revisión de ECS (2 a 5 minutos). Cada experimento dura entre 6 y 10 minutos, porque el fallo se inyecta y se retira en segundos con el endpoint de caos. **Ordene los experimentos para minimizar el número de revisiones de la task definition de Ventas**: hágalo parte de su planeación. Planee el laboratorio en al menos dos sesiones de trabajo.
 
 | Etapa | Esfuerzo aprox. |
 | --- | --- |
 | Publicación de imágenes, despliegue del stack y carga de datos | 1,5 h |
 | Configuración del sidecar y revisión del código | 0,5 h |
-| Preparación del plan de JMeter | 0,5 h |
-| Ronda de línea base: fallo en cascada (incluye la ventana de 10 min) | 0,75 h |
-| Rondas 2 a 4 (cada una: nueva revisión, reinicio de Inventario y ventana de 10 min) | 2,25 h |
-| Ronda de Outbox e idempotencia (local) y medición de latencia (AWS) | 1 h |
-| Análisis y entregables | 1,5 h |
+| Fichas de los siete experimentos (diseño) | 1 h |
+| E0 a E2 (incluye las revisiones de Ventas sin sidecar y solo con reintentos) | 1,5 h |
+| E3 a E5 (caídas, Outbox e idempotencia, reinicio de la RDS) | 1,25 h |
+| E6 (tormenta de reintentos y throttling) | 0,5 h |
+| Análisis y entregables | 1,75 h |
 | **Total** | **8 h-persona** |
 
 ## 5. Ejecución del laboratorio
@@ -392,10 +451,10 @@ aws cloudformation deploy  --template-file lab_5/recursos/cloudformation_templat
 
 Monitoree el progreso en la consola de AWS → CloudFormation → Stack `Cheapest-lab5` → pestaña **Events**.
 
-El template ya configura todas las variables de entorno de las tareas: `INVENTARIO_BASE_URL=http://localhost:10000` e `INVENTARIO_TIMEOUT_MS=9000` en Ventas, `INVENTARIO_UPSTREAM_HOST` (el DNS del balanceador de Inventario, que el template obtiene solo) e `INVENTARIO_UPSTREAM_PORT=80` en el sidecar, y `FAULT_DELAY_MS=0` y `RECOVERY_TIME_MS=60000` en Inventario. No tiene que escribir ninguno de esos valores a mano.
+El template ya configura todas las variables de entorno de las tareas: `INVENTARIO_BASE_URL=http://localhost:10000` e `INVENTARIO_TIMEOUT_MS=9000` en Ventas, `INVENTARIO_UPSTREAM_HOST` (el DNS del balanceador de Inventario, que el template obtiene solo) e `INVENTARIO_UPSTREAM_PORT=80` en el sidecar, `SIDECAR_ADMIN_URL=http://localhost:9901` y `OUTBOX_MAX_ATTEMPTS=600` también en Ventas, y `FAULT_DELAY_MS=0` en Inventario (arranca sano; los fallos se inyectan después, en caliente). No tiene que escribir ninguno de esos valores a mano.
 
 > [!IMPORTANT]
-> **Ejecute `aws cloudformation deploy` una sola vez.** Todos los cambios posteriores (activar el fallo de Inventario, quitar o poner el sidecar, cambiar la imagen del sidecar) se hacen **en la consola de ECS creando una nueva revisión de la task definition**, como se explica en la sección 6.1. Si vuelve a ejecutar `aws cloudformation deploy` con otros parámetros, CloudFormation puede devolver los servicios a las revisiones que él creó y perder sus cambios.
+> **Ejecute `aws cloudformation deploy` una sola vez.** Los cambios de configuración posteriores (quitar o poner el sidecar, cambiar la imagen del sidecar) se hacen **en la consola de ECS creando una nueva revisión de la task definition**, como se explica en la sección 6.1. Los fallos **no** se inyectan con revisiones: se inyectan en caliente con los endpoints de caos y con la AWS CLI (sección 5.8). Si vuelve a ejecutar `aws cloudformation deploy` con otros parámetros, CloudFormation puede devolver los servicios a las revisiones que él creó y perder sus cambios.
 
 ### 5.5 Verificar el despliegue
 
@@ -412,18 +471,22 @@ El valor que retorna es la **`BASE_URL`** que se usa en el resto del laboratorio
 BASE_URL=https://<API_ID>.execute-api.us-east-1.amazonaws.com/lab
 ```
 
-Todas las peticiones que haga desde su computador o desde JMeter contra AWS pasan por API Gateway y usan estas rutas:
+Todas las peticiones que haga desde su computador (`curl` y los scripts del laboratorio) contra AWS pasan por API Gateway y usan estas rutas:
 
 | Para qué | Método y ruta completa |
 | --- | --- |
 | Salud de cada servicio | `GET {BASE_URL}/logistica/health`, `GET {BASE_URL}/inventario/health`, `GET {BASE_URL}/ventas/health` |
 | **Crear una venta (endpoint bajo prueba)** | `POST {BASE_URL}/ventas/ventas` |
-| Listar productos externos (para armar el cuerpo de la venta) | `GET {BASE_URL}/ventas/productos-externos` |
+| Crear y listar productos externos (para armar el cuerpo de la venta) | `POST` y `GET {BASE_URL}/ventas/productos-externos` |
 | Consultar un ítem de inventario y su `cantidad` | `GET {BASE_URL}/inventario/items/{itemInventarioId}` |
 | Disponibilidad de un producto (la que consulta Ventas) | `GET {BASE_URL}/inventario/items/disponibilidad/{productoId}` |
+| Reponer stock de un ítem | `PATCH {BASE_URL}/inventario/items/{itemInventarioId}` |
+| Inyectar o retirar un fallo en Inventario, y leer el contador de llamadas | `POST` y `GET {BASE_URL}/inventario/chaos` |
+| Estado del Outbox (conteo de filas por estado) | `GET {BASE_URL}/ventas/outbox/resumen` |
+| Apagar el sidecar Envoy de Ventas | `POST {BASE_URL}/ventas/chaos/sidecar` |
 
 > [!NOTE]
-> El primer segmento de la ruta (`/ventas`, `/inventario`, `/logistica`) es el prefijo de API Gateway; el resto es la ruta del controlador. Por eso crear una venta es `/ventas/ventas`. API Gateway traduce `/inventario/...` a la ruta interna `/inventory/...` y `/logistica/...` a `/logistics/...`. Si usa los prefijos en inglés contra `BASE_URL` obtendrá 404. Las rutas en inglés (`/inventory/...`) solo se usan cuando se llama a un servicio **directamente**, sin API Gateway: dentro del código, en los logs y en la Ronda 5 local.
+> El primer segmento de la ruta (`/ventas`, `/inventario`, `/logistica`) es el prefijo de API Gateway; el resto es la ruta del controlador. Por eso crear una venta es `/ventas/ventas`. API Gateway traduce `/inventario/...` a la ruta interna `/inventory/...` y `/logistica/...` a `/logistics/...`. Si usa los prefijos en inglés contra `BASE_URL` obtendrá 404. Las rutas en inglés (`/inventory/...`) solo se usan cuando se llama a un servicio **directamente**, sin API Gateway: dentro del código, en los logs y en el ambiente local con Docker Compose.
 
 Desde su computador verifique que los tres servicios responden:
 
@@ -471,7 +534,21 @@ aws ec2 revoke-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --por
 
 Con los datos sembrados, ya puede ejecutar las pruebas usando los IDs fijos de `seed.sql` (los mismos de los laboratorios anteriores: tienda `bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`, producto `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, moneda `cccccccc-cccc-4ccc-8ccc-cccccccccccc`). El ítem de inventario de ese producto en esa tienda es `11111111-1111-4111-8111-111111111111`.
 
-Los productos externos se generan con IDs aleatorios: tome el `id` de cualquiera con `GET {BASE_URL}/ventas/productos-externos`. Guarde el cuerpo de la venta en un archivo `venta.json`, que es el que usarán JMeter y los comandos `curl` del laboratorio:
+El seed no crea productos externos (los productos que cada tienda vende por fuera del catálogo de Cheapest), y la venta necesita uno. Cree uno y anote el `id` que retorna:
+
+```bash
+curl -s -X POST $BASE_URL/ventas/productos-externos -H 'Content-Type: application/json' -d '{
+  "tiendaId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "codigoBarras": "7700000000001",
+  "nombre": "Arroz 500 g",
+  "categoria": "Granos",
+  "precioBase": 25.5,
+  "monedaId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "cantidad": 100
+}'
+```
+
+Guarde el cuerpo de la venta en un archivo `venta.json`, que es el que usarán el generador de tráfico y los comandos `curl` del laboratorio:
 
 ```json
 {
@@ -517,18 +594,42 @@ Realice los siguientes pasos:
 
 Las modificaciones de este laboratorio se dividen en tres partes:
 
-1. La inyección de fallos en Inventario (ya implementada en el código base).
+1. Las herramientas para inyectar fallos y observar el sistema (ya implementadas en el código base).
 2. La **configuración del sidecar Envoy** en Ventas: aquí es donde usted define los parámetros de retry y circuit breaker.
 3. Un ajuste mínimo en el servicio de Ventas para la graceful degradation.
 
-#### Inyección de fallos con auto-recuperación en Inventario
+#### Herramientas para inyectar fallos
 
-El servicio de Inventario ya incorpora un mecanismo de fallo transitorio controlado por dos variables de entorno:
+Un experimento de caos necesita poder **encender y apagar un fallo en segundos**, sin redesplegar. El código base trae cuatro mecanismos; no es necesario modificarlos.
 
-- `FAULT_DELAY_MS`: delay artificial en ms que se agrega a cada respuesta durante el período de fallo.
-- `RECOVERY_TIME_MS`: tiempo en ms desde el arranque del proceso hasta que el servicio se recupera automáticamente.
+**1. Endpoint de caos de Inventario** (`apps/inventario/src/chaos.controller.ts` y `fault.middleware.ts`). El fallo afecta solo la consulta de disponibilidad que hace Ventas (`GET /inventory/items/disponibilidad/:productoId`); el resto de Inventario sigue sano, lo que acota el radio de impacto.
 
-Este código ya existe en `apps/inventario/src/fault.middleware.ts` y se aplica en el endpoint `GET /inventory/items/disponibilidad/:productoId` que Ventas consume. No es necesario modificarlo.
+```bash
+# Latencia: cada consulta de disponibilidad tarda delayMs; el fallo se retira solo a los durationMs
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+  -d '{"mode": "latency", "delayMs": 5000, "durationMs": 180000}'
+
+# Errores: una fracción errorRate de las consultas responde HTTP 500
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+  -d '{"mode": "error", "errorRate": 0.3, "durationMs": 180000}'
+
+# Retirar el fallo de inmediato (reversión o condición de aborto)
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' -d '{"mode": "off"}'
+
+# Estado actual: modo, si está activo, hasta cuándo, y el contador llamadasDisponibilidad
+curl -s $BASE_URL/inventario/chaos
+```
+
+Si omite `durationMs`, el fallo queda activo hasta que lo apague. Las respuestas incluyen `injectedAt` y `until` en UTC: úselas como T_inj y T_rem. El contador `llamadasDisponibilidad` cuenta todas las consultas de disponibilidad que recibió la tarea desde que arrancó, reintentos incluidos (sección 4.4.5).
+
+> [!NOTE]
+> El estado del fallo vive en la memoria de la tarea de Inventario: si la tarea se reinicia, arranca sin fallo (con `FAULT_DELAY_MS=0`) y el contador vuelve a 0.
+
+**2. Endpoint de caos de Ventas**: `POST $BASE_URL/ventas/chaos/sidecar` le pide al sidecar Envoy que termine (`/quitquitquit`, su puerto de administración, que solo es alcanzable desde dentro de la tarea). Se usa en E4.
+
+**3. AWS CLI** para las caídas de infraestructura (E3, E4 y E5): `aws ecs stop-task` detiene una tarea como si su proceso hubiera muerto, y `aws rds reboot-db-instance` reinicia la base de datos. Los comandos exactos están en cada experimento.
+
+**4. Endpoint de observación del Outbox**: `GET $BASE_URL/ventas/outbox/resumen` retorna cuántas filas de `outbox_http_calls` hay en PENDING, DELIVERED y FAILED, la más antigua pendiente y la última entregada. Con él sigue la reconciliación desde AWS, sin abrir la base de datos.
 
 #### El sidecar Envoy: archivos y flujo
 
@@ -555,7 +656,7 @@ El directorio `apps/ventas/sidecar/` contiene tres archivos:
 | `INVENTARIO_BASE_URL` | `http://localhost:10000` | En ECS los containers del mismo task comparten la red; el sidecar escucha en ese puerto |
 | `INVENTARIO_TIMEOUT_MS` | `9000`              | Debe ser mayor que el timeout total del sidecar para no abortar antes de que Envoy resuelva los reintentos |
 
-Ambas ya están en el template. Solo cambian en la Ronda 1, cuando se quita el sidecar (sección 6.3).
+Ambas ya están en el template. Solo cambian en el grupo de control de E1 y E2, cuando se quita el sidecar (sección 6.1, procedimiento B).
 
 #### Completar la configuración de Envoy
 
@@ -575,8 +676,9 @@ Los seis puntos a completar son:
 **Restricciones de calibración** (úselas para justificar los valores que escoja):
 
 - `timeout` de la ruta ≥ `connect_timeout` × (1 + `num_retries`) + backoff acumulado; de lo contrario los reintentos son abortados por el propio sidecar.
-- `1 + num_retries` ≤ 2. Cada venta genera como máximo una llamada original más `num_retries` reintentos, así que en el peor caso (todas las llamadas fallan) el factor de amplificación es `1 + num_retries`. Es lo que exige el ASR-2: con reintentos activos, Inventario no debe recibir más del doble de las llamadas de disponibilidad que recibe sin reintentos (fórmula en la sección 4.4.3).
-- `base_ejection_time` < `RECOVERY_TIME_MS` de Inventario, para que el estado HALF-OPEN pueda detectar la recuperación automática del servicio.
+- `1 + num_retries` ≤ 2. Cada venta genera como máximo una llamada original más `num_retries` reintentos, así que en el peor caso (todas las llamadas fallan) el factor de amplificación es `1 + num_retries`. Es lo que exige el ASR-2: con reintentos activos, Inventario no debe recibir más del doble de las llamadas de disponibilidad que recibe sin reintentos (fórmula en la sección 4.4.5).
+- `base_ejection_time` < duración del fallo inyectado (`durationMs`), para que el estado HALF-OPEN alcance a probar varias veces mientras dura el fallo y detecte pronto la recuperación. Tenga en cuenta que Envoy **multiplica** `base_ejection_time` por el número de veces que el host ha sido eyectado seguidas: cada reapertura deja el circuito OPEN más tiempo.
+- El ASR-1 exige p99 < 3000 ms: una petición de prueba en HALF-OPEN que espera el `timeout` completo de la ruta también cuenta en ese p99.
 
 > [!IMPORTANT]
 > **Pregunta 3 (parte B — valores implementados; es la continuación de la parte A, en la que propuso un conjunto inicial de parámetros):**
@@ -645,17 +747,17 @@ if (isDegraded) {
 return this.mapToResponse(venta);
 ```
 
-La variable `isDegraded` es la que conecta la graceful degradation con el Outbox: el `catch` no retorna de inmediato, sino que marca la venta para graceful degradation, deja que la venta se guarde junto con su fila de Outbox y solo al final responde `pending_stock_confirmation`. Volverá sobre esto en la Ronda 5.
+La variable `isDegraded` es la que conecta la graceful degradation con el Outbox: el `catch` no retorna de inmediato, sino que marca la venta para graceful degradation, deja que la venta se guarde junto con su fila de Outbox y solo al final responde `pending_stock_confirmation`. Volverá sobre esto en el experimento E3.
 
 > [!NOTE]
-> NestJS responde `POST` con **HTTP 201**, tanto para una venta normal como para una con graceful degradation. Lo que distingue la graceful degradation es el campo `status: pending_stock_confirmation` en el cuerpo. En JMeter agregue una *Response Assertion* o un listener que le permita contar cuántas respuestas lo traen.
+> NestJS responde `POST` con **HTTP 201**, tanto para una venta normal como para una con graceful degradation. Lo que distingue la graceful degradation es el campo `status: pending_stock_confirmation` en el cuerpo. El generador de tráfico (sección 6.2) lo registra en la columna `pending` de su CSV.
 
-> Configure `base_ejection_time` del sidecar en un valor inferior a `RECOVERY_TIME_MS` (600 s en las rondas de prueba) para que el estado HALF-OPEN pueda detectar la recuperación automática de Inventario.
+> Configure `base_ejection_time` del sidecar en un valor inferior a la duración de los fallos que va a inyectar, para que el estado HALF-OPEN pueda detectar la recuperación de Inventario.
 
 ### 5.9 Cómo ver métricas en CloudWatch
 
 > [!NOTE]
-> **Amazon CloudWatch** es el servicio de observabilidad de AWS para ver métricas (series de tiempo), registros (logs) y alarmas. En este laboratorio lo usará principalmente para observar **cuántas peticiones llegan a Inventario** y **cuántos errores 5xx** se producen durante cada prueba. Estos pasos los repetirá en cada ronda de pruebas.
+> **Amazon CloudWatch** es el servicio de observabilidad de AWS para ver métricas (series de tiempo), registros (logs) y alarmas. En este laboratorio lo usará para observar **cuántas peticiones llegan a Inventario**, **cuántos errores 5xx** se producen, **cuándo el balanceador marca una tarea como no sana** y **cuándo cambia el estado del circuito**. Estos pasos los repetirá en cada experimento.
 
 **Abrir CloudWatch (consola AWS):**
 
@@ -670,13 +772,23 @@ La variable `isDegraded` es la que conecta la graceful degradation con el Outbox
 3. Identifique el *target group* de Inventario (normalmente incluye “inventario” en el nombre) y marque estas métricas:
   - `RequestCount` (tráfico total hacia el target group)
   - `HTTPCode_Target_5XX_Count` (errores 5xx generados por el servicio)
-  - `TargetResponseTime` (latencia del target vista por el ALB; no reemplaza el p99 de JMeter, pero ayuda a correlacionar)
+  - `TargetResponseTime` (latencia del target vista por el ALB; no reemplaza el p99 del generador de tráfico, pero ayuda a correlacionar)
+  - `HealthyHostCount` y `UnHealthyHostCount` (statistic `Maximum`): cuántas tareas considera sanas el balanceador. Son la fuente del TTD y del TTR de los experimentos de caída (E3, E4).
 4. En el gráfico, ajuste:
-  - **Time range** al intervalo exacto de su prueba JMeter
+  - **Time range** al intervalo exacto de su experimento
   - **Period** a 1 minuto (recomendado) para ver cambios con claridad
   - **Statistic**: `Sum` para `RequestCount` y `HTTPCode_Target_5XX_Count`
 
-> Para estimar *requests/s* desde CloudWatch: si su `RequestCount` es por minuto (period=60s), entonces $\text{req/s} \approx \text{RequestCount}/60$.
+> Para estimar *requests/s* desde CloudWatch: si su `RequestCount` es por minuto (period=60s), entonces $\text{req/s} \approx \text{RequestCount}/60$. Las métricas del ALB tienen resolución de 1 minuto: para tiempos de detección y recuperación en segundos use el CSV del generador de tráfico, los logs del sidecar y los eventos de ECS.
+
+**Ver los eventos de ECS (reemplazo de tareas):**
+
+En **ECS → Clusters → `Cheapest-lab5-cluster` → Services → (servicio) → pestaña Events** aparece, con hora, cada paso de la recuperación: la tarea detenida, la tarea nueva iniciada (*has started 1 tasks*), su registro en el target group (*registered 1 targets*) y el momento en que el servicio vuelve a su estado estable (*has reached a steady state*). La misma información está en la AWS CLI:
+
+```bash
+aws ecs describe-services --cluster Cheapest-lab5-cluster --services svc-Cheapest-inventario \
+  --query "services[0].events[:10].[createdAt,message]" --output table
+```
 
 **Ver los reintentos y el estado del circuito en los logs del sidecar:**
 
@@ -702,249 +814,124 @@ Para ver la evolución en el tiempo, abra **CloudWatch → Logs → Logs Insight
 ```
 parse @message /HTTP\/1\.1" (?<code>\d{3}) (?<flags>\S+) /
 | filter ispresent(code)
-| stats count(*) as peticiones by bin(30s), code, flags
-| sort by bin(30s) asc
+| stats count(*) as peticiones by bin(10s), code, flags
+| sort by bin(10s) asc
 ```
 
-El intervalo en que aparece `UH` es el tiempo con el circuito OPEN. El primer intervalo después de ese en que vuelven las respuestas `200 -` marca el regreso a CLOSED. Para contar reintentos, la ronda con reintentos debe mostrar más llamadas a Inventario (CloudWatch del target group) que peticiones registradas en este log.
+El intervalo en que aparece `UH` es el tiempo con el circuito OPEN. El primer intervalo después de ese en que vuelven las respuestas `200 -` marca el regreso a CLOSED. Para contar reintentos use el contador `llamadasDisponibilidad` del endpoint de caos (sección 4.4.5): este log registra una línea por petición de Ventas, no por intento.
 
 > [!TIP]
-> En la Ronda 5, que corre en su computador con Docker Compose, sí puede consultar directamente el puerto de administración: `curl -s http://localhost:9901/stats | grep -E "outlier_detection.ejections_active|upstream_rq_retry"`. `ejections_active` > 0 significa circuito OPEN.
+> Si reproduce un experimento en su computador con Docker Compose (sección 6.3), sí puede consultar directamente el puerto de administración: `curl -s http://localhost:9901/stats | grep -E "outlier_detection.ejections_active|upstream_rq_retry"`. `ejections_active` > 0 significa circuito OPEN.
 
 ## 6. Realización de pruebas
 
-En la sección anterior dejó desplegado el stack, configurado el sidecar y revisado el código. Aquí se explica qué debe modificar de ese despliegue en cada ronda de pruebas y qué parámetros puede ajustar para mejorar o empeorar el comportamiento del sistema.
+En la sección anterior dejó desplegado el stack, configurado el sidecar y revisado el código. Aquí se explica cómo preparar cada configuración, cómo correr un experimento de caos (el protocolo es el mismo para todos) y qué fallo inyectar en cada experimento del catálogo. Lo que **no** encontrará aquí son las hipótesis ni los resultados esperados: esos los escribe usted en las fichas (sección 4.4.3).
 
 ### 6.1 Puntos de sensibilidad
 
-Todos los cambios de configuración de las rondas 1 a 4 se hacen por **una sola vía**: una nueva revisión de la task definition en la consola de ECS (procedimiento A, abajo). La única excepción es el rate limiting, que se configura en la consola de API Gateway.
-
 | Punto de sensibilidad | Dónde se modifica | Efecto esperado |
 | --- | --- | --- |
-| **Fallo de Inventario** (`FAULT_DELAY_MS`) | Variable de entorno del contenedor `inventario` en la task definition `td-Cheapest-inventario` (procedimiento A). | `0` = Inventario sano. `5000` = cada consulta de disponibilidad tarda 5 s: el fallo que se quiere estudiar. |
-| **Tiempo hasta la recuperación** (`RECOVERY_TIME_MS`) | Variable de entorno del contenedor `inventario` (procedimiento A). El template la deja en `60000`; para las rondas use `600000`. | Define cuánto dura el incidente, contado desde que **arranca** la tarea de Inventario. Con `600000` hay 10 minutos para medir. |
-| **Presencia del sidecar** | Task definition `td-Cheapest-ventas` (procedimiento A): con un solo contenedor (`ventas`) e `INVENTARIO_BASE_URL` apuntando al balanceador de Inventario no hay sidecar; con el contenedor `ventas-sidecar` e `INVENTARIO_BASE_URL=http://localhost:10000`, las llamadas pasan por Envoy. | Sin sidecar no hay timeout corto, ni reintentos, ni circuit breaker. |
+| **Fallo de Inventario** (`mode`, `delayMs`, `errorRate`, `durationMs`) | Endpoint de caos `POST {BASE_URL}/inventario/chaos` (sección 5.8). Efecto inmediato, sin revisiones. | Define qué tan grave es el fallo y cuánto dura. `durationMs` es lo que permite observar la recuperación. |
+| **Presencia del sidecar** | Task definition `td-Cheapest-ventas` (procedimientos A y B): con un solo contenedor (`ventas`) e `INVENTARIO_BASE_URL` apuntando al balanceador de Inventario no hay sidecar; con el contenedor `ventas-sidecar` e `INVENTARIO_BASE_URL=http://localhost:10000`, las llamadas pasan por Envoy. | Sin sidecar no hay timeout corto, ni reintentos, ni circuit breaker. |
 | **Reintentos** (`num_retries`, `base_interval`, `max_interval`) | Archivo `apps/ventas/sidecar/envoy.yaml.tmpl`. Cada cambio exige reconstruir la imagen del sidecar, publicarla en ECR con un tag nuevo y cambiar la imagen del contenedor `ventas-sidecar` (procedimiento A). | Más reintentos recuperan más fallos transitorios, pero multiplican las peticiones que recibe Inventario. |
 | **Timeout de la ruta** (`timeout`) | El mismo archivo `envoy.yaml.tmpl`. | Un timeout corto libera rápido a Ventas, pero puede cortar peticiones que habrían respondido. |
 | **Umbral de apertura del circuito** (`consecutive_5xx`) | El mismo archivo `envoy.yaml.tmpl`, sección `outlier_detection`. | Bajo: el circuito abre rápido, incluso por fallos pasajeros. Alto: tarda en abrir y el fallo se propaga más tiempo. |
 | **Tiempo que el circuito permanece abierto** (`base_ejection_time`) | El mismo archivo `envoy.yaml.tmpl`, sección `outlier_detection`. | Corto: prueba con frecuencia si Inventario se recuperó. Largo: Ventas tarda en notar la recuperación. |
 | **Timeout de Ventas hacia el sidecar** (`INVENTARIO_TIMEOUT_MS`) | Variable de entorno del contenedor `ventas` (procedimiento A). El template la deja en `9000`. | Debe ser mayor que el timeout total del sidecar; si es menor, Ventas aborta antes de que Envoy termine sus reintentos. |
-| **Límite de peticiones** (*Rate* y *Burst*) | API Gateway → `Cheapest-ms-api` → stage `lab` → *Default route throttling*. | Un límite bajo protege a los servicios, pero rechaza peticiones legítimas. |
-| **Carga** | Threads y ramp-up de JMeter. | Define el nivel de carga de cada fila de la matriz. |
+| **Límite de peticiones** (*Rate* y *Burst*) | API Gateway → `Cheapest-ms-api` → stage `lab` (E6). | Un límite bajo protege a los servicios, pero rechaza peticiones legítimas; un límite de stage no distingue clientes ni tipos de tráfico. |
+| **Detección del balanceador** (`HealthCheckIntervalSeconds`, umbrales de sano/no sano) y **número de tareas** (`DesiredCount`) | Template de CloudFormation (target groups y servicios ECS). **No los modifique** durante el laboratorio: son lo que mide en E3 y E4. | Determinan cuánto tarda el sistema en notar una tarea caída y si hay otra que atienda mientras tanto. Úselos en su decisión arquitectónica (sección 7.4). |
 
 #### Procedimiento A — Crear una nueva revisión de una task definition
 
 1. Consola de AWS → **ECS → Task definitions** → elija la familia (`td-Cheapest-inventario` o `td-Cheapest-ventas`) → seleccione la revisión **más reciente** → **Create new revision** → **Create new revision with JSON**.
-2. Haga en el JSON el cambio que pide la ronda (variables en `environment`, imagen en `image`, contenedores en `containerDefinitions`) y haga clic en **Create**.
+2. Haga en el JSON el cambio que pide el paso (variables en `environment`, imagen en `image`, contenedores en `containerDefinitions`) y haga clic en **Create**.
 3. Vaya a **ECS → Clusters → `Cheapest-lab5-cluster` → Services**, seleccione el servicio (`svc-Cheapest-inventario` o `svc-Cheapest-ventas`) → **Update service**, elija la revisión que acaba de crear en **Revision** y haga clic en **Update**.
 4. Espere a que en la pestaña **Tasks** quede una sola tarea en `RUNNING` con la revisión nueva (la anterior pasa a `STOPPED`). Tarda entre 2 y 5 minutos.
 
-#### Procedimiento B — Reiniciar Inventario al inicio de cada ronda
+#### Procedimiento B — Preparar las tres configuraciones de Ventas
 
-`RECOVERY_TIME_MS` se cuenta desde que arranca el proceso de Inventario, no desde que empieza su prueba. Por eso **cada una de las rondas 1 a 4 empieza con una tarea de Inventario recién arrancada**; si no la reinicia, el servicio puede estar ya recuperado y la ronda no mide nada.
+E1 y E2 comparan tres configuraciones de Ventas. Prepárelas una sola vez, anote el número de revisión de cada una y, durante los experimentos, cambie de configuración actualizando `svc-Cheapest-ventas` a la revisión correspondiente (pasos 3 y 4 del procedimiento A).
 
-1. **ECS → Clusters → `Cheapest-lab5-cluster` → Services → `svc-Cheapest-inventario` → Update service**, marque **Force new deployment** y haga clic en **Update**. (Si en esa misma ronda creó una revisión nueva de Inventario con el procedimiento A, ese despliegue ya reinicia la tarea y puede omitir este paso.)
-2. Cuando la tarea nueva esté en `RUNNING` y la anterior en `STOPPED`, abra la tarea nueva y anote su **Started at**. Esa es la hora **T0** de la ronda. Inventario estará degradado hasta T0 + 10 min.
-3. Siga el cronograma de la ronda:
+| Configuración | Revisión de `td-Cheapest-ventas` | Cómo se obtiene |
+| --- | --- | --- |
+| **Completa** (reintentos + circuit breaker) | La que creó CloudFormation | Ya existe; anote su número. |
+| **Solo reintentos** | Nueva | Ver paso 1. |
+| **Sin sidecar** (grupo de control) | Nueva | Ver paso 2. |
 
-| Momento | Qué hacer |
-| --- | --- |
-| T0 | Inicie la sonda (sección 6.2). |
-| T0 + 1 min a T0 + 8 min | Ejecute las cuatro filas de la matriz de carga, una tras otra, dejando unos 15 s entre filas. |
-| T0 + 8 min a T0 + 12 min | No envíe más carga; deje correr solo la sonda para observar la recuperación a los 10 min. |
-| T0 + 12 min | Detenga la sonda y consulte CloudWatch para el intervalo [T0, T0 + 12 min]. |
-
-> [!NOTE]
-> Si una fila de la matriz se demora tanto que no alcanza a terminar las cuatro antes de T0 + 8 min (puede pasar en la línea base, donde cada petición tarda al menos 5 s), detenga la ronda, reinicie Inventario (procedimiento B) y ejecute las filas que faltan en una segunda ventana. Anote las dos T0.
-
-### 6.2 Matriz de carga y sonda
-
-Todas las rondas usan la misma matriz sobre `POST {BASE_URL}/ventas/ventas`, con el cuerpo `venta.json` de la sección 5.6, para que sean comparables. Cada fila es un *Thread Group* de JMeter con **Loop Count = 1**: cada hilo envía exactamente una venta, así que el número de ventas de cada fila es igual al número de hilos.
-
-| Test | Ramp-Up | Threads | Loops | Ventas enviadas |
-| --- | --- | --- | --- | --- |
-| Baja carga | 10 s | 50 | 1 | 50 |
-| Carga media | 20 s | 200 | 1 | 200 |
-| Operación normal | 50 s | 500 | 1 | 500 |
-| Alta carga | 75 s | 1500 | 1 | 1500 |
-
-Registre para cada fila: p99, p95, error %, throughput total, número de respuestas con `pending_stock_confirmation` y peticiones recibidas por Inventario (CloudWatch).
-
-**Sonda de recuperación.** La matriz termina mucho antes de que Inventario se recupere, así que para ver qué pasa a los 10 minutos se usa una sonda: una venta cada 2 segundos durante toda la ronda, que deja en un archivo la hora, el código HTTP y la latencia de cada petición.
-
-```bash
-while true; do
-  printf "%s " "$(date +%H:%M:%S)"
-  curl -s -o /dev/null -w "%{http_code} %{time_total}\n" -X POST "$BASE_URL/ventas/ventas" \
-    -H 'Content-Type: application/json' -d @venta.json
-  sleep 2
-done | tee sonda_ronda_N.log
-```
-
-Detenga la sonda con `Ctrl+C`. Al calcular el factor de amplificación (sección 4.4.3), sume también las ventas registradas por la sonda: `grep -c " 201 " sonda_ronda_N.log`.
-
-### 6.3 Ronda 1 — Línea base: reproducir el fallo en cascada
-
-**Qué modificar del despliegue:**
-
-1. **Activar el fallo en Inventario.** Con el procedimiento A, cree una revisión de `td-Cheapest-inventario` con estas variables del contenedor `inventario`, y actualice `svc-Cheapest-inventario`:
-   ```json
-   { "name": "FAULT_DELAY_MS", "value": "5000" },
-   { "name": "RECOVERY_TIME_MS", "value": "600000" }
+1. **Solo reintentos.** En `apps/ventas/sidecar/envoy.yaml.tmpl` cambie temporalmente `enforcing_consecutive_5xx: 100` por `enforcing_consecutive_5xx: 0` (Envoy sigue contando errores, pero no eyecta el host, es decir, el circuito nunca se abre). Construya y publique la imagen con el tag **`1.0.0-solo-retry`**:
+   ```bash
+   docker build --platform linux/amd64 -t <URI_ECR_SIDECAR>:1.0.0-solo-retry apps/ventas/sidecar/
+   docker push <URI_ECR_SIDECAR>:1.0.0-solo-retry
    ```
-2. **Quitar el sidecar de Ventas.** Con el procedimiento A, cree una revisión de `td-Cheapest-ventas` y en el JSON:
+   Después **devuelva el valor a `100`** en el archivo, para que su repositorio quede con la configuración completa. Con el procedimiento A, parta de la revisión **completa** y cambie solo la imagen del contenedor `ventas-sidecar`:
+   ```json
+   "image": "<URI_ECR_SIDECAR>:1.0.0-solo-retry"
+   ```
+2. **Sin sidecar.** Con el procedimiento A, parta de la revisión **completa** y en el JSON:
    - borre completo el objeto del contenedor `ventas-sidecar` dentro de `containerDefinitions` (desde su `{` hasta su `}`, incluida la coma que lo separa del contenedor `ventas`);
    - en el contenedor `ventas`, cambie `INVENTARIO_BASE_URL` para que apunte directamente al balanceador de Inventario. El DNS está en las salidas del stack (`aws cloudformation describe-stacks --stack-name Cheapest-lab5 --query "Stacks[0].Outputs[?OutputKey=='InventarioALBDns'].OutputValue" --output text`):
      ```json
      { "name": "INVENTARIO_BASE_URL", "value": "http://<InventarioALBDns>" }
      ```
-   Actualice `svc-Cheapest-ventas` con esa revisión y anote su número: es la **revisión sin sidecar**. Anote también el número de la revisión anterior, que tiene el sidecar completo (la que creó CloudFormation): la usará en la Ronda 3.
-3. Verifique que la tarea de Ventas tiene un solo contenedor (pestaña **Tasks** → la tarea → **Containers**) y que `curl $BASE_URL/ventas/health` responde 200.
-
-> Desde el paso 1 Inventario arrancó degradado. Como también actualizó Ventas, el reloj de 10 minutos pudo haber avanzado: haga el procedimiento B ahora para tener una ventana completa.
-
-**Ejecución.** Siga el cronograma del procedimiento B: sonda, las cuatro filas de la matriz y observación de la recuperación. El endpoint de Ventas hace una llamada interna a Inventario, que ahora responde con 5 segundos de retraso. Consulte en CloudWatch las peticiones y los errores del target group de Inventario durante la ronda.
-
-**Qué observar:**
-
-- Latencia de Ventas: ¿cómo se propaga el delay de 5 s de Inventario?
-- Error % de Ventas: ¿empieza a devolver errores 500 o 503?
-- Requests totales a Inventario: ¿aumentan con el tiempo?
-- **Recuperación espontánea**: en el archivo de la sonda, ¿qué sucede con la latencia de Ventas alrededor de T0 + 10 min? ¿El sistema se recupera solo? ¿Cuánto tarda Ventas en notar que Inventario ya está bien?
-- Punto de colapso: ¿a partir de cuántos threads el sistema deja de responder?
-
-> Anote estos valores como Base. Son el punto de comparación para las tácticas. La recuperación espontánea en el baseline es el caso de control: sin circuit breaker, el sistema se recupera cuando Inventario se recupera, pero el tiempo de recuperación percibido por Ventas puede ser mayor de lo esperado.
-
-### 6.4 Ronda 2 — Reintentos con backoff exponencial y jitter (sidecar)
-
-A partir de esta ronda la tarea de Ventas vuelve a tener el sidecar Envoy. En esta ronda el sidecar tiene **solo la política de reintentos**; el circuit breaker se desactiva.
-
-**Qué modificar del despliegue:**
-
-1. **Construir una imagen del sidecar sin circuit breaker.** En `apps/ventas/sidecar/envoy.yaml.tmpl` cambie temporalmente `enforcing_consecutive_5xx: 100` por `enforcing_consecutive_5xx: 0` (Envoy sigue contando errores, pero no eyecta el host, es decir, el circuito nunca se abre). Construya y publique la imagen con el tag **`1.0.0-solo-retry`**:
-   ```bash
-   docker build --platform linux/amd64 -t <URI_ECR_SIDECAR>:1.0.0-solo-retry apps/ventas/sidecar/
-   docker push <URI_ECR_SIDECAR>:1.0.0-solo-retry
-   ```
-   Después **devuelva el valor a `100`** en el archivo, para que su repositorio quede con la configuración completa.
-2. **Volver a poner el sidecar en Ventas.** Con el procedimiento A, parta de la revisión de `td-Cheapest-ventas` **con sidecar** que anotó en la Ronda 1 (no de la revisión sin sidecar) y cambie solo la imagen del contenedor `ventas-sidecar`:
-   ```json
-   "image": "<URI_ECR_SIDECAR>:1.0.0-solo-retry"
-   ```
-   Así quedan restaurados el contenedor `ventas-sidecar` y la variable `INVENTARIO_BASE_URL=http://localhost:10000`. Actualice `svc-Cheapest-ventas`.
-3. Reinicie Inventario (procedimiento B) y siga el cronograma.
-
-**Comportamiento esperado**: ante un fallo de Inventario, el sidecar reintenta automáticamente con el backoff que usted configuró, antes de devolver error a Ventas.
-
-**Qué medir**:
-- ¿El p99 de Ventas mejora respecto al baseline?
-- ¿El volumen de llamadas a Inventario aumenta? Calcule el factor de amplificación con la fórmula de la sección 4.4.3 (ASR-2: no debe superar 2).
-- ¿El error % de Ventas mejora? Si Inventario falla consistentemente, el retry no resolverá el error, solo lo retrasará.
-- En los logs del sidecar (sección 5.9) deben aparecer respuestas `UT` o `URX`, y nunca `UH`, porque el circuito está desactivado.
-
-> **Observación clave**: el retry solo ayuda con fallos transitorios. Para fallos persistentes (como el delay de 5 s que simulamos), el retry amplifica la carga sin mejorar la disponibilidad. Este es el problema que el circuit breaker resuelve.
-
-### 6.5 Ronda 3 — Circuit breaker con graceful degradation (sidecar y código)
-
-**Qué modificar del despliegue:**
-
-1. Con el procedimiento A, cree una revisión de `td-Cheapest-ventas` que use la imagen completa del sidecar (la que publicó en la sección 5.3, con los reintentos y la *outlier detection* activos):
-   ```json
-   "image": "<URI_ECR_SIDECAR>:1.0.0"
-   ```
-   Los reintentos siguen activos: esta ronda mide reintentos más circuit breaker. Actualice `svc-Cheapest-ventas`.
-2. Reinicie Inventario (procedimiento B) y siga el cronograma.
-
-**Comportamiento esperado**:
-- Primeras llamadas: el circuito está **CLOSED**; las llamadas llegan a Inventario y fallan (delay 5 s → timeout).
-- Tras `consecutive_5xx` errores seguidos: el sidecar eyecta el host y el circuito pasa a **OPEN**.
-- En estado OPEN: el sidecar rechaza las llamadas inmediatamente con 503. Ventas captura el 503 y retorna `status: pending_stock_confirmation` con HTTP 201 en p99 muy bajo.
-- Tras `base_ejection_time` segundos: el sidecar intenta **HALF-OPEN** enviando una sola request de prueba a Inventario.
-  - Si Inventario sigue degradado: la prueba falla → vuelve a OPEN.
-  - **Si Inventario se recuperó** (después de T0 + 10 min): la prueba tiene éxito → el circuito vuelve a **CLOSED** y el flujo normal se restaura automáticamente.
-
-Esta es la demostración clave del laboratorio: el circuit breaker no solo protege durante el fallo, sino que **detecta la recuperación** del servicio sin intervención humana.
-
-**Cómo observar el estado del circuito:** use la consulta de Logs Insights de la sección 5.9 sobre el intervalo [T0, T0 + 12 min]. Los intervalos con `503 UH` son el circuito OPEN; el regreso a respuestas `200 -` después de T0 + 10 min es el paso a CLOSED. Contraste esos momentos con el archivo de la sonda.
-
-**Qué medir**:
-- ¿El p99 de Ventas cae significativamente una vez el circuito está OPEN?
-- ¿El error % de Ventas llega a 0% una vez que el circuito está abierto?
-- ¿Cuántos requests llegan a Inventario en estado OPEN vs. estado CLOSED?
-- **¿En qué momento exacto el circuito pasa a CLOSED tras la recuperación de Inventario?** (hora del primer `200 -` en los logs del sidecar menos T0)
-
-### 6.6 Ronda 4 — Rate limiting en API Gateway y combinación de las tres tácticas
-
-**Qué modificar del despliegue:** configure el límite de peticiones (*throttling*) en el stage `lab` del API Gateway. Ventas sigue con la revisión de la Ronda 3 (sidecar completo).
-
-**Configuración sugerida**:
-
-| Parámetro | Valor | Justificación |
-| --- | --- | --- |
-| Rate (req/s) | 100 | Límite sostenido para operación normal de Cheapest |
-| Burst | 200 | Permite absorber picos breves sin rechazar pedidos legítimos |
-
-Pasos en la consola de AWS:
-
-1. API Gateway → seleccione `Cheapest-ms-api`.
-2. Stage `lab` → **Default route throttling**.
-3. Configure `Rate` y `Burst` con los valores de la tabla.
-4. Haga clic en **Save**.
-
-La ronda tiene dos partes:
-
-**Parte 1 — Tácticas combinadas con la matriz de carga.** Reinicie Inventario (procedimiento B) y ejecute la matriz completa con el cronograma de siempre. Con las tres tácticas activas simultáneamente, esta es la configuración final de las tácticas de resiliencia. Note que las filas de la matriz llegan como mucho a unas 20 ventas nuevas por segundo (1500 hilos en 75 s), por debajo del límite de 100 req/s, así que aquí casi no debería ver 429.
-
-**Parte 2 — Prueba de saturación a 300 req/s.** Para comprobar el rate limiting hace falta una carga que lo supere. Ejecútela **después de T0 + 12 min**, con Inventario ya recuperado, para medir el efecto del límite sin mezclarlo con el fallo. En JMeter cree un Thread Group aparte con:
-
-| Elemento de JMeter | Configuración |
-| --- | --- |
-| Thread Group | 150 threads, ramp-up 10 s, Loop Count **Infinite**, marque **Specify Thread lifetime** con **Duration** = 120 s |
-| Constant Throughput Timer (dentro del Thread Group) | **Target throughput (in samples per minute)** = `18000` (300 req/s × 60) y **Calculate Throughput based on** = *all active threads* |
-| HTTP Request | `POST {BASE_URL}/ventas/ventas` con `venta.json` |
-
-El Constant Throughput Timer frena a los hilos para que entre todos no pasen de 300 req/s; los 150 hilos son para que haya suficientes peticiones en vuelo para alcanzar esa tasa. Revise en el Summary Report que el throughput total quedó cerca de 300/s; si queda muy por debajo, suba el número de threads.
-
-Observe que API Gateway devuelve HTTP 429 para las requests que superan el límite. Las requests dentro del límite deben seguir respondiendo normalmente.
-
-**Qué medir**:
-- ¿Qué porcentaje de las requests recibe HTTP 429?
-- ¿El throughput de las requests que pasan el límite (respuestas 201) se mantiene estable y cerca del rate configurado?
-- ¿Cómo cambia el comportamiento de Inventario al estar protegido por el rate limit?
-
-> [!IMPORTANT]
-> **Pregunta 4:**
-> Si las tres tácticas cumplen ASRs en este laboratorio, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala?
-> Responda identificando al menos dos clases de fallos que estas tácticas no resuelven por sí solas y qué capacidad adicional haría falta. Si la capacidad que propone es una capa de control de tráfico centralizada como Aperture de DoorDash, desarrolle esa comparación en la sección 7.4.2 y aquí solo refiérase a ella, sin repetirla.
-
-### 6.7 Ronda 5 — Consistencia bajo fallo: Outbox e idempotencia
-
-#### El problema que el circuit breaker no resuelve
-
-El circuit breaker y la graceful degradation mantienen a Ventas *disponible*: el tendero recibe una respuesta exitosa incluso cuando Inventario está caído. Pero hay un efecto secundario silencioso: **el stock nunca se decrementó**. Cuando Inventario se recupera, el sistema no sabe cuántas ventas ocurrieron mientras estaba caído.
-
-Peor aún, si el descuento de stock se reintenta (porque un cliente o un proceso no supo si su primera petición llegó), el mismo descuento puede aplicarse dos veces.
-
-Esto demuestra que **resiliencia de infraestructura ≠ consistencia de datos**.
-
-#### Dónde se ejecuta esta ronda
-
-| Parte | Dónde | Por qué |
-| --- | --- | --- |
-| Fases 1 y 2 (consistencia e idempotencia) | **En su computador**, con Docker Compose | Necesita apagar y encender Inventario al instante y consultar las tablas directamente. En AWS la RDS es privada y reiniciar una tarea tarda minutos. |
-| Impacto del Outbox en la latencia | **En AWS**, sobre el stack de las rondas anteriores | Es una prueba de carga comparable con las demás rondas. |
+   Al desplegarla, verifique que la tarea de Ventas tiene un solo contenedor (pestaña **Tasks** → la tarea → **Containers**) y que `curl $BASE_URL/ventas/health` responde 200.
 
 > [!NOTE]
-> **Si prefiere hacer las fases 1 y 2 en AWS.** Es posible, pero más lento. El equivalente de apagar y encender Inventario es cambiar el número de tareas del servicio:
-> ```bash
-> # Apagar Inventario (0 tareas)
-> aws ecs update-service --cluster Cheapest-lab5-cluster --service svc-Cheapest-inventario --desired-count 0
-> # Encenderlo de nuevo (1 tarea)
-> aws ecs update-service --cluster Cheapest-lab5-cluster --service svc-Cheapest-inventario --desired-count 1
-> ```
-> La tarea nueva tarda uno o dos minutos en quedar sana, y antes de encenderla debe crear una revisión de Inventario con `FAULT_DELAY_MS=0`, o arrancará degradada. Para consultar las tablas tendrá que volver a abrir la RDS a su IP (pasos 1 a 5 de la sección 5.6) y conectarse con `psql -h <RDS_ENDPOINT_DEL_STACK> -U postgres -d Cheapest`. Al terminar, revierta el acceso a la RDS. Use `$BASE_URL/inventario/...` y `$BASE_URL/ventas/...` en lugar de las URLs locales.
+> Cada cambio de revisión reinicia la tarea de Ventas (2 a 5 minutos). Ordene sus experimentos para cambiar de configuración el menor número de veces: por ejemplo, haga con la configuración completa todos los experimentos que la usan antes de pasar a la siguiente. Termine siempre con la configuración completa, que es la que usan E3 a E6.
 
-#### Preparación del ambiente local
+### 6.2 Protocolo común y generador de tráfico de estado estable
+
+Todos los experimentos siguen el mismo protocolo.
+
+**1. Prepare el sistema.**
+
+```bash
+ITEM=11111111-1111-4111-8111-111111111111
+
+# Reponer stock: el generador de tráfico vende 2 unidades por segundo y el seed solo trae 100. Sin este paso,
+# en menos de un minuto las ventas empiezan a fallar por falta de stock y contaminan el experimento.
+curl -s -X PATCH $BASE_URL/inventario/items/$ITEM -H 'Content-Type: application/json' -d '{"cantidad": 100000}'
+
+# Confirmar que no hay un fallo activo y anotar el contador de llamadas
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' -d '{"mode": "off"}'
+curl -s $BASE_URL/inventario/chaos
+
+# Confirmar que una venta se confirma normalmente (sin pending_stock_confirmation)
+curl -s -X POST $BASE_URL/ventas/ventas -H 'Content-Type: application/json' -d @venta.json
+```
+
+**2. Arranque el generador de tráfico** en una terminal aparte, desde la carpeta donde está `venta.json`, con un archivo de salida por experimento y configuración (ajuste la ruta a donde tenga la carpeta `lab_5/recursos` de este repositorio):
+
+```bash
+BASE_URL=$BASE_URL ./lab_5/recursos/generador_trafico.sh e1_completa.csv
+```
+
+El generador de tráfico envía 2 ventas por segundo a `POST /ventas/ventas` y, cada 5 s, una petición a `GET /logistica/health`, `GET /inventario/items/{ITEM}` y `GET /ventas/productos-externos` para medir el radio de impacto. Cada petición sale en segundo plano, de modo que **la tasa no baja aunque el sistema se ponga lento** (lazo abierto). Deje el generador de tráfico corriendo durante todo el experimento y deténgala con `Ctrl+C` al final.
+
+**3. Siga el cronograma.** Anote cada hora en UTC (`date -u +%H:%M:%S`), que es la zona horaria del CSV del generador de tráfico y de los logs de CloudWatch.
+
+| Momento | Qué hacer |
+| --- | --- |
+| T−2 min | Arranque el generador de tráfico: dos minutos de estado estable antes del fallo. |
+| T_inj | Inyecte el fallo del experimento. Anote la hora (el endpoint de caos la retorna en `injectedAt`). |
+| T_inj → T_rem | Observe. Si se cumple su condición de aborto, retire el fallo de inmediato y anótelo. |
+| T_rem | El fallo se retira (solo, al cumplirse `durationMs`, o porque usted lo retiró). En las caídas, T_rem es cuando el componente vuelve a estar disponible. |
+| T_rem → T_rem + 3 min | Siga observando: es el período de recuperación. |
+| Fin | Detenga el generador de tráfico. |
+
+**4. Resuma el CSV por ventanas de 10 s:**
+
+```bash
+python3 lab_5/recursos/ventanas.py e1_completa.csv
+```
+
+El script imprime, por ventana y por endpoint, el número de peticiones, la disponibilidad percibida (2xx en menos de 3 s), el % de `pending` y el p99, y guarda la tabla en `e1_completa_ventanas.csv` para graficar la línea de tiempo en una hoja de cálculo. Identificar el estado estable, el TTD y el TTR a partir de esa tabla es parte de su análisis.
+
+> [!IMPORTANT]
+> **Un fallo a la vez** (E6 combina dos a propósito). Antes de empezar un experimento, verifique que el anterior terminó: fallo apagado, circuito cerrado (una venta sin `pending`), tareas en `RUNNING` y sin filas PENDING en `GET $BASE_URL/ventas/outbox/resumen`. Si mezcla dos fallos, no podrá atribuirle el resultado a ninguno.
+
+### 6.3 Ambiente local (opcional)
+
+Puede reproducir los experimentos en su computador con Docker Compose para preparar las fichas o para repetir uno sin gastar créditos: los endpoints de caos funcionan igual, y el puerto de administración de Envoy (`http://localhost:9901/stats`) sí es accesible. Los datos que entrega en el informe deben venir de AWS.
 
 Use **`docker compose`** (con espacio, el plugin de Docker Compose v2). Si su instalación solo tiene el binario antiguo `docker-compose` (con guion), reemplácelo en todos los comandos.
 
@@ -956,86 +943,103 @@ npm install                         # si no lo hizo en la sección 5.6
 npm run db:seed                     # por defecto apunta a la base de Docker Compose (127.0.0.1:5432, base cheapest)
 ```
 
-Los servicios se llaman **directamente**, sin API Gateway, así que aquí sí se usan las rutas internas en inglés (`/inventory/...`). Defina estas variables en la terminal:
+Los servicios se llaman **directamente**, sin API Gateway, así que aquí se usan las rutas internas en inglés (`/inventory/...`). Cree un producto externo con `POST http://localhost:3003/ventas/productos-externos` (mismo cuerpo de la sección 5.6) y un `venta-local.json` con ese `productoExternoId`. Para el generador de tráfico, sobrescriba los endpoints:
 
 ```bash
-INV=http://localhost:3002/inventory
-VEN=http://localhost:3003/ventas
-ITEM=11111111-1111-4111-8111-111111111111     # items_inventario: producto aaaa... en la tienda bbbb...
-sql() { docker compose exec -T postgres psql -U postgres -d cheapest -c "$1"; }
+VENTA_JSON=venta-local.json \
+VENTA_URL=http://localhost:3003/ventas/ventas \
+LOGISTICA_URL=http://localhost:3001/health \
+INVENTARIO_URL=http://localhost:3002/inventory/items/11111111-1111-4111-8111-111111111111 \
+CATALOGO_URL=http://localhost:3003/ventas/productos-externos \
+./lab_5/recursos/generador_trafico.sh local_e1.csv
 ```
 
-Los productos externos de la base local tienen IDs distintos a los de la RDS: tome uno con `curl -s $VEN/productos-externos` y cree `venta-local.json`, igual a `venta.json` de la sección 5.6 pero con ese `productoExternoId`. Verifique que una venta responde 201 **sin** `pending_stock_confirmation`:
+| En AWS | En local |
+| --- | --- |
+| `$BASE_URL/inventario/chaos` | `http://localhost:3002/inventory/chaos` |
+| `$BASE_URL/ventas/chaos/sidecar`, `$BASE_URL/ventas/outbox/resumen` | `http://localhost:3003/ventas/chaos/sidecar`, `http://localhost:3003/ventas/outbox/resumen` |
+| `aws ecs stop-task` (Inventario o Ventas) | `docker compose stop inventario` y luego `docker compose start inventario` (en local no hay un orquestador que reemplace el contenedor solo: usted hace el papel de ECS) |
+| `aws rds reboot-db-instance` | `docker compose stop postgres` y luego `docker compose start postgres` |
+| Consultas SQL | `docker compose exec -T postgres psql -U postgres -d cheapest -c "<SQL>"` |
+
+Al terminar, apague el ambiente local con `docker compose down`.
+
+### 6.4 E0 — Estado estable
+
+**Configuración:** Ventas con la revisión **completa**. No se inyecta ningún fallo.
+
+Siga el protocolo durante 5 minutos sin inyectar nada. Con la tabla de `ventanas.py`, defina el estado estable que usará en todas las fichas: disponibilidad percibida, p99 y % de `pending` de las ventas, y el comportamiento de los otros tres endpoints. Lea también el contador `llamadasDisponibilidad` al principio y al final, y calcule las llamadas por venta en estado estable.
+
+**Qué observar:**
+
+- ¿Qué tanto varían la disponibilidad y el p99 de una ventana a otra sin ningún fallo? Esa variación natural es la que debe tener en cuenta al decidir si un experimento "se desvió" del estado estable.
+- ¿Hay respuestas `pending` sin fallo? Si las hay, resuelva la causa antes de seguir.
+
+### 6.5 E1 — Inventario lento
+
+**Configuraciones:** completa, solo reintentos y sin sidecar (procedimiento B). Haga el experimento una vez con cada una.
+
+**Fallo:** latencia de 5 s en la consulta de disponibilidad, durante 3 minutos.
 
 ```bash
-curl -s -X POST $VEN/ventas -H 'Content-Type: application/json' -d @venta-local.json
+curl -s $BASE_URL/inventario/chaos                      # anote llamadasDisponibilidad
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+  -d '{"mode": "latency", "delayMs": 5000, "durationMs": 180000}'
+# ... al terminar el período de recuperación:
+curl -s $BASE_URL/inventario/chaos                      # vuelva a anotar llamadasDisponibilidad
 ```
 
-#### Fase 1 — Demostración del problema
+**Qué observar:**
 
-**Escenario 1: un descuento aplicado dos veces (sin idempotencia).** Inventario expone dos endpoints para registrar una venta y descontar stock: `POST /inventory/ventas`, sin clave de idempotencia, y `POST /inventory/ventas/desde-outbox`, con clave. Use el primero para simular un cliente que reintenta:
+- ¿Cómo se propaga la latencia de Inventario a las ventas en cada configuración? ¿Qué pasa con la disponibilidad percibida, el p99 y el % de `pending` por ventana?
+- ¿Cuánto tardó cada configuración en reaccionar al fallo (TTD) y en volver al estado estable después de T_rem (TTR)? En la configuración completa, ubique en los logs del sidecar (consulta de Logs Insights de la sección 5.9) el primer `503 UH` (circuito OPEN), las peticiones de prueba en HALF-OPEN y el regreso a `200 -` (CLOSED).
+- ¿Cuántas llamadas por venta recibió Inventario en cada configuración? Calcule el factor de amplificación (sección 4.4.5).
+- ¿Los otros endpoints del generador de tráfico se vieron afectados?
 
-1. Anote la cantidad actual:
-   ```bash
-   sql "SELECT cantidad FROM items_inventario WHERE id = '$ITEM';"
-   ```
-2. Envíe **dos veces la misma petición**, que representa una única venta (mismo `ventaId`):
-   ```bash
-   cat > registro.json <<'JSON'
-   {
-     "tiendaId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-     "productoId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-     "ventaId": "f0000000-0000-4000-8000-000000000001",
-     "itemInventarioId": "11111111-1111-4111-8111-111111111111",
-     "fechaVenta": "2026-10-14T10:00:00Z",
-     "cantidad": 1
-   }
-   JSON
-   curl -s -X POST $INV/ventas -H 'Content-Type: application/json' -d @registro.json; echo
-   curl -s -X POST $INV/ventas -H 'Content-Type: application/json' -d @registro.json; echo
-   ```
-3. Vuelva a consultar la cantidad. **Resultado esperado**: bajó en 2, aunque se trataba de una sola venta.
+> [!NOTE]
+> Sin sidecar, Ventas espera a Inventario hasta `INVENTARIO_TIMEOUT_MS` (9 s), así que cada venta tarda lo que tarde Inventario. Que la respuesta termine siendo un 201 no significa que el tendero la haya recibido a tiempo: por eso la disponibilidad percibida solo cuenta las respuestas que llegan en menos de 3 s.
 
-**Escenario 2: ventas registradas sin descuento de stock.**
+### 6.6 E2 — Inventario con errores
 
-1. Anote la cantidad actual del ítem (`sql "SELECT cantidad FROM items_inventario WHERE id = '$ITEM';"`) y el número de ventas (`sql "SELECT count(*) FROM ventas;"`).
-2. Apague Inventario:
-   ```bash
-   docker compose stop inventario
-   ```
-3. Cree 3 ventas:
-   ```bash
-   for i in 1 2 3; do
-     curl -s -X POST $VEN/ventas -H 'Content-Type: application/json' -d @venta-local.json; echo
-   done
-   ```
-   Las tres deben responder HTTP 201 con `status: pending_stock_confirmation`: el sidecar no puede conectarse a Inventario, responde 503 de inmediato y Ventas aplica la graceful degradation.
-4. Compare las dos fuentes de verdad mientras Inventario sigue apagado (la base de datos es la misma, así que se puede consultar aunque Inventario no esté):
-   ```bash
-   sql "SELECT count(*) FROM ventas;"                                      # 3 ventas más
-   sql "SELECT cantidad FROM items_inventario WHERE id = '$ITEM';"         # la misma cantidad
-   ```
-   **Resultado esperado**: hay 3 ventas más, pero el stock no cambió.
+**Configuraciones:** completa, solo reintentos y sin sidecar. Haga el experimento una vez con cada una (puede hacerlo en la misma visita a cada configuración que E1).
 
-Esta es la inconsistencia. Lo único que hace que el sistema "recuerde" que esos tres descuentos están pendientes es la tabla `outbox_http_calls`:
+**Fallo:** primero errores intermitentes (30 % de las consultas responde 500) durante 2 minutos e, inmediatamente después, errores totales (100 %) durante 2 minutos.
 
 ```bash
-sql "SELECT id, status, attempts, \"createdAt\" FROM outbox_http_calls ORDER BY \"createdAt\" DESC LIMIT 5;"
+curl -s $BASE_URL/inventario/chaos                      # anote llamadasDisponibilidad
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+  -d '{"mode": "error", "errorRate": 0.3, "durationMs": 120000}'
+# al cumplirse los 2 minutos (anote el contador otra vez):
+curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+  -d '{"mode": "error", "errorRate": 1, "durationMs": 120000}'
 ```
 
-**Esperado**: tres filas con `status = 'PENDING'` y `attempts` creciendo cada 2 s, porque el publicador del Outbox sigue intentando entregarlas. **Sin el patrón Outbox**, esas filas no existirían y ningún proceso volvería a intentar el descuento: el stock quedaría desactualizado para siempre. **Deje Inventario apagado**: la Fase 2 empieza desde este estado.
+**Qué observar:**
 
-> [!IMPORTANT]
-> **Pregunta 5:**
-> Describa con precisión el estado de inconsistencia que se produce en cada escenario:
-> 1. Ventas registradas durante la degradación: ¿qué diferencia hay entre lo que dice la tabla `ventas` y lo que dice `items_inventario.cantidad`?
-> 2. Reintento sin idempotencia: ¿qué invariante de negocio se viola? ¿Cómo lo detectaría operacionalmente en Cheapest?
+- Con errores intermitentes, ¿qué fracción de las ventas terminó en `pending` en cada configuración? ¿Los reintentos lograron que más ventas se confirmaran con stock verificado?
+- ¿El circuito se abrió con errores intermitentes, con errores totales o con ambos? Relacione la respuesta con su valor de `consecutive_5xx`.
+- Calcule el factor de amplificación por separado para la fase intermitente y la total. ¿En cuál de las dos los reintentos son útiles y en cuál solo agregan carga?
+- Compare con E1: ¿por qué el mismo sidecar se comporta distinto ante un Inventario lento y ante uno que falla rápido?
+
+### 6.7 E3 — Caída de la tarea de Inventario
+
+**Configuración:** completa.
+
+Este experimento mide dos cosas: cuánto tarda la infraestructura en reemplazar una tarea caída (ASR-5) y si las ventas registradas mientras tanto descuentan su stock exactamente una vez cuando Inventario vuelve (ASR-4).
+
+#### El problema que el circuit breaker no resuelve
+
+El circuit breaker y la graceful degradation mantienen a Ventas *disponible*: el tendero recibe una respuesta exitosa incluso cuando Inventario está caído. Pero hay un efecto secundario silencioso: **el stock nunca se decrementó** en ese momento. Cuando Inventario se recupera, alguien tiene que recordar cuántas ventas ocurrieron mientras estaba caído.
+
+Peor aún, si el descuento de stock se reintenta (porque un cliente o un proceso no supo si su primera petición llegó), el mismo descuento puede aplicarse dos veces.
+
+Esto demuestra que **resiliencia de infraestructura ≠ consistencia de datos**.
 
 #### Conceptos: Outbox e idempotencia
 
 ##### Outbox HTTP
 
-El **patrón Outbox** resuelve la inconsistencia del escenario 2. En lugar de intentar decrementar el stock en el mismo momento que se crea la venta (lo cual falla si Inventario está caído), se escribe una fila en la tabla local `outbox_http_calls` dentro de **la misma transacción** que guarda la venta:
+El **patrón Outbox** resuelve la primera inconsistencia. En lugar de decrementar el stock en el mismo momento que se crea la venta (lo cual falla si Inventario está caído), Ventas escribe una fila en la tabla local `outbox_http_calls` dentro de **la misma transacción** que guarda la venta:
 
 ```
 POST /ventas/ventas
@@ -1048,13 +1052,15 @@ OutboxHttpPublisherService (polling 2 s):
   SELECT * FROM outbox_http_calls WHERE status = 'PENDING'
   → POST /inventory/ventas/desde-outbox (con X-Idempotency-Key)
   → UPDATE SET status = 'DELIVERED' si 2xx o 409
+  → UPDATE SET status = 'FAILED' si Inventario la rechaza con otro 4xx (p. ej. stock insuficiente)
+  → si falla por red o 5xx, la deja en PENDING y la reintenta en el siguiente ciclo
 ```
 
-La garantía: **at-least-once** — si la venta se guardó, el decremento de stock se entregará eventualmente, incluso si Inventario estuvo caído un buen rato.
+La garantía: **at-least-once** — si la venta se guardó, el decremento de stock se entregará eventualmente, incluso si Inventario estuvo caído un buen rato. Toda venta usa el Outbox, no solo las que se registran con graceful degradation.
 
 ##### Idempotencia
 
-El **patrón de Idempotencia** resuelve la inconsistencia del escenario 1. El publicador puede enviar la misma fila de `outbox_http_calls` más de una vez (si falla entre enviarla y marcarla `DELIVERED`). El endpoint `/inventory/ventas/desde-outbox` usa el `id` de esa fila como `X-Idempotency-Key`:
+El **patrón de Idempotencia** resuelve la segunda inconsistencia. El publicador puede enviar la misma fila de `outbox_http_calls` más de una vez (si falla entre enviarla y marcarla `DELIVERED`). El endpoint `/inventory/ventas/desde-outbox` usa el `id` de esa fila como `X-Idempotency-Key`:
 
 ```
 POST /inventory/ventas/desde-outbox  (Header: X-Idempotency-Key: <id de la fila de outbox_http_calls>)
@@ -1082,60 +1088,189 @@ Analice el flujo implementado y responda:
 1. ¿Qué ocurre si el proceso de Inventario muere entre `decrementCantidad()` y el `save(ProcessedCall)`? ¿Puede producirse un decremento sin `ProcessedCall`?
 2. ¿Por qué se usa el `id` del `OutboxHttpCall` como clave de idempotencia en lugar del `ventaId`?
 
-#### Fase 2 — Verificación del Outbox y la idempotencia
+#### Parte 1 — Idempotencia (antes de la caída)
 
-Parte del estado en que terminó la Fase 1: Inventario apagado y tres filas PENDING en `outbox_http_calls`.
+Inventario expone dos endpoints para registrar una venta y descontar stock: `POST /inventory/ventas`, sin clave de idempotencia, y `POST /inventory/ventas/desde-outbox`, con clave. Use los dos con **la misma petición repetida**, que representa una única venta (mismo `ventaId`):
 
-1. Encienda Inventario y mida cuándo vuelve a responder. Ese momento es **T_rec**, desde el que se cuenta el tiempo de PENDING → DELIVERED del ASR-4:
+```bash
+cat > registro.json <<'JSON'
+{
+  "tiendaId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "productoId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "ventaId": "f0000000-0000-4000-8000-000000000001",
+  "itemInventarioId": "11111111-1111-4111-8111-111111111111",
+  "fechaVenta": "2026-10-14T10:00:00Z",
+  "cantidad": 1
+}
+JSON
+
+# Sin clave de idempotencia: anote la cantidad, envíe dos veces, vuelva a consultar
+curl -s $BASE_URL/inventario/items/$ITEM | grep -o '"cantidad":[0-9]*'
+curl -s -X POST $BASE_URL/inventario/ventas -H 'Content-Type: application/json' -d @registro.json; echo
+curl -s -X POST $BASE_URL/inventario/ventas -H 'Content-Type: application/json' -d @registro.json; echo
+curl -s $BASE_URL/inventario/items/$ITEM | grep -o '"cantidad":[0-9]*'
+
+# Con clave de idempotencia: la misma petición dos veces con la misma clave
+KEY=$(uuidgen | tr 'A-Z' 'a-z')
+curl -i -X POST $BASE_URL/inventario/ventas/desde-outbox -H 'Content-Type: application/json' \
+  -H "X-Idempotency-Key: $KEY" -d @registro.json
+curl -i -X POST $BASE_URL/inventario/ventas/desde-outbox -H 'Content-Type: application/json' \
+  -H "X-Idempotency-Key: $KEY" -d @registro.json
+curl -s $BASE_URL/inventario/items/$ITEM | grep -o '"cantidad":[0-9]*'
+```
+
+Haga esta parte **sin el generador de tráfico corriendo**, para que la cantidad solo cambie por sus peticiones. Compare cuánto bajó la cantidad en cada caso y qué código HTTP respondió la segunda petición con clave.
+
+> [!IMPORTANT]
+> **Pregunta 5:**
+> Describa con precisión el estado de inconsistencia que se produce en cada escenario:
+> 1. Ventas registradas durante la caída de Inventario (Parte 2 de este experimento, antes de que Inventario vuelva): ¿qué diferencia hay entre lo que dice la tabla `ventas` y lo que dice `items_inventario.cantidad`?
+> 2. Reintento sin idempotencia (Parte 1): ¿qué invariante de negocio se viola? ¿Cómo lo detectaría operacionalmente en Cheapest?
+
+#### Parte 2 — Caída de la tarea
+
+1. Prepare el sistema (protocolo, paso 1), anote la cantidad del ítem y arranque el generador de tráfico.
+2. En otra terminal, registre el estado del Outbox y la salud de Inventario cada 5 s durante todo el experimento:
    ```bash
-   docker compose start inventario
-   until curl -sf http://localhost:3002/health > /dev/null; do sleep 1; done; date +%H:%M:%S   # T_rec
+   while true; do
+     printf "%s health=%s %s\n" "$(date -u +%H:%M:%S)" \
+       "$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 $BASE_URL/inventario/health)" \
+       "$(curl -s --max-time 4 $BASE_URL/ventas/outbox/resumen)"
+     sleep 5
+   done | tee e3_outbox.log
    ```
-2. Consulte la tabla cada pocos segundos hasta que las tres filas estén en DELIVERED:
+3. Pasados 2 minutos de estado estable, detenga la tarea de Inventario. Anote la hora: es T_inj.
    ```bash
-   sql "SELECT id, status, attempts, \"deliveredAt\" FROM outbox_http_calls ORDER BY \"createdAt\" DESC LIMIT 5;"
+   TASK=$(aws ecs list-tasks --cluster Cheapest-lab5-cluster --service-name svc-Cheapest-inventario --query "taskArns[0]" --output text)
+   date -u +%H:%M:%S; aws ecs stop-task --cluster Cheapest-lab5-cluster --task $TASK --reason "E3 caos"
    ```
-   El tiempo de reconciliación es el `deliveredAt` más tardío de las tres filas menos T_rec. **Umbral del ASR-4**: < 30 s. Como el publicador revisa la tabla cada 2 s, lo normal es que tarde unos pocos segundos.
-3. Verifique el stock:
+4. No haga nada más: ECS debe lanzar una tarea nueva solo. Observe hasta 3 minutos después de que `health` vuelva a 200 (ese momento es **T_rec**) y las filas PENDING lleguen a 0.
+5. Detenga el generador de tráfico y el registro. Consulte la cantidad final del ítem y los eventos del servicio (sección 5.9):
    ```bash
-   sql "SELECT cantidad FROM items_inventario WHERE id = '$ITEM';"
+   curl -s $BASE_URL/inventario/items/$ITEM | grep -o '"cantidad":[0-9]*'
+   aws ecs describe-services --cluster Cheapest-lab5-cluster --services svc-Cheapest-inventario \
+     --query "services[0].events[:10].[createdAt,message]" --output table
    ```
-   **Esperado**: la cantidad bajó exactamente en 3 respecto a la anotada en el paso 1 del escenario 2 (una por cada venta).
-4. Pruebe la idempotencia reenviando una entrega que ya se hizo. Tome el `id` y el `payload` de una fila DELIVERED:
+
+**Qué observar:**
+
+- **MTTR descompuesto:** con los eventos de ECS, `HealthyHostCount`/`UnHealthyHostCount` del target group de Inventario y el registro de salud, ubique en el tiempo: la tarea detenida, la tarea nueva iniciada, su registro en el target group, el momento en que quedó `healthy` y el primer `health=200`. ¿Qué etapa dominó el MTTR?
+- **Ventas durante la caída:** ¿qué respondió el balanceador de Inventario mientras no tenía tareas (código y velocidad), y cómo reaccionó el sidecar? ¿Se mantuvo la disponibilidad percibida de las ventas?
+- **Outbox:** ¿cuántas filas se acumularon en PENDING? ¿Cuánto tardaron en pasar a DELIVERED después de T_rec? ¿Quedó alguna en FAILED?
+- **Exactamente una vez:** compare cuánto bajó la cantidad del ítem con el número de ventas 201 que registró el generador de tráfico (`grep -c ',venta,201,' e3.csv`). ¿Coinciden?
+
+> [!IMPORTANT]
+> **Pregunta 7:**
+> El equipo de operaciones de Cheapest quiere repetir el E3 en producción, un lunes por la mañana, para confirmar los resultados con tráfico real. ¿Lo aprobaría? Si lo aprueba, defina las condiciones: cómo limitaría el radio de impacto (qué porcentaje de tiendas o de tráfico), qué condiciones de aborto usaría y con qué umbrales, quién debe estar presente y cómo revertiría. Si no lo aprueba, explique qué tendría que cambiar en la arquitectura (piense en el `DesiredCount` de Inventario) para que fuera aceptable.
+
+### 6.8 E4 — Caída del sidecar y de la tarea de Ventas
+
+**Configuración:** completa. Experimento **exploratorio**: no hay ASR que verificar en la Parte 1, pero debe escribir su hipótesis antes.
+
+#### Parte 1 — El sidecar se cae
+
+1. Prepare el sistema, arranque el generador de tráfico y, pasados 2 minutos, apague el sidecar (T_inj):
    ```bash
-   sql "SELECT id, payload FROM outbox_http_calls WHERE status = 'DELIVERED' ORDER BY \"createdAt\" DESC LIMIT 1;"
+   date -u +%H:%M:%S; curl -s -X POST $BASE_URL/ventas/chaos/sidecar
    ```
-   y envíe ese `payload` con ese `id` como clave:
+2. Observe hasta 3 minutos después de que las ventas vuelvan al estado estable. Consulte los eventos de `svc-Cheapest-ventas` y `HealthyHostCount` del target group de Ventas.
+
+**Qué observar:** ¿qué le pasó al contenedor `ventas` cuando se cayó su sidecar? (Revise `Essential` en la task definition.) ¿Qué endpoints del generador de tráfico se afectaron y cuáles no? ¿Cuánto tardó la recuperación y quién la hizo? Compare el radio de impacto con el de E3: ¿qué es más grave para Cheapest, que se caiga Inventario o que se caiga el sidecar de Ventas?
+
+#### Parte 2 — Ventas se reinicia con entregas pendientes
+
+1. Prepare el sistema y arranque el generador de tráfico. Inyecte errores totales en Inventario **sin duración** (quedan activos hasta que los apague), para que las ventas se registren con graceful degradation y el Outbox acumule filas PENDING:
    ```bash
-   curl -i -X POST $INV/ventas/desde-outbox \
-     -H 'Content-Type: application/json' \
-     -H 'X-Idempotency-Key: <id>' \
-     -d '<payload>'
+   curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' -d '{"mode": "error", "errorRate": 1}'
    ```
-   **Esperado**: HTTP 409 y la cantidad de `items_inventario` no cambia. Compárelo con el escenario 1 de la Fase 1, donde la misma petición repetida sí descontó dos veces.
-5. Al terminar, apague el ambiente local con `docker compose down`.
+2. Cuando `GET $BASE_URL/ventas/outbox/resumen` muestre varias filas PENDING, detenga el generador de tráfico, anote el resumen y detenga la tarea de Ventas:
+   ```bash
+   TASK=$(aws ecs list-tasks --cluster Cheapest-lab5-cluster --service-name svc-Cheapest-ventas --query "taskArns[0]" --output text)
+   aws ecs stop-task --cluster Cheapest-lab5-cluster --task $TASK --reason "E4 caos"
+   ```
+3. Cuando la tarea nueva de Ventas esté sana, vuelva a consultar el resumen (las filas deben seguir ahí) y retire el fallo de Inventario con `{"mode": "off"}`. Mida cuánto tardan las filas PENDING en llegar a 0.
 
-#### Impacto del Outbox en la latencia
+**Qué observar:** ¿se perdió alguna entrega pendiente al reiniciarse Ventas? ¿Por qué? Relacione la respuesta con la transacción de `VentaService.create()` que revisó en E3.
 
-Esta parte se hace en AWS. Repita la fila de 500 threads y 50 s de ramp-up sobre `POST {BASE_URL}/ventas/ventas` con Inventario sano (cree una revisión de Inventario con `FAULT_DELAY_MS=0`, procedimiento A), para que el circuito esté CLOSED y cada petición haga la escritura transaccional completa (la venta y su fila de Outbox). Compare el resultado con la misma fila de la ronda de tácticas combinadas, que no tenía Outbox: la diferencia es el costo en latencia de la escritura adicional. **Umbral del ASR-4 (b)**: ≤ 50 ms de diferencia en el p99.
+### 6.9 E5 — Reinicio de la base de datos compartida
 
-### 6.8 Cómo leer los resultados
+**Configuración:** completa. Experimento **exploratorio**.
 
-Analice los resultados con enfoque en disponibilidad:
+Los tres servicios usan la misma instancia RDS. Un reinicio es un evento de operación normal (mantenimiento, cambio de parámetros, actualización menor de versión).
 
-- p99 y error % de Ventas en cada ronda (línea base, reintentos, circuit breaker, tácticas combinadas).
-- Peticiones recibidas por Inventario en cada ronda (CloudWatch: `RequestCount` del target group de Inventario).
-- Transiciones de estado del circuit breaker correlacionadas con la carga (registros del sidecar en CloudWatch, consulta de la sección 5.9).
-- Peticiones rechazadas por API Gateway (HTTP 429).
+1. Prepare el sistema, arranque el generador de tráfico y, pasados 2 minutos, reinicie la base (T_inj). Siga su estado:
+   ```bash
+   date -u +%H:%M:%S; aws rds reboot-db-instance --db-instance-identifier Cheapest-lab5-db
+   while true; do
+     printf "%s %s\n" "$(date -u +%H:%M:%S)" \
+       "$(aws rds describe-db-instances --db-instance-identifier Cheapest-lab5-db --query 'DBInstances[0].DBInstanceStatus' --output text)"
+     sleep 10
+   done
+   ```
+   Si su cuenta no le permite el comando, use la consola: **RDS → Databases → `cheapest-lab5-db` → Actions → Reboot**.
+2. Observe hasta 3 minutos después de que la base vuelva a `available`.
 
-**Umbrales por ASR:**
+**Qué observar:** ¿qué endpoints del generador de tráfico fallaron y con qué código? ¿Ventas aplicó graceful degradation? ¿Por qué? ¿Qué reportaron `GET /health` y los health checks del balanceador mientras la base estaba caída, y qué consecuencia tiene eso para ECS? ¿Cuánto tardaron los servicios en volver al estado estable después de que la base volvió a `available`? ¿Alguna táctica del laboratorio cubre este fallo?
 
-- **ASR-1** (Ventas sigue respondiendo cuando Inventario falla): Ventas responde HTTP 201 con `pending_stock_confirmation` en p99 < 3000 ms durante el fallo de Inventario, con el p99 calculado sobre todas las peticiones de cada fila de la matriz. Se verifica en la ronda con circuit breaker activo en el sidecar.
-- **ASR-2** (los reintentos no amplifican la carga): el factor de amplificación de las llamadas de disponibilidad es ≤ 2. Se calcula con la fórmula de la sección 4.4.3, comparando la ronda de línea base con la ronda de reintentos.
-- **ASR-3** (el tráfico excedente no afecta los pedidos): con rate limiting activo, el throughput de pedidos válidos cae menos de 10% respecto a la línea base. Se verifica en la ronda con rate limiting.
-- **ASR-4** (cada venta hecha con graceful degradation descuenta su stock exactamente una vez): se verifica en dos dimensiones:
-  - **Consistencia**: toda fila de `outbox_http_calls` en PENDING pasa a DELIVERED en menos de 30 s, contados desde que Inventario vuelve a responder `/health` (T_rec, Fase 2); ningún `items_inventario.cantidad` refleja descuentos duplicados.
-  - **Impacto en latencia**: el p99 de `POST /ventas/ventas` con Inventario sano y Outbox activo no debe superar en más de 50 ms el p99 de la ronda de tácticas combinadas sin Outbox. Esto verifica que la escritura adicional en `outbox_http_calls` no degrada perceptiblemente la operación principal.
+> [!IMPORTANT]
+> **Pregunta 4:**
+> Con base en lo que observó en E4 y E5, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala, aun si las tácticas del laboratorio cumplen sus ASRs?
+> Responda identificando al menos dos clases de fallos que estas tácticas no resuelven por sí solas, sustentadas con sus datos, y qué capacidad adicional haría falta. Si la capacidad que propone es una capa de control de tráfico centralizada como Aperture de DoorDash, desarrolle esa comparación en la sección 7.4.2 y aquí solo refiérase a ella, sin repetirla.
+
+### 6.10 E6 — Tormenta de reintentos (*retry storm*)
+
+**Configuraciones:** sin sidecar (grupo de control), sin sidecar con throttling del stage, y completa. Opcional: sin sidecar con clientes que sí usan backoff.
+
+Este experimento reproduce el escenario del lunes por la mañana. Combina dos fallos inyectados a la vez: **Inventario lento** y una **versión defectuosa de la app** que reintenta de inmediato cada pedido que no le responde en 3 s. Es el único experimento con dos fallos simultáneos, porque la tormenta solo existe cuando se juntan los dos. El script `recursos/tormenta_reintentos.sh` simula esas apps: cada una envía un pedido y, si no recibe un 2xx a tiempo, **abandona la petición y la reenvía**; después de un pedido exitoso espera 5 s antes del siguiente. Con el sistema sano es tráfico normal.
+
+> [!IMPORTANT]
+> Una petición que el cliente abandona **no se cancela en el servidor**: Ventas la sigue procesando y, si termina, registra la venta. Mida cuántas ventas se registraron (filas totales del Outbox) frente a cuántos pedidos pidieron realmente los tenderos.
+
+**Configurar el throttling del stage** (solo para esa configuración). Use la consola (**API Gateway → `Cheapest-ms-api` → Protect → Throttling**, stage `lab`) o la CLI; el `API_ID` es la primera parte de su `BASE_URL`. Al terminar, devuelva el stage a sus valores sin efecto.
+
+```bash
+aws apigatewayv2 update-stage --api-id <API_ID> --stage-name lab \
+  --default-route-settings ThrottlingRateLimit=10,ThrottlingBurstLimit=20
+# Al terminar:
+aws apigatewayv2 update-stage --api-id <API_ID> --stage-name lab \
+  --default-route-settings ThrottlingRateLimit=1000,ThrottlingBurstLimit=5000
+```
+
+Los valores son un punto de partida: si en la Pregunta 3 propuso otros, use los suyos y justifíquelos frente al tráfico que genera la tormenta.
+
+**Para cada configuración:**
+
+1. Prepare el sistema, arranque el generador de tráfico y anote el total de filas del Outbox (`PENDING + DELIVERED + FAILED` de `GET $BASE_URL/ventas/outbox/resumen`) y el contador `llamadasDisponibilidad`.
+2. Pasados 2 minutos, inyecte la latencia en Inventario y, de inmediato, lance la tormenta en otra terminal (T_inj):
+   ```bash
+   curl -s -X POST $BASE_URL/inventario/chaos -H 'Content-Type: application/json' \
+     -d '{"mode": "latency", "delayMs": 5000, "durationMs": 150000}'
+   BASE_URL=$BASE_URL CLIENTES=50 DURACION=120 ./lab_5/recursos/tormenta_reintentos.sh e6_sin_sidecar.csv
+   ```
+   Para la configuración opcional con backoff, agregue `BACKOFF=1` al comando de la tormenta.
+3. La tormenta termina sola a los 120 s e imprime un resumen (pedidos, intentos por pedido, peticiones abandonadas, 429). El fallo de Inventario se retira a los 150 s (T_rem). Observe 3 minutos más.
+4. Vuelva a leer el total de filas del Outbox y el contador, y detenga el generador de tráfico.
+
+**Qué observar:**
+
+- ¿Cuántos intentos por pedido necesitaron las apps defectuosas en cada configuración, y cuántos pedidos lograron completar?
+- ¿Cuántas llamadas recibió Inventario por cada pedido lógico? Compárelo con E1, que tenía el mismo fallo pero sin tormenta.
+- ¿Cuántas ventas se registraron frente a los pedidos que realmente se hicieron? ¿De dónde salen las ventas sobrantes y qué significan para un tendero?
+- ¿Qué le pasó a la disponibilidad de las ventas del generador de tráfico, los otros tenderos, en cada configuración? ¿Recibieron 429?
+- Con throttling, ¿qué hicieron las apps defectuosas al recibir 429? ¿El throttling apagó la tormenta o solo la contuvo en el borde?
+- Con la configuración completa, ¿por qué la tormenta se apaga sola? ¿Qué táctica rompe el ciclo de reintentos?
+
+### 6.11 Cómo leer los resultados
+
+Para cada experimento, la pieza central del análisis es la **línea de tiempo**: la disponibilidad percibida y el % de `pending` de las ventas por ventana de 10 s, con T_inj y T_rem marcados. Sobre ella se leen el estado estable, la desviación, el TTD y el TTR. Compare:
+
+- **Entre configuraciones** del mismo experimento (E1, E2, E6): el efecto de una táctica es la diferencia con la configuración que no la tiene. Por ejemplo, el efecto del circuit breaker es la diferencia entre *solo reintentos* y *completa*.
+- **Contra la ficha**: ¿el radio de impacto y los tiempos fueron los que predijo? Lo que no predijo es tan importante como lo que sí.
+- **Contra los ASRs**: use las medidas de respuesta de la sección 4.2 tal como están escritas (por ventana, después de los primeros 30 s, etc.).
+
+> [!IMPORTANT]
+> **Pregunta 6:**
+> En los Labs 2 a 4 usted validó la arquitectura con pruebas de carga. Con base en sus resultados de este laboratorio, ¿qué demostró este experimento que una prueba de carga no habría podido demostrar? Y al revés: ¿qué riesgo de disponibilidad de Cheapest solo se descubre con una prueba de carga? Dé al menos un ejemplo concreto de cada lado, tomado de sus datos o de los laboratorios anteriores, y concluya cuándo usaría cada tipo de experimento.
 
 ## 7. Entregables
 
@@ -1143,79 +1278,83 @@ Entregue un informe organizado con los siguientes numerales.
 
 ### 7.1 Resultados
 
-#### 7.1.1 ¿Qué se observó?
+#### 7.1.1 Fichas de los experimentos
 
-Describa, sin interpretar todavía, lo que observó en cada ronda:
+Las siete fichas (E0 a E6), con todos los campos de la sección 4.4.3, **tal como las escribió antes de ejecutar cada experimento**. Si cambió algo del diseño después de ejecutarlo (por ejemplo, la duración del fallo), deje la versión original y agregue al final de la ficha qué cambió y por qué.
 
-- **Línea base:** cómo se propagó a Ventas el retraso de 5 s de Inventario, qué errores devolvió Ventas (500, 503, tiempos de espera agotados), a partir de cuántos threads dejó de responder, y qué pasó a los 600 s del arranque de Inventario, cuando este se recuperó solo.
-- **Reintentos:** qué pasó con la latencia y los errores de Ventas, y con el número de peticiones que recibió Inventario.
-- **Circuit breaker:** en qué momento se abrió el circuito, qué respondió Ventas mientras estuvo abierto y en qué momento volvió a cerrarse tras la recuperación de Inventario.
-- **Rate limiting y tácticas combinadas:** qué proporción de las peticiones fue rechazada con 429 y qué pasó con las que sí pasaron.
-- **Outbox e idempotencia:** qué pasó con el stock y con la tabla `outbox_http_calls` mientras Inventario estuvo apagado y después de encenderlo, qué pasó al repetir una petición sin clave de idempotencia y qué respondió Inventario al repetirla con la misma clave.
+#### 7.1.2 ¿Qué se observó?
 
-#### 7.1.2 ¿Qué métricas se obtuvieron?
+Describa, sin interpretar todavía, lo que observó en cada experimento y configuración: cómo se comportó el estado estable antes, durante y después del fallo, qué endpoints se afectaron y qué mostraron los logs del sidecar, los eventos de ECS y el Outbox.
 
-Entregue una tabla comparativa con los resultados de las cuatro rondas de tácticas:
+#### 7.1.3 ¿Qué métricas se obtuvieron?
 
-| Ronda | p99 Ventas (ms) | Error % Ventas | Requests/s a Inventario | HTTP 429 % |
-| --- | ---: | ---: | ---: | ---: |
-| Baseline (sin sidecar, sin protecciones) | | | | N/A |
-| Sidecar: retry + backoff | | | | N/A |
-| Sidecar: circuit breaker + graceful degradation | | | | N/A |
-| Sidecar completo + rate limiting API Gateway | | | | |
+**a. Línea de tiempo por experimento.** Una gráfica por experimento y configuración con la disponibilidad percibida y el % de `pending` de las ventas por ventana de 10 s, con T_inj y T_rem marcados (a partir de `*_ventanas.csv`).
 
-Entregue también, **por cada ronda**, una tabla por fila de la matriz de carga:
+**b. Tabla resumen de E0 a E5:**
 
-| # threads | Ramp-up (s) | p99 (ms) | p95 (ms) | Throughput (req/s) | Error % |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 50 | 10 | | | | |
-| 200 | 20 | | | | |
-| 500 | 50 | | | | |
-| 1500 | 75 | | | | |
+| Experimento | Configuración | Disponibilidad mínima por ventana (tras 30 s) | p99 máximo por ventana (ms) | % de `pending` durante el fallo | TTD (s) | TTR (s) | Llamadas por venta / factor de amplificación | Endpoints afectados |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| E0 | Completa | | | | N/A | N/A | | |
+| E1 | Sin sidecar | | | | | | | |
+| E1 | Solo reintentos | | | | | | | |
+| E1 | Completa | | | | | | | |
+| E2 (30 % / 100 %) | Sin sidecar | | | | | | | |
+| E2 (30 % / 100 %) | Solo reintentos | | | | | | | |
+| E2 (30 % / 100 %) | Completa | | | | | | | |
+| E3 | Completa | | | | | | | |
+| E4 Parte 1 | Completa | | | | | | | |
+| E5 | Completa | | | | | | | |
 
-Agregue los datos de la ronda de Outbox e idempotencia:
+**c. Descomposición del MTTR de E3 (y de E4, Parte 1):**
 
-**a. Impacto en latencia de `POST /ventas/ventas` (Inventario sano, circuito CLOSED):**
+| Etapa | Hora (UTC) | Segundos desde T_inj | Fuente |
+| --- | --- | ---: | --- |
+| Tarea detenida (T_inj) | | 0 | |
+| Tarea nueva iniciada | | | |
+| Target registrado en el target group | | | |
+| Target `healthy` | | | |
+| Primer `GET /health` 200 (T_rec) | | | |
+| Ventas de vuelta al estado estable | | | |
 
-| Ronda | p99 Ventas (ms) | p95 Ventas (ms) | Throughput (req/s) | Error % |
-| --- | ---: | ---: | ---: | ---: |
-| Tácticas combinadas (sin Outbox) | | | | |
-| Tácticas combinadas + Outbox activo | | | | |
-| Δ absoluto (con Outbox − sin Outbox) | | | | |
+**d. Consistencia (E3 y E4, Parte 2):**
 
-> Use la fila de 500 threads y 50 s de ramp-up con Inventario sano (sin inyección de fallos).
+| Prueba | Filas PENDING máximas | Desde T_rec hasta 0 PENDING (s) | Filas FAILED | Δ cantidad del ítem | Ventas 201 del generador de tráfico | Descuentos duplicados |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| E3 Parte 1 — sin clave (2 envíos) | N/A | N/A | N/A | | N/A | |
+| E3 Parte 1 — con clave (2 envíos) | N/A | N/A | N/A | | N/A | |
+| E3 Parte 2 — caída de Inventario | | | | | | |
+| E4 Parte 2 — reinicio de Ventas | | | | N/A | N/A | N/A |
 
-**b. Consistencia y reconciliación:**
+**e. E6 (tormenta de reintentos):**
 
-| Fase | Descripción | `outbox_http_calls` PENDING → DELIVERED, desde T_rec (s) | Descuentos duplicados |
-| --- | --- | ---: | ---: |
-| Fase 1 — el problema | Escenario 1: misma petición repetida en `POST /inventory/ventas` (sin clave). Escenario 2: ventas registradas con Inventario apagado | N/A | sí (escenario 1) |
-| Fase 2 — con Outbox e idempotencia | Reconciliación tras encender Inventario y reenvío con la misma `X-Idempotency-Key` | | 0 |
+| Configuración | Intentos por pedido | Pedidos completados / pedidos lógicos | Llamadas a Inventario por pedido | Ventas registradas | Pedidos duplicados | Disponibilidad del generador de tráfico (mínima por ventana tras 30 s) | 429 (tormenta / generador) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Sin sidecar | | | | | | | N/A |
+| Sin sidecar + throttling del stage (rate / burst: …) | | | | | | | |
+| Completa | | | | | | | N/A |
+| (Opcional) Sin sidecar, clientes con backoff | | | | | | | N/A |
 
-Reporte también los seis valores que escogió en `envoy.yaml.tmpl` y los valores de *Rate* y *Burst* de API Gateway.
+Reporte también los seis valores que escogió en `envoy.yaml.tmpl`.
 
 ### 7.2 Análisis de resultados
 
-Extensión sugerida para los numerales 7.2 a 7.4 juntos: 2 a 4 páginas, sin contar tablas ni capturas. Las respuestas a las preguntas orientadoras (7.5) no cuentan en ese límite. Donde un punto de 7.2 a 7.4 se cruza con una pregunta orientadora, se indica cuál; respóndalo una sola vez y en el otro lugar haga referencia.
+Extensión sugerida para los numerales 7.2 a 7.4 juntos: 3 a 5 páginas, sin contar tablas, gráficas ni capturas. Las respuestas a las preguntas orientadoras (7.5) no cuentan en ese límite. Donde un punto de 7.2 a 7.4 se cruza con una pregunta orientadora, se indica cuál; respóndalo una sola vez y en el otro lugar haga referencia.
 
 #### 7.2.1 ¿Qué significan los datos frente al escenario de calidad?
 
 Para cada ASR, compare lo medido con su medida de respuesta e indique si se cumple:
 
-- **ASR-1** (Ventas responde HTTP 201 con `pending_stock_confirmation` en p99 < 3000 ms durante el fallo de Inventario). ¿Qué diferencia operativa tiene para un tendero recibir un error 500 frente a `status: pending_stock_confirmation`? ¿Bajo qué condiciones la degradación es aceptable para el negocio?
-- **ASR-2** (con reintentos activos, el factor de amplificación de las llamadas de disponibilidad a Inventario es ≤ 2). ¿Por qué el reintento sin backoff ni jitter puede empeorar una situación de fallo? Relacione la respuesta con el escenario de Cheapest (tenderos reintentando pedidos en el pico del lunes).
-- **ASR-3** (el rate limiter rechaza el excedente con 429 sin que el throughput de pedidos válidos caiga más de 10%). ¿Por qué el rate limiting en API Gateway protege mejor ante una avalancha de reintentos que un rate limiting implementado dentro del propio servicio?
-- **ASR-4** (toda venta hecha con graceful degradation pasa de PENDING a DELIVERED en menos de 30 s tras la recuperación, sin descuentos duplicados, y el Outbox no sube el p99 en más de 50 ms). Con base en los datos de impacto en latencia, ¿el patrón Outbox aumenta la latencia de `POST /ventas/ventas`? Argumente en qué condiciones ese costo sería aceptable para Cheapest y en cuáles representaría un riesgo para los ASRs. Considere el volumen transaccional, la latencia de la base de datos RDS y si la escritura adicional en `outbox_http_calls` ocurre dentro o fuera de la transacción principal.
-- **Paso de OPEN a HALF-OPEN.** Con los tiempos que midió en la Ronda 3 (cuándo se abrió el circuito, cada cuánto hubo peticiones de prueba y cuánto tardó en volver a CLOSED después de T0 + 10 min), ¿cuánto tiempo debería permanecer el circuito en OPEN antes de pasar a HALF-OPEN (`base_ejection_time`)? ¿Qué riesgos hay en pasar a HALF-OPEN demasiado pronto frente a demasiado tarde? Aquí se analiza lo que midió; la justificación del valor que configuró va en la Pregunta 3, parte B.
+- **ASR-1** (con Inventario lento o con errores, disponibilidad ≥ 99 % por ventana tras 30 s, p99 < 3000 ms, y CLOSED a más tardar 60 s después del retiro del fallo). ¿Qué configuración lo cumple en E1 y en E2? ¿Qué diferencia operativa tiene para un tendero recibir una respuesta lenta, un error o `pending_stock_confirmation`? ¿Bajo qué condiciones la degradación es aceptable para el negocio?
+- **ASR-2** (factor de amplificación ≤ 2). ¿Por qué el reintento sin backoff ni jitter puede empeorar una situación de fallo? ¿En qué fase de E2 los reintentos ayudaron y en cuál solo amplificaron? Relacione la respuesta con el escenario de Cheapest (tenderos reintentando pedidos en el pico del lunes).
+- **ASR-3** (durante la tormenta, ≤ 2 intentos por pedido tras 30 s y el generador de tráfico cumple el ASR-1). ¿Qué configuración apaga la tormenta y cuál solo la contiene? ¿Por qué el throttling del stage protege al backend pero no a los demás tenderos? ¿Qué parte del problema solo se resuelve en el cliente (backoff, respetar un 429) y qué parte en el servidor? ¿Qué haría falta para que los pedidos que el cliente reintenta no se registren dos veces?
+- **ASR-4** (reconciliación en < 30 s desde T_rec, sin duplicados, y las entregas pendientes sobreviven al reinicio de Ventas). ¿Qué mecanismo garantiza cada una de las tres partes? Si alguna fila quedó en FAILED, ¿qué significa para el negocio y quién debería atenderla?
+- **ASR-5** (MTTR ≤ 5 min ante la caída de la tarea de Inventario). ¿Qué etapa dominó el MTTR? ¿Qué parámetros del template la acortarían, y a qué costo?
+- **Paso de OPEN a HALF-OPEN.** Con los tiempos que midió en E1 y E2 (cuándo se abrió el circuito, cada cuánto hubo peticiones de prueba y cuánto tardó en volver a CLOSED después de T_rem), ¿cuánto tiempo debería permanecer el circuito en OPEN antes de pasar a HALF-OPEN (`base_ejection_time`)? ¿Qué riesgos hay en pasar a HALF-OPEN demasiado pronto frente a demasiado tarde? Aquí se analiza lo que midió; la justificación del valor que configuró va en la Pregunta 3, parte B.
+- **Experimentos exploratorios (E4 y E5).** ¿Qué descubrió que no estaba en ningún ASR? Esto es insumo de la Pregunta 4; aquí describa el hallazgo y en la pregunta desarrolle la capacidad que haría falta.
 
 #### 7.2.2 ¿Se cumple la hipótesis?
 
-Para cada hipótesis indique si se cumple, se cumple parcialmente o no se cumple, y con qué dato lo sustenta:
-
-- H1: con circuit breaker y graceful degradation, `POST /ventas/ventas` responde HTTP 201 con `pending_stock_confirmation` en p99 < 3000 ms aun con Inventario en falla total.
-- H2: con reintentos con backoff exponencial y jitter, el factor de amplificación de las llamadas a Inventario es ≤ 2.
-- H3: con rate limiting en API Gateway, el tráfico excedente se rechaza con 429 sin que el throughput de pedidos válidos caiga más de 10%.
-- H4: con Outbox e idempotencia, cada descuento de stock pendiente se entrega exactamente una vez tras la recuperación, en menos de 30 s, y la escritura adicional no sube el p99 en más de 50 ms.
+Para la hipótesis de **cada ficha** (E0 a E6) indique si se cumple, se cumple parcialmente o no se cumple, y con qué dato lo sustenta. Si una hipótesis se refutó, explique qué suposición de su ficha resultó equivocada. Una hipótesis refutada con un buen análisis vale tanto como una confirmada.
 
 ### 7.3 Conclusión
 
@@ -1223,21 +1362,24 @@ Para cada hipótesis indique si se cumple, se cumple parcialmente o no se cumple
 
 Más allá de si cada táctica funcionó, reflexione sobre:
 
-- ¿Cómo se complementaron los reintentos y el circuit breaker en sus datos (compare la Ronda 2 con la Ronda 3)? El escenario de conflicto entre ambos se pide en la Pregunta 3, parte A; aquí no lo repita.
+- ¿Cómo se complementaron los reintentos y el circuit breaker en sus datos (compare *solo reintentos* con *completa* en E1 y E2)? El escenario de conflicto entre ambos se pide en la Pregunta 3, parte A; aquí no lo repita.
 - ¿Por qué "entrega al menos una vez" más idempotencia no equivale a una garantía distribuida de "exactamente una vez"? ¿Qué requeriría una garantía real de exactamente una vez entre dos servicios con bases de datos independientes?
 - ¿Qué ventajas concretas tuvo desplegar con CloudFormation frente a la configuración manual del Lab 4? ¿En qué escenarios del negocio de Cheapest (por ejemplo, la expansión a México o Brasil, o un incidente que obligue a reconstruir el ambiente) sería crítica esta capacidad?
+
+La comparación entre experimentos de caos y pruebas de carga se pide en la Pregunta 6; aquí no la repita.
 
 ### 7.4 Decisión arquitectónica
 
 #### 7.4.1 ¿Qué se decide?
 
-Para cada táctica (reintentos con backoff y jitter, circuit breaker con graceful degradation, rate limiting en API Gateway, Outbox con idempotencia) indique si la **adopta, la modifica o la descarta** para Cheapest, y con qué parámetros. Incluya en su decisión:
+Para cada táctica (reintentos con backoff y jitter, circuit breaker con graceful degradation, rate limiting en API Gateway, Outbox con idempotencia, y detección y recuperación automática con health checks de ECS) indique si la **adopta, la modifica o la descarta** para Cheapest, y con qué parámetros. Incluya en su decisión:
 
-- En este laboratorio las tácticas de resiliencia se implementaron en un sidecar y no en el código de negocio. ¿Qué ventajas concretas tuvo este enfoque? ¿En qué escenarios el sidecar no sería suficiente y se necesitaría lógica de resiliencia dentro de la aplicación?
+- En este laboratorio las tácticas de resiliencia se implementaron en un sidecar y no en el código de negocio. ¿Qué ventajas concretas tuvo este enfoque? Con lo que observó en E4, ¿qué costo de disponibilidad tiene? ¿En qué escenarios el sidecar no sería suficiente y se necesitaría lógica de resiliencia dentro de la aplicación?
+- Con lo que observó en E3 y E5: ¿cuántas tareas debería tener cada servicio, qué debería revisar el endpoint `/health` y con qué frecuencia debería consultarlo el balanceador?
 
 #### 7.4.2 ¿Qué cambios se hacen a la arquitectura?
 
-- Describa los cambios que quedan en la arquitectura de Cheapest después del experimento: qué componentes nuevos se agregan, con qué configuración y qué reglas de negocio hay que acordar (por ejemplo, cuánto tiempo puede quedar un pedido como pendiente de confirmación de stock).
+- Describa los cambios que quedan en la arquitectura de Cheapest después del experimento: qué componentes nuevos se agregan, con qué configuración y qué reglas de negocio hay que acordar (por ejemplo, cuánto tiempo puede quedar un pedido como pendiente de confirmación de stock, o qué se hace con una venta degradada cuyo descuento queda en FAILED por falta de stock).
 - Lea el artículo [Failure Mitigation for Microservices: An Intro to Aperture](https://careersatdoordash.com/blog/failure-mitigation-for-microservices-an-intro-to-aperture/) de DoorDash. ¿Qué problema específico resuelve Aperture que el sidecar Envoy de este laboratorio no resuelve? ¿En qué punto del crecimiento de Cheapest tendría sentido adoptar un enfoque centralizado como ese? Si en la Pregunta 4 propuso una capa de este tipo como capacidad adicional, desarróllela aquí y en la Pregunta 4 solo haga referencia.
 
 ### 7.5 Respuestas a las preguntas orientadoras
@@ -1245,10 +1387,12 @@ Para cada táctica (reintentos con backoff y jitter, circuit breaker con gracefu
 Incluya las respuestas argumentadas a las preguntas planteadas a lo largo del laboratorio. Cada respuesta debe incluir los elementos que pide la pregunta (tablas, gráficas o diagramas) y debe ir más allá de lo superficial. Se repiten aquí para que no tenga que buscarlas:
 
 - **Pregunta 1.** En Cheapest, ¿qué decisión de producto y operación debería tomarse primero cuando aparece una avalancha de reintentos: proteger la disponibilidad percibida (graceful degradation) o proteger la consistencia estricta (rechazar operaciones)? Argumente considerando el impacto en tenderos, el riesgo financiero y el costo de reconciliación posterior.
-- **Pregunta 2.** Si usted fuera el líder encargado de llevar estas tácticas a producción en Cheapest, ¿las adoptaría en el mismo orden de las rondas (reintentos, circuit breaker, rate limiting, Outbox e idempotencia), teniendo en cuenta el riesgo de cada cambio? Describa un plan de migración que mitigue los riesgos, con etapas, tiempo estimado por etapa y tareas de cada una.
-- **Pregunta 3 (partes A y B, se responden y califican juntas).** Parte A: los reintentos, el circuit breaker y el rate limiting pueden entrar en conflicto si se calibran mal. Proponga un conjunto coherente de parámetros iniciales para Cheapest (timeouts, reintentos, umbral de apertura, tiempo de reapertura, rate y burst) y justifique cómo evitaría inestabilidad sistémica. Incluya un escenario concreto en el que usar reintentos y circuit breaker juntos sin coordinación generaría un problema. Parte B: documente los valores que finalmente eligió para cada `TODO` de `envoy.yaml.tmpl`, la justificación cuantitativa de cada uno y cómo garantiza que no violan el ASR-2 (factor de amplificación ≤ 2).
-- **Pregunta 4.** Si las tres tácticas cumplen los ASRs en este laboratorio, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala? Identifique al menos dos clases de fallos que estas tácticas no resuelven por sí solas y qué capacidad adicional haría falta. Si esa capacidad es una capa centralizada como Aperture, la comparación se desarrolla en 7.4.2.
-- **Pregunta 5.** Describa con precisión el estado de inconsistencia que se produce en cada escenario de la Fase 1 de la Ronda 5: (1) ventas registradas durante la degradación: ¿qué diferencia hay entre lo que dice la tabla `ventas` y lo que dice `items_inventario.cantidad`?; (2) reintento sin idempotencia: ¿qué invariante de negocio se viola y cómo lo detectaría operacionalmente en Cheapest?
+- **Pregunta 2.** Si usted fuera el líder encargado de llevar estas tácticas a producción en Cheapest, ¿las adoptaría en el mismo orden en que se presentan (reintentos, circuit breaker, rate limiting, Outbox e idempotencia), teniendo en cuenta el riesgo de cada cambio? Describa un plan de migración que mitigue los riesgos, con etapas, tiempo estimado por etapa y tareas de cada una.
+- **Pregunta 3 (partes A y B, se responden y califican juntas).** Parte A: los reintentos, el circuit breaker y el rate limiting pueden entrar en conflicto si se calibran mal. Proponga un conjunto coherente de parámetros iniciales para Cheapest (timeouts, reintentos, umbral de apertura, tiempo de reapertura, rate y burst) y justifique cómo evitaría inestabilidad sistémica. Incluya un escenario concreto en el que usar reintentos y circuit breaker juntos sin coordinación generaría un problema. Parte B: documente los valores que finalmente eligió para cada `TODO` de `envoy.yaml.tmpl`, la justificación cuantitativa de cada uno y cómo garantiza que no violan el ASR-2 (factor de amplificación ≤ 2) ni el p99 del ASR-1.
+- **Pregunta 4.** Con base en lo que observó en E4 y E5, ¿qué riesgo residual seguiría existiendo para una operación real de Cheapest a mayor escala, aun si las tácticas del laboratorio cumplen sus ASRs? Identifique al menos dos clases de fallos que estas tácticas no resuelven por sí solas, sustentadas con sus datos, y qué capacidad adicional haría falta. Si esa capacidad es una capa centralizada como Aperture, la comparación se desarrolla en 7.4.2.
+- **Pregunta 5.** Describa con precisión el estado de inconsistencia que se produce en cada escenario de E3: (1) ventas registradas durante la caída de Inventario: ¿qué diferencia hay entre lo que dice la tabla `ventas` y lo que dice `items_inventario.cantidad`?; (2) reintento sin idempotencia: ¿qué invariante de negocio se viola y cómo lo detectaría operacionalmente en Cheapest?
+- **Pregunta 6.** ¿Qué demostró este experimento que una prueba de carga no habría podido demostrar? Y al revés: ¿qué riesgo de disponibilidad de Cheapest solo se descubre con una prueba de carga? Dé al menos un ejemplo concreto de cada lado y concluya cuándo usaría cada tipo de experimento.
+- **Pregunta 7.** ¿Aprobaría repetir el E3 en producción un lunes por la mañana? Si lo aprueba, defina cómo limitaría el radio de impacto, qué condiciones de aborto usaría y con qué umbrales, quién debe estar presente y cómo revertiría. Si no lo aprueba, explique qué tendría que cambiar en la arquitectura para que fuera aceptable.
 - **Revisión de la escritura transaccional en `VentaService`.** ¿Qué ocurre si el proceso muere entre el guardado de la venta y el guardado de su fila de Outbox? ¿Por qué la fila de Outbox se crea incluso cuando la venta se registra con graceful degradation? ¿Qué datos lleva la fila de Outbox y son suficientes para lo que necesita `POST /inventory/ventas/desde-outbox`?
 - **Revisión del endpoint con idempotencia en Inventario.** ¿Qué ocurre si el proceso de Inventario muere entre el descuento de stock y el guardado de la clave procesada? ¿Puede producirse un descuento sin clave registrada? ¿Por qué se usa como clave de idempotencia el `id` de la fila de Outbox y no el `ventaId`?
 
@@ -1258,26 +1402,27 @@ Adjunte capturas de:
 
 - Stack CloudFormation en estado `CREATE_COMPLETE`.
 - Actividad post-despliegue: los dos recursos del stack que eligió al explorar lo que se desplegó, con una captura de la consola por cada uno y su explicación.
-- Task Definition de Ventas mostrando los **dos containers**: `ventas` y `ventas-sidecar`.
+- Task Definition de Ventas mostrando los **dos containers**: `ventas` y `ventas-sidecar`, y la revisión sin sidecar con un solo container.
 - Servicios ECS de los tres microservicios en estado RUNNING.
-- API Gateway con throttling configurado devolviendo HTTP 429.
 - `envoy.yaml.tmpl` con los valores completados por el estudiante (los seis `TODO`).
-- Resultado de la consulta de Logs Insights de la sección 5.9 sobre el grupo `/ecs/Cheapest-ventas-sidecar` para la Ronda 2 (respuestas `UT`/`URX`, reintentos) y para la Ronda 3 (intervalos con `503 UH`, circuito OPEN, y regreso a `200 -` tras la recuperación).
-- Respuesta HTTP 201 con `status: pending_stock_confirmation` capturada en JMeter durante el fallo de Inventario.
-- Summary Report de JMeter para la ronda baseline y la ronda con tácticas combinadas.
-- Resultado de la consulta a `outbox_http_calls` en estado PENDING durante el fallo de Inventario (Ronda 5, Fase 1).
-- Captura de la misma tabla con status DELIVERED tras la recuperación.
-- Respuesta HTTP 409 ante un retry con el mismo `X-Idempotency-Key`.
-- Valor de `items_inventario.cantidad` antes y después de la reconciliación: debe bajar exactamente N unidades (una por cada venta creada en degradación).
+- Respuesta del endpoint de caos al inyectar un fallo (con `injectedAt` y `until`) y al leer el contador `llamadasDisponibilidad`.
+- Resultado de la consulta de Logs Insights de la sección 5.9 sobre el grupo `/ecs/Cheapest-ventas-sidecar` para E1 o E2 con *solo reintentos* (respuestas `UT`/`URX`, sin `UH`) y con la configuración *completa* (intervalos con `503 UH`, circuito OPEN, y regreso a `200 -` tras la recuperación).
+- Eventos del servicio `svc-Cheapest-inventario` durante E3 y gráfica de `HealthyHostCount`/`UnHealthyHostCount` de su target group.
+- Registro de E3 (`e3_outbox.log`) mostrando las filas PENDING acumulándose y bajando a 0 tras T_rec, y la cantidad del ítem antes y después.
+- Respuestas de E3 Parte 1: la cantidad bajando dos veces sin clave, y el HTTP 409 al repetir con la misma `X-Idempotency-Key`.
+- Eventos del servicio `svc-Cheapest-ventas` durante E4 (tarea reemplazada al apagar el sidecar) y el resumen del Outbox antes y después del reinicio de Ventas.
+- Estados de la instancia RDS durante E5 y la tabla de `ventanas.py` de ese experimento.
+- Configuración de throttling del stage en API Gateway y el resumen de `tormenta_reintentos.sh` de cada configuración de E6 (con las respuestas 429 cuando aplique).
 
 Adjunte también:
 
+- Los CSV del generador de tráfico y de la tormenta de cada experimento (o un enlace a ellos).
 - Los prompts utilizados (si usó IA).
-- Los scripts adicionales de carga (si aplica).
+- Los scripts adicionales que haya escrito (si aplica).
 
 ### 7.7 Formato de entrega
 
-Un informe en PDF o Word con los numerales de resultados, análisis de resultados, conclusión, decisión arquitectónica, respuestas a las preguntas orientadoras y evidencias.
+Un informe en PDF o Word con los numerales de resultados (incluidas las fichas), análisis de resultados, conclusión, decisión arquitectónica, respuestas a las preguntas orientadoras y evidencias.
 
 > [!IMPORTANT]
 > **¿A dónde se suben los entregables?**
