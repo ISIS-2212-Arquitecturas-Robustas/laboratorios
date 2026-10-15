@@ -495,6 +495,10 @@ Resources:
             # Esto es lo que permite que retry/circuit breaker se apliquen sin tocar el código de Ventas.
             - Name: INVENTARIO_BASE_URL
               Value: 'http://localhost:10000'
+            # Debe ser mayor que el timeout total de la ruta en el sidecar; sin esta variable el
+            # cliente usa 3000 ms por defecto y abortaría antes de que Envoy termine sus reintentos.
+            - Name: INVENTARIO_TIMEOUT_MS
+              Value: '9000'
             # Ventas también valida existencia de producto contra Logística (LogisticaProductosClient).
             # Logística corre en un ECS Service DISTINTO (no comparte red con Ventas), así que debe
             # apuntar al ALB de Logística; sin esta variable, el cliente cae a su default
