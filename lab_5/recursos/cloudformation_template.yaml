@@ -45,16 +45,15 @@ Parameters:
     Type: String
     Default: '0'
     Description: >
-      Delay en ms que Inventario agrega artificialmente a sus respuestas (0 = sin fallo).
-      Cambie a 5000 para reproducir la degradación del lab.
+      Fallo de latencia con el que arranca Inventario (0 = arranca sano). En el lab los fallos
+      se inyectan en caliente con POST /inventario/chaos; deje este valor en 0.
 
   RecoveryTimeMs:
     Type: String
     Default: '60000'
     Description: >
-      Tiempo en ms desde el arranque del proceso hasta que Inventario se recupera automáticamente.
-      Con FaultDelayMs=5000 y RecoveryTimeMs=60000, el servicio está degradado durante 60s y luego
-      vuelve a la normalidad, simulando un reinicio automático por ECS health checks.
+      Solo aplica si FaultDelayMs > 0: tiempo en ms desde el arranque hasta que el fallo inicial
+      se retira solo. Los fallos inyectados con POST /inventario/chaos usan su propio durationMs.
 
 # ---------------------------------------------------------------------------
 # RECURSOS
@@ -382,10 +381,11 @@ Resources:
               Value: !Ref DBPassword
             - Name: DB_NAME
               Value: !Ref DBName
-            # FAULT_DELAY_MS: delay artificial por request durante el período de fallo
+            # FAULT_DELAY_MS / RECOVERY_TIME_MS: fallo con el que arranca la tarea (0 = sana).
+            # Los experimentos inyectan fallos en caliente con POST /inventory/chaos
+            # (apps/inventario/src/chaos.controller.ts), sin crear revisiones nuevas.
             - Name: FAULT_DELAY_MS
               Value: !Ref FaultDelayMs
-            # RECOVERY_TIME_MS: tiempo desde el arranque hasta la auto-recuperación
             - Name: RECOVERY_TIME_MS
               Value: !Ref RecoveryTimeMs
             # Inventario también valida existencia de producto contra Logística
@@ -507,6 +507,14 @@ Resources:
               Value: !Sub 'http://${LogisticaALB.DNSName}'
             - Name: LOGISTICA_TIMEOUT_MS
               Value: '5000'
+            # Puerto de administración del sidecar (mismo task → localhost). Lo usa
+            # POST /ventas/chaos/sidecar para apagar Envoy en el experimento E4.
+            - Name: SIDECAR_ADMIN_URL
+              Value: 'http://localhost:9901'
+            # Intentos del Outbox antes de marcar FAILED (polling de 2 s → 600 ≈ 20 min):
+            # cubre la caída de Inventario mientras ECS reemplaza la tarea (experimento E3).
+            - Name: OUTBOX_MAX_ATTEMPTS
+              Value: '600'
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -717,8 +725,27 @@ Resources:
       RouteKey: 'GET /ventas/health'
       Target: !Sub 'integrations/${VentasHealthIntegration}'
 
-  # Stage con throttling habilitado (Táctica 3 del lab)
-  # Rate y Burst se configuran manualmente desde la consola según las instrucciones del lab
+  # Ruta propia para el catálogo: el experimento E6 (cliente defectuoso) inunda esta ruta y
+  # necesita poder limitarla por separado (throttling por ruta) sin limitar POST /ventas/ventas.
+  # Al ser más específica que ANY /ventas/{proxy+}, API Gateway la elige primero.
+  VentasCatalogoIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref CheapestHttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      IntegrationUri: !Sub 'http://${VentasALB.DNSName}/ventas/productos-externos'
+      PayloadFormatVersion: '1.0'
+
+  VentasCatalogoRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CheapestHttpApi
+      RouteKey: 'GET /ventas/productos-externos'
+      Target: !Sub 'integrations/${VentasCatalogoIntegration}'
+
+  # Stage del lab. Los límites por defecto son altos (sin efecto práctico); en el experimento E6
+  # se configuran manualmente desde la consola: primero para todo el stage y luego por ruta.
   ApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
@@ -726,7 +753,7 @@ Resources:
       StageName: lab
       AutoDeploy: true
       DefaultRouteSettings:
-        # Throttling desactivado al inicio — se activa manualmente en la Parte 2, Táctica 3
+        # Throttling sin efecto al inicio — se ajusta manualmente en el experimento E6
         ThrottlingBurstLimit: 5000
         ThrottlingRateLimit: 1000
 
