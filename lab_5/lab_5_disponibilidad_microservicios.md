@@ -56,44 +56,27 @@ Como hacen esos equipos, el *game day* se ensaya primero en un ambiente que no c
 
 Un aspecto crítico de este escenario es que el fallo suele ser **transitorio**: un servicio degradado por un pico de memoria, un pool de conexiones agotado o un spike de CPU puede recuperarse por sí solo en segundos o minutos, y los orquestadores como ECS reemplazan automáticamente las tareas que dejan de responder. Por eso en este laboratorio los fallos de Inventario se inyectan con una **duración**: al cumplirse, el fallo se retira solo. Esto hace que el estado **HALF-OPEN** del circuit breaker no sea solo teórico: cuando Inventario se recupera, el circuit breaker lo detecta y vuelve al estado CLOSED, restaurando el flujo normal sin intervención humana. Medir **cuánto tarda** cada mecanismo en detectar el fallo y en volver a la normalidad es una de las metas del laboratorio.
 
-**Conceptos que se presentan en este laboratorio.** Cada uno se explica con más detalle, y con su aplicación en Cheapest, en la parte de tácticas y patrones y en el diseño del experimento.
+**Conceptos nuevos de este laboratorio.** Se usan desde las hipótesis y los escenarios de calidad; los patrones de resiliencia se explican con más detalle, y con su aplicación en Cheapest, en la parte de tácticas y patrones.
 
 | Concepto | Qué es |
 | --- | --- |
-| Ingeniería del caos (*chaos engineering*) | Disciplina que consiste en experimentar sobre un sistema inyectándole fallos controlados para ganar confianza en su capacidad de soportar condiciones adversas. Un experimento de caos compara el comportamiento del sistema con y sin el fallo. |
-| *Game day* | Sesión planeada en la que un equipo ejecuta experimentos de caos sobre su sistema y observa la respuesta. Este laboratorio es un *game day* de Cheapest. |
-| Estado estable (*steady state*) | Comportamiento normal y medible del sistema, expresado con una métrica de negocio (aquí, la disponibilidad percibida y la latencia de las ventas con tráfico bajo y constante). La hipótesis de un experimento de caos dice si ese estado se mantiene cuando se inyecta el fallo. |
-| Inyección de fallos | Provocar a propósito un fallo concreto (latencia, errores, caída de un proceso) en un punto definido del sistema, durante un tiempo definido. |
+| Ingeniería del caos y *game day* | Experimentar sobre un sistema inyectándole fallos controlados para ganar confianza en su capacidad de soportar condiciones adversas. Un *game day* es la sesión planeada en la que un equipo ejecuta esos experimentos; este laboratorio es uno. |
 | Radio de impacto (*blast radius*) | Qué partes del sistema (servicios, endpoints, usuarios) resultan afectadas por un fallo. Se predice antes del experimento y se mide durante. |
 | Condición de aborto | Criterio, definido antes de empezar, que obliga a detener el experimento y revertir el fallo (por ejemplo, "si la disponibilidad de las ventas cae por debajo de X durante más de Y segundos"). En producción es lo que impide que un experimento se convierta en un incidente. |
-| Grupo de control | Configuración contra la que se compara un experimento. Aquí, el sistema sin sidecar: sin reintentos ni circuit breaker. |
-| TTD (*time to detect*) | Tiempo entre la inyección del fallo y el momento en que un mecanismo lo detecta (por ejemplo, el circuito se abre o el balanceador marca el destino como no sano). |
-| TTR y MTTR (*time to recover* / *mean time to recover*) | Tiempo entre el retiro (o la ocurrencia) del fallo y la vuelta al estado estable. El MTTR es el promedio de varios TTR. |
-| Fallo en cascada (*cascading failure*) | Un servicio que falla hace fallar a los servicios que dependen de él, y estos a los que dependen de ellos. |
-| Timeout | Tiempo máximo que un servicio espera la respuesta de otro antes de darla por fallida. |
-| Reintento (*retry*) | Volver a enviar automáticamente una petición que falló. |
-| *Retry storm* (tormenta de reintentos) | Avalancha de reintentos: muchos clientes reintentan al mismo tiempo contra un servicio que ya está degradado y terminan de tumbarlo. |
-| *Backoff* exponencial | Esperar cada vez más entre un reintento y el siguiente (por ejemplo 0,1 s, 0,2 s, 0,4 s...). |
-| *Jitter* | Variación aleatoria que se le suma a esa espera para que los clientes no reintenten todos en el mismo instante. |
+| TTD, TTR y MTTR | *Time to detect*: tiempo entre la inyección del fallo y el momento en que un mecanismo lo detecta. *Time to recover*: tiempo hasta que el sistema vuelve al estado estable. El MTTR (*mean time to recover*) es el promedio de varios TTR. |
+| *Backoff* exponencial y *jitter* | Esperar cada vez más entre un reintento y el siguiente (por ejemplo 0,1 s, 0,2 s, 0,4 s...), sumándole una variación aleatoria (*jitter*) para que los clientes no reintenten todos en el mismo instante. Reintentar sin backoff es lo que forma una tormenta de reintentos. |
 | *Circuit breaker* | Mecanismo que, al detectar que un servicio falla repetidamente, deja de enviarle peticiones por un tiempo y responde de inmediato con un error. Tiene tres estados: CLOSED (el tráfico pasa), OPEN (el tráfico se corta) y HALF-OPEN (deja pasar tráfico de prueba para ver si el servicio se recuperó). |
-| *Graceful degradation* | Cuando una dependencia no está disponible, responder algo útil aunque incompleto en lugar de un error. La respuesta alternativa se llama *fallback*. |
-| *Rate limiting* (o *throttling*) | Limitar cuántas peticiones por segundo se aceptan. Las que exceden el límite se rechazan con el código HTTP 429 (*Too Many Requests*). Se configura con dos valores: el *rate* (peticiones por segundo aceptadas de forma sostenida) y el *burst* (cuántas peticiones se aceptan de golpe por encima de ese ritmo, para absorber picos cortos). |
-| Proxy | Programa intermediario por el que pasan las peticiones entre dos servicios, y que puede aplicarles reglas (reintentar, cortar, registrar). |
-| Sidecar | Contenedor auxiliar que se despliega junto al contenedor de un servicio, dentro de la misma tarea de ECS, y que se encarga de asuntos transversales (aquí, la resiliencia de las llamadas a Inventario) sin tocar el código del servicio. |
-| Envoy | El proxy de código abierto que se usa como sidecar en este laboratorio. A su implementación del circuit breaker la llama *outlier detection*. |
-| Health check | Petición periódica que el balanceador (ALB) le hace a cada tarea (`GET /health`) para decidir si le sigue enviando tráfico. ECS reemplaza las tareas que se detienen o que el balanceador marca como no sanas. |
-| Docker Compose | Herramienta que levanta varios contenedores en su computador a partir de un archivo (`docker-compose.yml`). Es el ambiente de la fase local. |
-| Infraestructura como Código (IaC) | Describir la infraestructura en un archivo de texto que se puede versionar y ejecutar, en lugar de crearla a mano en la consola. |
-| CloudFormation | El servicio de AWS para infraestructura como código. El archivo que describe los recursos se llama **template** y el conjunto de recursos que crea a partir de él se llama **stack**. |
-| Outbox | Patrón en el que una operación que hay que enviarle a otro servicio se guarda primero en una tabla local, en la misma transacción que el dato de negocio, y un proceso aparte la envía después hasta que logra entregarla. |
-| Idempotencia | Propiedad de una operación que produce el mismo resultado aunque se ejecute varias veces. Se logra con una **clave de idempotencia**: un identificador que le permite al receptor reconocer una operación que ya procesó. |
+| *Graceful degradation* | Cuando una dependencia no está disponible, responder algo útil aunque incompleto en lugar de un error. Aquí, Ventas registra el pedido sin verificar el stock y lo marca como pendiente. |
+| *Rate limiting* (o *throttling*) | Limitar cuántas peticiones por segundo se aceptan; las que exceden el límite se rechazan con HTTP 429. Se configura con un *rate* (peticiones por segundo sostenidas) y un *burst* (cuántas se aceptan de golpe por encima de ese ritmo, para absorber picos cortos). |
+| Sidecar (Envoy) | Contenedor auxiliar que se despliega junto al de un servicio, en la misma tarea de ECS, y se encarga de asuntos transversales sin tocar el código del servicio. Aquí es Envoy, un proxy de código abierto que aplica los reintentos y el circuit breaker a las llamadas de Ventas a Inventario. |
+| Outbox e idempotencia | **Outbox:** la operación que hay que enviarle a otro servicio se guarda primero en una tabla local, en la misma transacción que el dato de negocio, y un proceso aparte la envía hasta que logra entregarla. **Idempotencia:** una operación repetida produce el mismo resultado que una sola; se logra con una clave que le permite al receptor reconocer lo que ya procesó. |
 
 > [!NOTE]
 > **Nombres:** En el código se usan los nombres de las entidades (`OutboxHttpCall`, `ProcessedCall`) y en SQL los de las tablas (`outbox_http_calls`, `processed_calls`, `items_inventario`). Las columnas están en *camelCase* y en SQL van entre comillas dobles (`"createdAt"`).
 
 ### 4.1 Hipótesis de diseño
 
-En este laboratorio **usted escribe las hipótesis: una por cada experimento**. El laboratorio tiene tres experimentos (la medición del estado estable, la tormenta de reintentos y la caída de Inventario, que se describen en el catálogo de experimentos más abajo), así que usted escribe tres hipótesis. Cada una va en la **ficha** de su experimento (un formato corto en el que usted documenta el diseño del experimento antes de correrlo: estado estable, hipótesis, fallo, radio de impacto, condición de aborto, métricas y reversión; sus campos se detallan en el diseño del experimento) y se redacta **antes** de ejecutarlo, sin mirar los resultados. Una hipótesis de caos afirma qué le pasa al **estado estable** cuando se inyecta un fallo, y por qué:
+En este laboratorio **usted escribe las hipótesis: una por cada experimento**. El laboratorio tiene tres experimentos (la medición del estado estable, la tormenta de reintentos y la caída de Inventario, que se describen en el catálogo de experimentos más abajo), así que usted escribe tres hipótesis. Cada una va en la **ficha** de su experimento (un formato corto en el que usted documenta el diseño del experimento antes de correrlo: estado estable, hipótesis, fallo, radio de impacto, condición de aborto, métricas y reversión; sus campos se detallan en el diseño del experimento) y se redacta **antes** de ejecutarlo, sin mirar los resultados. Una hipótesis de caos afirma qué le pasa al **estado estable** (el comportamiento normal del sistema, medido aquí con la disponibilidad y la latencia de las ventas) cuando se inyecta un fallo, y por qué:
 
 > **Si** inyectamos *[fallo concreto, dónde y por cuánto tiempo]* con *[configuración de tácticas]*, **entonces** *[métrica del estado estable]* *[se mantiene / se degrada a lo sumo hasta …]* y vuelve al estado estable en *[TTR esperado]*, **porque** *[mecanismo de la táctica que lo explica]*.
 
@@ -259,7 +242,7 @@ Por eso en este laboratorio:
 Un experimento de caos sigue cuatro pasos:
 
 1. **Definir el estado estable** con una métrica de negocio medible (aquí, disponibilidad percibida y p99 de las ventas del generador de tráfico).
-2. **Formular la hipótesis** de que el estado estable se mantiene (o se degrada de forma acotada) en el grupo experimental, frente al grupo de control.
+2. **Formular la hipótesis** de que el estado estable se mantiene (o se degrada de forma acotada) en el grupo experimental, frente al grupo de control (la misma situación sin las tácticas que se quieren evaluar).
 3. **Inyectar el fallo** de forma controlada, con duración definida y con una condición de aborto. Un solo fallo a la vez, salvo cuando el escenario es justamente la combinación de dos, como en la tormenta de reintentos.
 4. **Comparar** el estado estable antes, durante y después del fallo, y entre configuraciones. Lo que se busca es la diferencia.
 
