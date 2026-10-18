@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tormenta de reintentos (retry storm) para el experimento E6 del Lab 5.
+# Tormenta de reintentos (retry storm) para el experimento de tormenta de reintentos del Lab 5.
 #
 # Simula CLIENTES apps de tenderos con una versión defectuosa: cada una envía un pedido
 # (POST /ventas/ventas) y, si no recibe una respuesta 2xx en TIMEOUT_CLIENTE segundos,
@@ -8,7 +8,7 @@
 # tráfico normal; con Inventario degradado se convierte en una tormenta.
 #
 # Uso:
-#   BASE_URL=https://<API_ID>.execute-api.us-east-1.amazonaws.com/lab ./tormenta_reintentos.sh e6_sin_sidecar_tormenta.csv
+#   BASE_URL=https://<API_ID>.execute-api.us-east-1.amazonaws.com/lab ./tormenta_reintentos.sh tormenta_sin_sidecar_apps.csv
 #
 # Variables opcionales:
 #   CLIENTES         número de apps cliente concurrentes (por defecto 50)
@@ -25,7 +25,7 @@
 
 set -u
 
-OUT="${1:?Indique el archivo CSV de salida, p. ej. ./tormenta_reintentos.sh e6_tormenta.csv}"
+OUT="${1:?Indique el archivo CSV de salida, p. ej. ./tormenta_reintentos.sh tormenta_apps.csv}"
 CLIENTES="${CLIENTES:-50}"
 DURACION="${DURACION:-120}"
 TIMEOUT_CLIENTE="${TIMEOUT_CLIENTE:-3}"

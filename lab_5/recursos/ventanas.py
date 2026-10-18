@@ -2,8 +2,8 @@
 """Agrupa el CSV de generador_trafico.sh en ventanas de tiempo (Lab 5).
 
 Uso:
-    python3 ventanas.py e1_sin_sidecar.csv            # ventanas de 10 s
-    python3 ventanas.py e1_sin_sidecar.csv --ventana 5 --umbral 3
+    python3 ventanas.py tormenta_local_sin_sidecar.csv            # ventanas de 10 s
+    python3 ventanas.py tormenta_local_sin_sidecar.csv --ventana 5 --umbral 3
 
 Imprime, por ventana y por endpoint: peticiones, disponibilidad percibida
 (respuestas útiles / total; útil = 2xx, incluidas las 201 con

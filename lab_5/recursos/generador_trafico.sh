@@ -6,7 +6,7 @@
 # la carga es la misma en todos los experimentos; lo que cambia es el fallo inyectado.
 #
 # Uso:
-#   BASE_URL=https://<API_ID>.execute-api.us-east-1.amazonaws.com/lab ./generador_trafico.sh e1_sin_sidecar.csv
+#   BASE_URL=https://<API_ID>.execute-api.us-east-1.amazonaws.com/lab ./generador_trafico.sh tormenta_completa.csv
 #
 # Variables opcionales:
 #   RATE        ventas por segundo a POST /ventas/ventas (por defecto 2)
@@ -22,7 +22,7 @@
 
 set -u
 
-OUT="${1:?Indique el archivo CSV de salida, p. ej. ./generador_trafico.sh e0_estado_estable.csv}"
+OUT="${1:?Indique el archivo CSV de salida, p. ej. ./generador_trafico.sh estado_estable.csv}"
 RATE="${RATE:-2}"
 EXTRA_EVERY="${EXTRA_EVERY:-5}"
 VENTA_JSON="${VENTA_JSON:-venta.json}"
