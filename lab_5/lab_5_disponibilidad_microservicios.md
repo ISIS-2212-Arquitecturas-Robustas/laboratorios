@@ -106,29 +106,44 @@ Contexto de negocio de cada ASR (motivación, no parte de la especificación for
 
 ### 4.3 Tácticas y patrones
 
-#### 4.3.1 Patrones de diseño
+En este laboratorio no se distingue entre táctica y patrón: lo que un autor llama táctica, otro lo llama patrón. Todos son mecanismos para mantener la disponibilidad. La tabla los resume con sus ventajas y sus costos; después se explica cada uno y cómo se ve en Cheapest.
 
-##### Sidecar
+| Táctica o patrón                            | Análisis                                                                                                                                                                                                                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reintentos con backoff exponencial + jitter | Favorece la recuperación automática ante fallos transitorios.<br>Sin backoff ni jitter, los reintentos sincronizados pueden amplificar la carga (thundering herd), agravando el incidente en lugar de resolverlo.                                                |
+| Circuit Breaker (CLOSED / OPEN / HALF-OPEN) | Favorece disponibilidad del servicio cliente al dejar de enviar requests a un servicio que ya está fallando.<br>Desfavorece consistencia inmediata: el estado OPEN implica que algunas operaciones retornan una respuesta de graceful degradation en lugar de resultados reales. |
+| Graceful degradation (fallback)             | Favorece experiencia de usuario y continuidad operativa: el sistema sigue aceptando pedidos con graceful degradation en lugar de fallar completamente.<br>Introduce complejidad en la lógica de negocio para manejar el estado `pending_stock_confirmation`, y requiere acuerdos de negocio sobre qué se puede degradar sin romper la experiencia crítica del tendero. |
+| Detección y recuperación automática (health checks + reemplazo de tareas de ECS) | Favorece la recuperación sin intervención humana: el balanceador deja de enviar tráfico a una tarea que no responde `/health` y ECS lanza una tarea nueva.<br>El tiempo de recuperación depende de la frecuencia de los health checks, del tiempo de arranque de la tarea y de cuántas réplicas hay; un `/health` que no revisa las dependencias (por ejemplo, la base de datos) puede reportar sana una tarea que no sirve. |
+| Rate Limiting en el API Gateway (throttling) | El API Gateway es el punto de entrada de todas las peticiones, así que es el lugar natural para limitar cuántas se aceptan por segundo.<br>Favorece protección de servicios backend ante picos de tráfico y retry storms.<br>Puede afectar a usuarios legítimos si los límites no están bien calibrados o si no distinguen entre clientes o tipos de tráfico. |
+| Control de recursos (*resource control*)    | Limitar concurrencia, throughput y consumo por cliente o por ruta (throttling, cuotas, aislamiento) favorece la estabilidad bajo carga.<br>Sin una buena calibración, puede rechazar tráfico legítimo y afectar temporalmente la percepción de disponibilidad. |
+| Proxy sidecar (Envoy)                       | Externaliza responsabilidades transversales (aquí, retry y circuit breaker) a un proceso que corre junto al servicio, sin tocar el código de negocio.<br>El sidecar intercepta el tráfico saliente de Ventas hacia Inventario y aplica las políticas configuradas en su archivo YAML; se pueden cambiar sin redesplegar la aplicación.<br>Introduce un salto de red adicional, un componente más que puede fallar, y requiere que los parámetros del sidecar sean coherentes con los timeouts de la aplicación. |
 
-Un **sidecar** es un contenedor auxiliar que se despliega junto al contenedor principal dentro de la misma unidad de ejecución (tarea ECS en este caso). Comparte el namespace de red con el servicio principal, lo que le permite interceptar el tráfico sin que la aplicación lo sepa.
+#### Reintentos con backoff y jitter
 
-![Diagrama de sidecar](./recursos/sidecar.png)
+Los **reintentos** permiten recuperar solicitudes ante fallos transitorios (timeouts cortos, reinicios, errores 5xx momentáneos). Para evitar sincronización masiva, se usan **backoff exponencial + jitter**.
 
-**¿Por qué sidecar en lugar de código?**
+**Flujo típico**
 
-En este laboratorio las tácticas de disponibilidad se implementan en el sidecar y no dentro del servicio NestJS por tres razones:
+```
+intento 1 -> falla
+espera base_interval (+/- jitter)
+intento 2 -> falla
+espera min(2x, max_interval)
+intento 3 -> exito o error final
+```
 
-1. **Separación de responsabilidades**: el código de negocio de Ventas no debería saber si el circuito está abierto o cerrado; eso es una política de infraestructura.
-2. **Cambios sin redespliegue del servicio**: ajustar `num_retries` o `base_ejection_time` solo requiere actualizar la config del sidecar y reiniciarlo, sin tocar ni recompilar la aplicación.
-3. **Consistencia cross-lenguaje**: si mañana Ventas se reescribe en Go o Python, el sidecar sigue funcionando igual, sin reimplementar la lógica de retry en cada SDK.
+**Cómo se ve en Cheapest**
 
-**El sidecar también es un componente que puede fallar.** Al agregarlo, la tarea de Ventas pasa a tener dos contenedores, y en la configuración de AWS del laboratorio ambos están marcados como esenciales (`Essential: true`: si uno se detiene, ECS detiene la tarea completa). Qué le pasa a Ventas cuando el sidecar se cae no se prueba en los experimentos; usted lo analiza al final del laboratorio, cuando diseñe el experimento que lo probaría.
+- Envoy reintenta automáticamente cuando Inventario responde 5xx.
+- El timeout total de la ruta debe cubrir el tiempo de reintentos.
+- El número de reintentos debe respetar el ASR de tormenta de reintentos: Inventario no puede recibir más de 2 consultas por pedido.
 
-**Relación entre sidecar y graceful degradation**
+**Por qué importa**
 
-El sidecar maneja la red (retry, circuit breaker). La graceful degradation —retornar `status: pending_stock_confirmation` en lugar de propagar el error— es una decisión de negocio que vive en el código de Ventas. El sidecar le comunica al servicio que Inventario está caído (mediante un 503 rápido en lugar de un timeout lento), y el servicio decide qué respuesta dar al cliente.
+- Mejora disponibilidad cuando el fallo es breve o intermitente.
+- Si el fallo es persistente, los retries solo amplifican carga y empeoran el incidente. En el experimento de tormenta de reintentos hay dos fuentes de reintentos a la vez: las del sidecar y las de la app de los tenderos.
 
-##### Circuit Breaker
+#### Circuit breaker
 
 Un **circuit breaker** es un control de fallos que corta el tráfico hacia un servicio cuando detecta errores persistentes. Evita que un servicio degradado reciba más carga y permite al cliente responder rápido con una salida controlada.
 
@@ -158,53 +173,7 @@ Un **circuit breaker** es un control de fallos que corta el tráfico hacia un se
 - Umbral demasiado bajo: el circuito abre con fallos transitorios y corta tráfico legítimo.
 - Umbral demasiado alto: tarda en abrir y el sistema sigue colapsando en cascada.
 
-##### Outbox e idempotencia
-
-El circuit breaker y la graceful degradation mantienen a Ventas disponible, pero dejan un problema de datos: la venta quedó registrada y el stock de Inventario nunca se descontó. Dos patrones cierran esa brecha:
-
-- **Outbox:** en la misma transacción en la que Ventas guarda la venta, guarda también una fila en una tabla local (`outbox_http_calls`, entidad `OutboxHttpCall`) que representa "hay que descontar este stock en Inventario". Un proceso en segundo plano lee esa tabla cada 2 segundos y envía la petición a Inventario hasta que logra entregarla. La garantía es de entrega **al menos una vez** (*at-least-once*).
-- **Idempotencia:** como "al menos una vez" significa que la misma petición puede llegar repetida, Inventario recibe con cada petición una clave de idempotencia y guarda las claves que ya procesó. Si llega una clave repetida, no vuelve a descontar.
-
-Juntos logran que cada venta descuente el stock exactamente una vez. Verá ambos patrones en detalle, sobre el código, en el experimento de caída de Inventario.
-
-#### 4.3.2 Tácticas de arquitectura
-
-| Táctica o patrón                            | Análisis                                                                                                                                                                                                                                                         |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reintentos con backoff exponencial + jitter | Favorece la recuperación automática ante fallos transitorios.<br>Sin backoff ni jitter, los reintentos sincronizados pueden amplificar la carga (thundering herd), agravando el incidente en lugar de resolverlo.                                                |
-| Circuit Breaker (CLOSED / OPEN / HALF-OPEN) | Favorece disponibilidad del servicio cliente al dejar de enviar requests a un servicio que ya está fallando.<br>Desfavorece consistencia inmediata: el estado OPEN implica que algunas operaciones retornan una respuesta de graceful degradation en lugar de resultados reales. |
-| Graceful degradation (fallback)             | Favorece experiencia de usuario y continuidad operativa: el sistema sigue aceptando pedidos con graceful degradation en lugar de fallar completamente.<br>Introduce complejidad en la lógica de negocio para manejar el estado `pending_stock_confirmation`, y requiere acuerdos de negocio sobre qué se puede degradar sin romper la experiencia crítica del tendero. |
-| Detección y recuperación automática (health checks + reemplazo de tareas de ECS) | Favorece la recuperación sin intervención humana: el balanceador deja de enviar tráfico a una tarea que no responde `/health` y ECS lanza una tarea nueva.<br>El tiempo de recuperación depende de la frecuencia de los health checks, del tiempo de arranque de la tarea y de cuántas réplicas hay; un `/health` que no revisa las dependencias (por ejemplo, la base de datos) puede reportar sana una tarea que no sirve. |
-| Rate Limiting en el API Gateway (throttling) | El API Gateway es el punto de entrada de todas las peticiones, así que es el lugar natural para limitar cuántas se aceptan por segundo.<br>Favorece protección de servicios backend ante picos de tráfico y retry storms.<br>Puede afectar a usuarios legítimos si los límites no están bien calibrados o si no distinguen entre clientes o tipos de tráfico. |
-| Control de recursos (*resource control*)    | Limitar concurrencia, throughput y consumo por cliente o por ruta (throttling, cuotas, aislamiento) favorece la estabilidad bajo carga.<br>Sin una buena calibración, puede rechazar tráfico legítimo y afectar temporalmente la percepción de disponibilidad. |
-| Proxy sidecar (Envoy)                       | Externaliza responsabilidades transversales (aquí, retry y circuit breaker) a un proceso que corre junto al servicio, sin tocar el código de negocio.<br>El sidecar intercepta el tráfico saliente de Ventas hacia Inventario y aplica las políticas configuradas en su archivo YAML; se pueden cambiar sin redesplegar la aplicación.<br>Introduce un salto de red adicional, un componente más que puede fallar, y requiere que los parámetros del sidecar sean coherentes con los timeouts de la aplicación. |
-
-##### Retries (reintentos)
-
-Los **reintentos** permiten recuperar solicitudes ante fallos transitorios (timeouts cortos, reinicios, errores 5xx momentáneos). Para evitar sincronización masiva, se usan **backoff exponencial + jitter**.
-
-**Flujo típico**
-
-```
-intento 1 -> falla
-espera base_interval (+/- jitter)
-intento 2 -> falla
-espera min(2x, max_interval)
-intento 3 -> exito o error final
-```
-
-**Cómo se ve en Cheapest**
-
-- Envoy reintenta automáticamente cuando Inventario responde 5xx.
-- El timeout total de la ruta debe cubrir el tiempo de reintentos.
-- El número de reintentos debe respetar el ASR de tormenta de reintentos: Inventario no puede recibir más de 2 consultas por pedido.
-
-**Por qué importa**
-
-- Mejora disponibilidad cuando el fallo es breve o intermitente.
-- Si el fallo es persistente, los retries solo amplifican carga y empeoran el incidente. En el experimento de tormenta de reintentos hay dos fuentes de reintentos a la vez: las del sidecar y las de la app de los tenderos.
-
-##### Graceful Degradation
+#### Graceful degradation
 
 La **graceful degradation** es una decisión de negocio: el servicio devuelve una respuesta útil aunque parcial cuando un componente crítico no está disponible. No evita la falla, pero protege la experiencia del usuario.
 
@@ -217,6 +186,35 @@ La **graceful degradation** es una decisión de negocio: el servicio devuelve un
 
 - Mantiene la disponibilidad percibida (ASR de degradación) aun con Inventario degradado.
 - Requiere reglas claras: qué significa "pendiente", cuánto tiempo puede estarlo, y cómo se reconcilia.
+
+#### Sidecar
+
+Un **sidecar** es un contenedor auxiliar que se despliega junto al contenedor principal dentro de la misma unidad de ejecución (tarea ECS en este caso). Comparte el namespace de red con el servicio principal, lo que le permite interceptar el tráfico sin que la aplicación lo sepa.
+
+![Diagrama de sidecar](./recursos/sidecar.png)
+
+**¿Por qué sidecar en lugar de código?**
+
+En este laboratorio las tácticas de disponibilidad se implementan en el sidecar y no dentro del servicio NestJS por tres razones:
+
+1. **Separación de responsabilidades**: el código de negocio de Ventas no debería saber si el circuito está abierto o cerrado; eso es una política de infraestructura.
+2. **Cambios sin redespliegue del servicio**: ajustar `num_retries` o `base_ejection_time` solo requiere actualizar la config del sidecar y reiniciarlo, sin tocar ni recompilar la aplicación.
+3. **Consistencia cross-lenguaje**: si mañana Ventas se reescribe en Go o Python, el sidecar sigue funcionando igual, sin reimplementar la lógica de retry en cada SDK.
+
+**El sidecar también es un componente que puede fallar.** Al agregarlo, la tarea de Ventas pasa a tener dos contenedores, y en la configuración de AWS del laboratorio ambos están marcados como esenciales (`Essential: true`: si uno se detiene, ECS detiene la tarea completa). Qué le pasa a Ventas cuando el sidecar se cae no se prueba en los experimentos; usted lo analiza al final del laboratorio, cuando diseñe el experimento que lo probaría.
+
+**Relación entre sidecar y graceful degradation**
+
+El sidecar maneja la red (retry, circuit breaker). La graceful degradation —retornar `status: pending_stock_confirmation` en lugar de propagar el error— es una decisión de negocio que vive en el código de Ventas. El sidecar le comunica al servicio que Inventario está caído (mediante un 503 rápido en lugar de un timeout lento), y el servicio decide qué respuesta dar al cliente.
+
+#### Outbox e idempotencia
+
+El circuit breaker y la graceful degradation mantienen a Ventas disponible, pero dejan un problema de datos: la venta quedó registrada y el stock de Inventario nunca se descontó. Dos patrones cierran esa brecha:
+
+- **Outbox:** en la misma transacción en la que Ventas guarda la venta, guarda también una fila en una tabla local (`outbox_http_calls`, entidad `OutboxHttpCall`) que representa "hay que descontar este stock en Inventario". Un proceso en segundo plano lee esa tabla cada 2 segundos y envía la petición a Inventario hasta que logra entregarla. La garantía es de entrega **al menos una vez** (*at-least-once*).
+- **Idempotencia:** como "al menos una vez" significa que la misma petición puede llegar repetida, Inventario recibe con cada petición una clave de idempotencia y guarda las claves que ya procesó. Si llega una clave repetida, no vuelve a descontar.
+
+Juntos logran que cada venta descuente el stock exactamente una vez. Los verá en funcionamiento, y revisará su código, en el experimento en el que se detiene Inventario mientras el generador de tráfico sigue registrando ventas: esas ventas quedan pendientes en el Outbox y se entregan cuando Inventario vuelve. Ese experimento, la caída de Inventario, se describe en el catálogo de experimentos del diseño.
 
 > [!IMPORTANT]
 > **Pregunta 3 (parte A — propuesta de parámetros):**
@@ -268,7 +266,7 @@ Por qué cada fase corre lo que corre:
 
 #### 4.4.3 Ficha de cada experimento
 
-Antes de ejecutar cada experimento, complete su ficha. Hay una ficha por experimento (tres en total), que sirve para las dos fases. Las fichas se entregan en el informe y se califican: un experimento sin ficha previa no es un experimento, es una prueba al azar.
+Antes de ejecutar cada experimento, complete su ficha. Hay una ficha por experimento (tres en total), y cada ficha sirve para las dos fases del laboratorio: la **fase local**, en la que usted corre los experimentos en su computador con Docker Compose, y la **fase AWS**, en la que los repite sobre la infraestructura desplegada en la nube. Las fichas se entregan en el informe y se califican: un experimento sin ficha previa no es un experimento, es una prueba al azar.
 
 | Campo | Qué debe contener |
 | --- | --- |
@@ -288,7 +286,7 @@ Antes de ejecutar cada experimento, complete su ficha. Hay una ficha por experim
 | --- | --- |
 | Inventario | Endpoint de inyección de fallos en caliente (`/inventory/chaos`: latencia o errores, con duración) sobre la consulta de disponibilidad, y endpoint que recibe los descuentos de stock con clave de idempotencia. |
 | Ventas | Graceful degradation (`pending_stock_confirmation`) cuando Inventario no está disponible, escritura transaccional de la venta junto con su fila de Outbox y endpoint de observación del Outbox (`/ventas/outbox/resumen`). |
-| Sidecar Envoy (en la tarea de Ventas) | Configuración del timeout, de los reintentos con backoff y jitter, y del circuit breaker (los seis `???` que usted completa). |
+| Sidecar Envoy (en la tarea de Ventas) | Configuración del timeout, de los reintentos con backoff y jitter, y del circuit breaker. Son seis parámetros del archivo de configuración del sidecar (`envoy.yaml.tmpl`) que vienen marcados con `???`; usted los completa una sola vez, al preparar el código, antes de levantar el ambiente local. No tienen relación con los experimentos: los mismos seis valores se usan en todos. |
 | API Gateway | Rate limiting sobre el stage `lab` (solo en AWS). |
 
 #### 4.4.5 ¿Qué métricas se van a medir?
