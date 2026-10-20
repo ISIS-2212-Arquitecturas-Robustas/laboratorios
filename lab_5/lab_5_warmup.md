@@ -1,94 +1,14 @@
-# Warm-up en clase — Lab 5: Disponibilidad en Microservicios (Circuit Breaker, Retry, Rate Limiting)
+# Warm-up en clase — Lab 5: Disponibilidad en Microservicios (experimentos de caos con Circuit Breaker, Retry, Rate Limiting)
 
-## Preparación: IaaC con CloudFormation
+El laboratorio tiene dos fases: primero se corren todos los experimentos en su computador con Docker Compose, y después se confirman en AWS (lo explica la ruta del laboratorio, al comienzo de la ejecución en el enunciado). Este warm-up es el comienzo de la **fase local**: no necesita AWS ni consume créditos.
 
-### ¿Qué es Infraestructura como Código?
+Al terminar la sesión debe tener el ambiente local arriba, el sidecar calibrado, las fichas de los experimentos de estado estable y de tormenta de reintentos, y los resultados del estado estable y de la tormenta sin sidecar.
 
-En los labs anteriores, la infraestructura se creó paso a paso desde la consola de AWS: security groups, instancias EC2, RDS, ECS, API Gateway. Este enfoque manual tiene un problema: es propenso a errores, difícil de reproducir y no deja registro de qué se configuró exactamente.
+## Parte 1 — Ambiente local y sidecar
 
-**Infraestructura como Código (IaaC)** resuelve esto declarando la infraestructura en un archivo de texto (código), que puede versionarse, revisarse y ejecutarse de forma reproducible. **AWS CloudFormation** es el servicio nativo de AWS para esto: usted define un *template* YAML o JSON que describe los recursos, y CloudFormation se encarga de crearlos, actualizarlos o eliminarlos.
+### El sidecar Envoy: archivos y flujo
 
-### Template CloudFormation del laboratorio
-
-Se provee el archivo `lab_5/recursos/cloudformation_template.yaml` con toda la infraestructura del laboratorio declarada. Lea el template antes de ejecutarlo: cada sección tiene comentarios que explican qué recurso crea y por qué.
-
-El template incluye:
-
-| Sección            | Recursos creados                                                              |
-| ------------------ | ------------------------------------------------------------------------------- |
-| `Parameters`       | ARNs de imágenes ECR, credenciales RDS, VPC/subnets                           |
-| `VPC y Networking` | VPC, subnets públicas/privadas, Internet Gateway, Security Groups             |
-| `RDS`              | Instancia PostgreSQL, subnet group, security group de base de datos           |
-| `ECS Cluster`      | Cluster Fargate compartido, roles IAM de ejecución                            |
-| `Task Definitions` | Una por servicio (Logistica, Inventario, Ventas) con variables de entorno     |
-| `ECS Services`     | Un servicio ECS por Task Definition, conectado a su ALB                       |
-| `Load Balancers`   | ALB por servicio con Target Groups y Health Checks                            |
-| `API Gateway`      | HTTP API con rutas `/logistica/*`, `/inventario/*`, `/ventas/*` y stage `lab` |
-
-### Preparar parámetros
-
-Antes de desplegar, publique las imágenes Docker en ECR y anote los URIs. En este laboratorio hay **cuatro imágenes**: las tres del monorepo más la del sidecar Envoy.
-
-| Servicio          | Repositorio sugerido     | Tag     | Dockerfile                          |
-| ----------------- | ------------------------ | ------- | ----------------------------------- |
-| Logística         | `cheapest-logistica`       | `2.0.0` | `apps/logistica/Dockerfile`         |
-| Inventario        | `cheapest-inventario`      | `2.0.0` | `apps/inventario/Dockerfile`        |
-| Ventas            | `cheapest-ventas`          | `2.0.0` | `apps/ventas/Dockerfile`            |
-| Ventas sidecar    | `cheapest-ventas-sidecar`  | `1.0.0` | `apps/ventas/sidecar/Dockerfile`    |
-
-Tutorial de apoyo:
-- [Subir imágenes Docker a Amazon ECR](../tutoriales/subir_imagenes%20_a_ecr.md)
-
-> Use el tag `2.0.0` para distinguir las imágenes con las modificaciones de este lab de las del Lab 4. La rama de trabajo para este laboratorio es **`availability`**.
-> Recuerde que debe construir el sidecar como una imagen Docker aparte, usando el Dockerfile en `apps/ventas/sidecar/`, y subirla a ECR también.
-
-### Desplegar el stack
-
-```bash
-aws cloudformation deploy  --template-file lab_5/recursos/cloudformation_template.yaml  --stack-name Cheapest-lab5  --parameter-overrides LogisticaImageUri=<URI_ECR_LOGISTICA>:2.0.0 InventarioImageUri=<URI_ECR_INVENTARIO>:2.0.0 VentasImageUri=<URI_ECR_VENTAS>:2.0.0  VentasSidecarImageUri=<URI_ECR_SIDECAR>:2.0.0 DBPassword=<SU_CONTRASEÑA>  --region us-east-1
-```
-
-Monitoree el progreso en la consola de AWS → CloudFormation → Stack `Cheapest-lab5` → pestaña **Events**.
-
-### Verificar el despliegue
-
-Una vez el stack esté en estado `CREATE_COMPLETE`:
-
-```bash
-# Obtener la URL del API Gateway
-aws cloudformation describe-stacks --stack-name Cheapest-lab5 --query "Stacks[0].Outputs[?OutputKey=='ApiGatewayUrl'].OutputValue" --output text
-```
-
-Desde su computador verifique que los tres servicios responden:
-
-```
-GET https://<API_ID>.execute-api.<REGION>.amazonaws.com/lab/logistica/health
-GET https://<API_ID>.execute-api.<REGION>.amazonaws.com/lab/inventario/health
-GET https://<API_ID>.execute-api.<REGION>.amazonaws.com/lab/ventas/health
-```
-
-Los tres deben retornar HTTP 200 antes de continuar.
-
-## Configuración del sidecar y ajuste de código
-
-Las modificaciones de este laboratorio se dividen en tres partes:
-
-1. La inyección de fallos en Inventario (ya implementada en el código base).
-2. La **configuración del sidecar Envoy** en Ventas: aquí es donde usted define los parámetros de retry y circuit breaker.
-3. Un ajuste mínimo en el servicio de Ventas para la graceful degradation.
-
-### Lógica de inyección de fallos con auto-recuperación en Inventario
-
-El servicio de Inventario ya incorpora un mecanismo de fallo transitorio controlado por dos variables de entorno:
-
-- `FAULT_DELAY_MS`: delay artificial en ms que se agrega a cada respuesta durante el período de fallo.
-- `RECOVERY_TIME_MS`: tiempo en ms desde el arranque del proceso hasta que el servicio se recupera automáticamente.
-
-Este código ya existe en `apps/inventario/src/fault.middleware.ts` y se aplica en el endpoint `GET /inventory/items/disponibilidad/:productoId` que Ventas consume. No es necesario modificarlo.
-
-### El sidecar Envoy: arquitectura y flujo
-
-El directorio `apps/ventas/sidecar/` contiene tres archivos:
+En este laboratorio Ventas no llama directamente a Inventario: llama a un **sidecar**, un proxy Envoy que corre junto a Ventas y le agrega reintentos y circuit breaker sin tocar el código de negocio. El directorio `apps/ventas/sidecar/` de la rama `availability` contiene tres archivos:
 
 | Archivo            | Rol                                                                              |
 | ------------------ | -------------------------------------------------------------------------------- |
@@ -96,25 +16,9 @@ El directorio `apps/ventas/sidecar/` contiene tres archivos:
 | `entrypoint.sh`    | Al arrancar, sustituye `${INVENTARIO_UPSTREAM_HOST}` y `${INVENTARIO_UPSTREAM_PORT}` en el template y lanza Envoy |
 | `envoy.yaml.tmpl`  | Configuración de Envoy con los parámetros de retry y circuit breaker — **usted debe completar los valores marcados con `???`** |
 
-**Variables de entorno del sidecar:**
-
-| Variable                   | docker-compose         | ECS (mismo task)          |
-| -------------------------- | ---------------------- | ------------------------- |
-| `INVENTARIO_UPSTREAM_HOST` | `inventario`           | `<ALB DNS de inventario>` |
-| `INVENTARIO_UPSTREAM_PORT` | `3002`                 | `80`                      |
-
-**Variable de entorno del contenedor ventas:**
-
-| Variable              | Valor en ECS          | Por qué                                              |
-| --------------------- | --------------------- | ---------------------------------------------------- |
-| `INVENTARIO_BASE_URL` | `http://localhost:10000` | En ECS los containers del mismo task comparten la red; el sidecar escucha en ese puerto |
-| `INVENTARIO_TIMEOUT_MS` | `9000`              | Debe ser mayor que el timeout total del sidecar para no abortar antes de que Envoy resuelva los reintentos |
-
 ### Completar la configuración de Envoy
 
 Abra `apps/ventas/sidecar/envoy.yaml.tmpl`. Encontrará seis parámetros marcados con `???` y un comentario `TODO` que explica el criterio de diseño de cada uno. Debe reemplazar cada `???` con el valor que usted considera correcto.
-
-Los seis puntos a completar son:
 
 | # | Parámetro Envoy          | Sección              | Qué controla                                                                 |
 | - | ------------------------ | --------------------- | ------------------------------------------------------------------------------ |
@@ -128,27 +32,66 @@ Los seis puntos a completar son:
 **Restricciones de calibración** (úselas para justificar los valores que escoja):
 
 - `timeout` de la ruta ≥ `connect_timeout` × (1 + `num_retries`) + backoff acumulado; de lo contrario los reintentos son abortados por el propio sidecar.
-- `num_retries` × factor de amplificación ≤ 2× tráfico baseline (ASR-2).
-- `base_ejection_time` < `RECOVERY_TIME_MS` de Inventario, para que el estado HALF-OPEN pueda detectar la recuperación automática del servicio.
+- `1 + num_retries` ≤ 2: cada venta genera como máximo `1 + num_retries` llamadas a Inventario, y el ASR de tormenta de reintentos exige que Inventario no reciba más de 2 consultas por pedido.
+- `base_ejection_time` < duración del fallo inyectado (`durationMs`), para que el estado HALF-OPEN pueda detectar la recuperación del servicio.
+- El ASR de degradación exige p99 < 3000 ms: una petición de prueba en HALF-OPEN que espera el `timeout` completo también cuenta en ese p99.
 
-**Verificar la configuración de Envoy localmente antes de subir a ECR:**
+### Levantar el ambiente local
+
+Use **`docker compose`** (con espacio, Docker Compose v2).
+
+> [!WARNING]
+> **Si ya usó Docker Compose en laboratorios anteriores con este mismo repositorio**, el volumen de la base local (`cheapest-api_postgres_data`) conserva el esquema de esas ramas y `npm run db:seed` falla (por ejemplo, con `column "tiendaIds" of relation "promociones" contains null values`). Empiece con una base limpia: `docker compose down -v` borra los contenedores **y la base local** de Docker Compose; después siga con `docker compose up -d --build`.
 
 ```bash
-# Construir la imagen del sidecar
-docker build -t cheapest-ventas-sidecar:local apps/ventas/sidecar/
+git checkout availability
+docker compose up -d --build        # postgres, logística, inventario, sidecar y ventas
+# Espere ~30 s a que los servicios creen las tablas
+npm install
+npm run db:seed
 
-# Lanzar el sidecar apuntando a un inventario local (para verificar que el YAML es válido)
-docker run --rm \
-  -e INVENTARIO_UPSTREAM_HOST=host.docker.internal \
-  -e INVENTARIO_UPSTREAM_PORT=3002 \
-  -p 10000:10000 -p 9901:9901 \
-  cheapest-ventas-sidecar:local
-
-# En otra terminal: verificar que Envoy está listo
-curl http://localhost:9901/ready
+curl -i http://localhost:3002/health      # inventario
+curl -i http://localhost:3003/health      # ventas
+curl -s http://localhost:9901/ready       # sidecar Envoy: debe responder LIVE
 ```
 
-Si el YAML tiene errores de sintaxis o valores inválidos (como `???` sin reemplazar), Envoy imprimirá el error y saldrá. Corrija antes de publicar la imagen.
+Si el sidecar no responde `LIVE`, revise `docker compose logs ventas-sidecar`: lo más probable es un `???` sin reemplazar o un valor inválido en `envoy.yaml.tmpl`. Corríjalo y reconstruya solo el sidecar con `docker compose up -d --build ventas-sidecar`.
+
+Desde su carpeta de trabajo local, defina las variables del ambiente local pegando este bloque en la terminal (los comandos del laboratorio usan `$INV`, `$VEN` e `$ITEM`, y los scripts leen las URLs de abajo). Las variables solo viven en esa terminal: péguelo también en cada terminal nueva que abra.
+
+```bash
+# Variables del ambiente local (Docker Compose): los servicios se llaman directamente
+export AMBIENTE=local
+export ITEM=11111111-1111-4111-8111-111111111111
+export INV=http://localhost:3002/inventory
+export INV_HEALTH=http://localhost:3002/health
+export VEN=http://localhost:3003/ventas
+# URLs que leen generador_trafico.sh y tormenta_reintentos.sh
+export VENTA_URL=$VEN/ventas
+export LOGISTICA_URL=http://localhost:3001/health
+export INVENTARIO_URL=$INV/items/$ITEM
+export CATALOGO_URL=$VEN/productos-externos
+```
+
+Cree un producto externo, guarde el `venta.json` y pruébelo, como se indica en el enunciado, en la parte de levantar el ambiente local. La venta debe responder HTTP 201.
+
+### Herramientas para inyectar fallos
+
+En este laboratorio el experimento no es una prueba de carga: el tráfico es bajo y constante, y lo que se manipula es el **fallo**. Para eso el código base trae un endpoint de caos en Inventario, que enciende y apaga un fallo en segundos sin redesplegar. El fallo afecta solo la consulta de disponibilidad que hace Ventas (`GET /inventory/items/disponibilidad/:productoId`):
+
+```bash
+# Latencia de 5 s durante 150 s (se retira sola al cumplirse durationMs)
+curl -s -X POST $INV/chaos -H 'Content-Type: application/json' \
+  -d '{"mode": "latency", "delayMs": 5000, "durationMs": 150000}'
+
+# Retirar el fallo de inmediato
+curl -s -X POST $INV/chaos -H 'Content-Type: application/json' -d '{"mode": "off"}'
+
+# Estado actual y contador de llamadas de disponibilidad
+curl -s $INV/chaos
+```
+
+El código está en `apps/inventario/src/chaos.controller.ts` y `fault.middleware.ts`. No es necesario modificarlo.
 
 ### Ajuste de código: graceful degradation en Ventas
 
@@ -158,77 +101,63 @@ Cuando el circuito está OPEN, el sidecar devuelve HTTP 503 a Ventas. El cliente
 
 Este cambio ya está aplicado en la rama `availability` (en `libs/ventas/src/services/venta.service.ts`): revise el archivo para entender la implementación completa antes de continuar.
 
-### Variables de entorno adicionales
+## Parte 2 — Primer experimento de caos: estado estable y tormenta de reintentos sin protecciones
 
-Actualice las Task Definitions del template CloudFormation con las siguientes variables:
+En esta parte hace, en local, los dos primeros pasos del laboratorio: la medición del estado estable y la tormenta de reintentos con la configuración **sin sidecar** (el grupo de control, en el que Ventas llama directamente a Inventario, sin reintentos ni circuit breaker), para ver la tormenta sin protecciones.
 
-| Servicio          | Variable                   | Valor para pruebas                                                         |
-| ----------------- | --------------------------- | ---------------------------------------------------------------------------- |
-| Inventario        | `FAULT_DELAY_MS`           | `0` (baseline) / `5000` (degradado: 5s de delay)                           |
-| Inventario        | `RECOVERY_TIME_MS`         | `600000` (el servicio se recupera 10 minutos después de arrancar)          |
-| Ventas            | `INVENTARIO_BASE_URL`      | `http://localhost:10000` (apunta al sidecar en ECS)                        |
-| Ventas            | `INVENTARIO_TIMEOUT_MS`    | `9000`                                                                     |
-| Ventas sidecar    | `INVENTARIO_UPSTREAM_HOST` | `<ALB DNS del servicio de Inventario>`                                     |
-| Ventas sidecar    | `INVENTARIO_UPSTREAM_PORT` | `80`                                                                       |
+### Antes de empezar: las fichas
 
-> Configure `base_ejection_time` del sidecar en un valor inferior a `RECOVERY_TIME_MS` (600s) para que el estado HALF-OPEN pueda detectar la recuperación automática de Inventario.
+Escriba las fichas de los dos experimentos (el formato está en el enunciado, en el diseño del experimento) **antes** de inyectar nada: estado estable que espera, hipótesis, radio de impacto esperado y condición de aborto. Deje para después el campo de predicción para AWS. Discútalas con su grupo: ¿qué cree que le pasará a una venta cuando Inventario tarde 5 s, si Ventas lo espera hasta 9 s y la app del tendero la abandona a los 3 s?
 
-## Parte 1 — Reproducir el fallo en cascada
+### Preparar los datos y el generador de tráfico
 
-### Configurar el fallo
+Reponga stock, porque el generador de tráfico vende 2 unidades por segundo y la tormenta muchas más:
 
-1. En la consola de AWS → ECS → Task Definition `td-Cheapest-inventario`, cree una nueva revisión con:
-   - `FAULT_DELAY_MS=5000`
-   - `RECOVERY_TIME_MS=600000`
-2. Actualice el servicio ECS de Inventario para que use la nueva revisión y espere que las tareas sean reemplazadas.
-3. Asegúrese de que **el task de Ventas esté desplegado sin el sidecar** para este baseline: use la Task Definition con un solo container (ventas) y `INVENTARIO_BASE_URL` apuntando directamente al ALB de Inventario.
+```bash
+curl -s -X PATCH $INV/items/$ITEM -H 'Content-Type: application/json' -d '{"cantidad": 100000}'
+```
 
-> Con esta configuración, Inventario arrancará degradado y responderá con 5s de delay. Pasados 10 minutos desde el arranque, se recuperará automáticamente. Anote el momento exacto de arranque de la tarea (visible en ECS → Tasks → Started at) para correlacionarlo con las métricas de JMeter.
+El **generador de tráfico** (`lab_5/recursos/generador_trafico.sh`) envía 2 ventas por segundo y, cada 5 s, consulta otros tres endpoints para medir el radio de impacto. Escribe un CSV con la hora, el endpoint, el código HTTP, la latencia y si la venta quedó `pending`. No es una prueba de carga: la carga es la misma en todos los experimentos.
 
-### Pruebas de carga
+### Experimento de estado estable
 
-Ejecute JMeter con carga sobre `POST /ventas`. El endpoint de Ventas hace una llamada interna a Inventario, que ahora responde con 5 segundos de delay. Las métricas clave serán visibles desde CloudWatch.
+Con la configuración completa (la que levanta `docker compose up`), corra el generador de tráfico 5 minutos sin inyectar nada y resúmalo por ventanas de 10 s:
 
-**Abrir CloudWatch (consola AWS):**
+```bash
+./lab_5/recursos/generador_trafico.sh estado_estable_local.csv      # Ctrl+C a los 5 minutos
+python3 lab_5/recursos/ventanas.py estado_estable_local.csv
+```
 
-1. Verifique la región: arriba a la derecha seleccione **us-east-1** (la misma región donde desplegó el stack).
-2. En la consola de AWS use el buscador y abra **CloudWatch**.
-3. En el menú izquierdo: **Metrics** → **All metrics**.
+Anote la disponibilidad percibida (2xx en menos de 3 s), el p99 y el % de `pending` de las ventas: ese es el estado estable contra el que comparará todo lo demás.
 
-**Ver requests y errores hacia Inventario (vía ALB/Target Group):**
+### Experimento de tormenta de reintentos, sin sidecar
 
-1. En **All metrics** seleccione el namespace **ApplicationELB**.
-2. Abra **TargetGroup, LoadBalancer** (o similar). Si no lo ve, pruebe también **LoadBalancer**.
-3. Identifique el *target group* de Inventario (normalmente incluye "inventario" en el nombre) y marque estas métricas:
-   - `RequestCount` (tráfico total hacia el target group)
-   - `HTTPCode_Target_5XX_Count` (errores 5xx generados por el servicio)
-   - `TargetResponseTime` (latencia del target vista por el ALB; no reemplaza el p99 de JMeter, pero ayuda a correlacionar)
-4. En el gráfico, ajuste:
-   - **Time range** al intervalo exacto de su prueba JMeter
-   - **Period** a 1 minuto (recomendado) para ver cambios con claridad
-   - **Statistic**: `Sum` para `RequestCount` y `HTTPCode_Target_5XX_Count`
-
-> Para estimar *requests/s* desde CloudWatch: si su `RequestCount` es por minuto (period=60s), entonces $\text{req/s} \approx \text{RequestCount}/60$.
-
-| Test | Ramp-Up | Threads | Loops |
-| --- | --- | --- | --- |
-| Baja carga | 10s | 50 | 1 |
-| Carga media | 20s | 200 | 1 |
-| Operación normal | 50s | 500 | 1 |
-| Alta carga | 75s | 1500 | N/A |
-
-Registre para cada escenario: p99, error %, throughput total, y throughput recibido por Inventario (visible en CloudWatch).
+1. Recree Ventas sin sidecar, apuntando directamente a Inventario, y verifíquelo:
+   ```bash
+   VENTAS_INVENTARIO_BASE_URL=http://inventario:3002 docker compose up -d ventas
+   docker compose exec ventas printenv INVENTARIO_BASE_URL     # debe mostrar http://inventario:3002
+   ```
+2. Arranque el generador de tráfico en una terminal (`./lab_5/recursos/generador_trafico.sh tormenta_local_sin_sidecar.csv`). Anote el total de filas del Outbox (`curl -s $VEN/outbox/resumen`) y el contador `llamadasDisponibilidad` (`curl -s $INV/chaos`).
+3. A los 2 minutos, anote la hora, inyecte la latencia y lance la tormenta en otra terminal (pegue también ahí el bloque de variables):
+   ```bash
+   curl -s -X POST $INV/chaos -H 'Content-Type: application/json' \
+     -d '{"mode": "latency", "delayMs": 5000, "durationMs": 150000}'
+   CLIENTES=50 DURACION=120 ./lab_5/recursos/tormenta_reintentos.sh tormenta_local_sin_sidecar_apps.csv
+   ```
+4. La tormenta termina a los 120 s e imprime su resumen; anote el contador en ese momento. El fallo se retira solo a los 150 s (la hora está en el campo `until`). Observe 3 minutos más, vuelva a leer el total de filas del Outbox y detenga el generador de tráfico.
+5. Resuma con `python3 lab_5/recursos/ventanas.py tormenta_local_sin_sidecar.csv`.
+6. Vuelva a la configuración completa: `docker compose up -d ventas`.
 
 ### Qué observar
 
-- Latencia de Ventas: ¿cómo se propaga el delay de 5s de Inventario?
-- Error % de Ventas: ¿empieza a devolver errores 500 o 503?
-- Requests totales a Inventario: ¿aumentan con el tiempo?
-- **Recuperación espontánea**: ¿qué sucede con la latencia de Ventas a los 600s del arranque de Inventario? ¿El sistema se recupera solo? ¿Cuánto tarda Ventas en notar que Inventario ya está bien?
-- Punto de colapso: ¿a partir de cuántos threads el sistema deja de responder?
+- Latencia de Ventas: ¿cómo se propaga a las ventas del generador de tráfico el retraso de 5 s de Inventario? ¿Cambia la disponibilidad percibida aunque las respuestas sigan siendo 201?
+- La tormenta: ¿cuántos intentos por pedido necesitaron las apps defectuosas, y cuántos pedidos completaron?
+- Consultas a Inventario por pedido (la fórmula está en las métricas del enunciado) y pedidos duplicados: ¿cuántas ventas se registraron frente a los pedidos que realmente se hicieron?
+- Radio de impacto: ¿qué otros endpoints del generador de tráfico se afectaron?
+- **Recuperación**: ¿cuánto tardó Ventas en volver al estado estable después de que el fallo se retiró?
 
-> Anote estos valores como Base. Son el punto de comparación para las tácticas. La recuperación espontánea en el baseline es el caso de control: sin circuit breaker, el sistema se recupera cuando Inventario se recupera, pero el tiempo de recuperación percibido por Ventas puede ser mayor de lo esperado.
+> Anote estos valores: son el grupo de control contra el que comparará las tácticas en el resto del laboratorio.
 
 ## Cierre de la sesión
 
-Al terminar, cada estudiante debe tener: el stack de CloudFormation desplegado y verificado, los 6 parámetros del sidecar calibrados y verificados localmente, y la tabla de métricas de la línea base del fallo en cascada sin protecciones. Esto es exactamente lo que pide el laboratorio antes de aplicar las tácticas de resiliencia — no hay que rehacerlo después, se sigue directamente con las rondas de tácticas de resiliencia.
+Al terminar, cada estudiante debe tener: el ambiente local arriba, los 6 parámetros del sidecar calibrados y verificados (`/ready` en `LIVE`), las fichas del estado estable y de la tormenta de reintentos, y los resultados del estado estable y de la tormenta sin sidecar en local (CSV del generador de tráfico y de la tormenta, tabla por ventanas, contador de llamadas y filas del Outbox). Esto es exactamente lo que pide la fase local para esos dos experimentos: no hay que rehacerlo después. Se sigue con las demás configuraciones locales de la tormenta de reintentos (solo reintentos y completa) y con el experimento de caída de Inventario; la fase AWS viene cuando la fase local esté completa.
