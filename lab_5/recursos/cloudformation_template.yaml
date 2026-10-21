@@ -75,7 +75,7 @@ Resources:
         - Key: Name
           Value: Cheapest-lab5-vpc
 
-  # Subnet pública A — usada por los ALBs (deben estar en al menos 2 AZs)
+  # Subnet pública A — usada por los ALBs, las tareas ECS y la RDS (al menos 2 AZs)
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -97,27 +97,6 @@ Resources:
       Tags:
         - Key: Name
           Value: Cheapest-lab5-public-b
-
-  # Subnet privada A — usada por las tareas ECS y RDS (sin IP pública)
-  PrivateSubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref LabVPC
-      CidrBlock: 10.0.10.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-      Tags:
-        - Key: Name
-          Value: Cheapest-lab5-private-a
-
-  PrivateSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref LabVPC
-      CidrBlock: 10.0.11.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      Tags:
-        - Key: Name
-          Value: Cheapest-lab5-private-b
 
   # Internet Gateway — permite que las subnets públicas salgan a internet
   InternetGateway:
@@ -227,10 +206,14 @@ Resources:
   RDSSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnets privadas para RDS de Cheapest Lab 5
+      # Subnets públicas: la RDS se crea con PubliclyAccessible: false (sin IP pública) y su
+      # security group solo acepta a los servicios, así que no es alcanzable desde internet.
+      # Estar en subnets con ruta al Internet Gateway es lo que permite hacerla pública
+      # temporalmente para cargar los datos de prueba desde el computador del estudiante.
+      DBSubnetGroupDescription: Subnets de la RDS de Cheapest Lab 5
       SubnetIds:
-        - !Ref PrivateSubnetA
-        - !Ref PrivateSubnetB
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
 
   # Instancia RDS PostgreSQL — db.t3.micro es suficiente para el laboratorio
   CheapestDB:

@@ -666,7 +666,7 @@ El template incluye:
 | Sección            | Recursos creados                                                              |
 | ------------------ | ----------------------------------------------------------------------------- |
 | `Parameters`       | ARNs de imágenes ECR, credenciales RDS, VPC/subnets                           |
-| `VPC y Networking` | VPC, subnets públicas/privadas, Internet Gateway, Security Groups             |
+| `VPC y Networking` | VPC, subnets públicas en dos zonas de disponibilidad, Internet Gateway, Security Groups |
 | `RDS`              | Instancia PostgreSQL, subnet group, security group de base de datos           |
 | `ECS Cluster`      | Cluster Fargate compartido, roles IAM de ejecución                            |
 | `Task Definitions` | Una por servicio (Logistica, Inventario, Ventas) con variables de entorno     |
@@ -785,7 +785,7 @@ aws ec2 authorize-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --
 
 # 6. Cargue los datos de prueba desde su computador (rama availability) apuntando a la RDS real
 git checkout availability
-DB_HOST=<RDS_ENDPOINT_DEL_STACK> DB_PORT=5432 DB_USER=postgres DB_PASSWORD=<SU_CONTRASEÑA> DB_NAME=Cheapest npm run db:seed
+DB_HOST=<RDS_ENDPOINT_DEL_STACK> DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=<SU_CONTRASEÑA> DB_NAME=Cheapest npm run db:seed
 ```
 
 Al terminar, **revierta ambos cambios** para no dejar la base expuesta:
@@ -794,6 +794,8 @@ Al terminar, **revierta ambos cambios** para no dejar la base expuesta:
 aws rds modify-db-instance --db-instance-identifier Cheapest-lab5-db --no-publicly-accessible --apply-immediately
 aws ec2 revoke-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --port 5432 --cidr ${MY_IP}/32
 ```
+
+Revertir el acceso público reconfigura la instancia y puede cortar las conexiones por unos segundos: espere a que `aws rds describe-db-instances --db-instance-identifier Cheapest-lab5-db --query "DBInstances[0].DBInstanceStatus"` vuelva a `available` antes de medir el estado estable.
 
 Cree el producto externo y el `venta.json` de AWS igual que en la fase local, ahora con `$VEN` apuntando a AWS y en su carpeta de trabajo de AWS. Pruebe la venta una vez; debe responder HTTP 201.
 
@@ -875,11 +877,11 @@ Para ver la evolución en el tiempo, abra **CloudWatch → Logs → Logs Insight
 ```
 parse @message /HTTP\/1\.1" (?<code>\d{3}) (?<flags>\S+) /
 | filter ispresent(code)
-| stats count(*) as peticiones by bin(10s), code, flags
-| sort by bin(10s) asc
+| stats count(*) as peticiones by bin(10s) as ventana, code, flags
+| sort ventana asc
 ```
 
-La consulta separa de cada línea el código HTTP y las *response flags*, y cuenta cuántas peticiones hubo de cada combinación en intervalos de 10 s. El intervalo en que aparece `UH` es el tiempo con el circuito OPEN. El primer intervalo después de ese en que vuelven las respuestas `200 -` marca el regreso a CLOSED. Para contar reintentos use el contador `llamadasDisponibilidad` del endpoint de caos: este log registra una línea por petición de Ventas, no por intento. En local, las mismas líneas salen en `docker compose logs ventas-sidecar`.
+La consulta separa de cada línea el código HTTP y las *response flags*, y cuenta cuántas peticiones hubo de cada combinación en intervalos de 10 s (la columna `ventana`). Además de las consultas de disponibilidad, verá líneas `201 -`: son las entregas del Outbox, que también pasan por el sidecar. El intervalo en que aparece `UH` es el tiempo con el circuito OPEN. El primer intervalo después de ese en que vuelven las respuestas `200 -` marca el regreso a CLOSED. Para contar reintentos use el contador `llamadasDisponibilidad` del endpoint de caos: este log registra una línea por petición de Ventas, no por intento. En local, las mismas líneas salen en `docker compose logs ventas-sidecar`.
 
 ## 6. Realización de pruebas
 
@@ -1203,7 +1205,9 @@ Haga esta parte **sin el generador de tráfico corriendo**, para que la cantidad
      date -u +%H:%M:%S; aws ecs stop-task --cluster Cheapest-lab5-cluster --task $TASK --reason "experimento de caos"
      ```
      El primer comando busca el identificador de la tarea de Inventario que está corriendo; el segundo la detiene. No haga nada más: ECS debe lanzar una tarea nueva solo.
-4. Observe hasta 3 minutos después de que `health` vuelva a 200 (ese momento es **T_rec**) y las filas PENDING lleguen a 0.
+
+     > La tarea no muere en el instante del comando. ECS le pide al proceso que termine y espera hasta 30 s antes de forzarlo; mientras tanto la tarea sigue respondiendo, y solo cuando el balanceador la saca de rotación empiezan los 503. Por eso `health` puede seguir en 200 durante el primer medio minuto: eso **no** es la recuperación. T_rec es el primer 200 **después** de los 503.
+4. Observe hasta 3 minutos después de que `health` vuelva a 200 tras la caída (ese momento es **T_rec**) y las filas PENDING lleguen a 0.
 5. Detenga el generador de tráfico y el registro. Consulte la cantidad final del ítem y, en AWS, los eventos del servicio:
    ```bash
    curl -s $INV/items/$ITEM | grep -o '"cantidad":[0-9]*'
@@ -1316,6 +1320,7 @@ En la fila de AWS con la configuración completa, los reintentos del sidecar se 
 | Etapa | Hora (UTC) | Segundos desde T_inj | Fuente |
 | --- | --- | ---: | --- |
 | Tarea detenida (T_inj) | | 0 | |
+| Tarea sacada del target group (primeros 503) | | | |
 | Tarea nueva iniciada | | | |
 | Target registrado en el target group | | | |
 | Target `healthy` | | | |
