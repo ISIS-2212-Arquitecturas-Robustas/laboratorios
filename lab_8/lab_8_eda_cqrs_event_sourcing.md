@@ -102,9 +102,18 @@ Adicionalmente, EDA introduce una propiedad nueva que la arquitectura síncrona 
 
 ### 4.3 Tácticas y patrones
 
-#### 4.3.1 Patrones de diseño
+En este laboratorio no se distingue entre táctica y patrón: lo que un autor llama táctica, otro lo llama patrón. La tabla los resume con sus ventajas y sus costos; después se explica cada uno y cómo se ve en Cheapest.
 
-##### Event Sourcing
+| Táctica o patrón | Análisis |
+| --- | --- |
+| Event Sourcing | El log de eventos, append-only, es la fuente de verdad, y el estado actual se reconstruye reproduciéndolo. Favorece la trazabilidad y permite crear proyecciones nuevas desde el historial.<br>El log crece sin límite y el replay no deshace efectos externos irreversibles. |
+| Publicación y suscripción | El productor publica un evento sin saber quién lo usa. Agregar un consumidor no exige cambiar al productor.<br>El flujo se vuelve más difícil de seguir: hay que observar el bus y las colas para saber qué pasó con un evento. |
+| Mantener una copia de los datos lista para consultar (modelo de lectura) | Favorece la latencia de consulta: se lee un documento ya calculado. Desfavorece la consistencia: la copia puede estar unos segundos atrasada. |
+| Desacoplar en el tiempo con una cola | El productor no espera al consumidor. Favorece la disponibilidad del registro de ventas ante la caída del consumidor. Introduce el riesgo de que la cola crezca y los datos de consulta se atrasen. |
+| Cola de mensajes fallidos (DLQ) | Los mensajes que fallan tres veces se apartan para revisión, sin bloquear el resto. |
+| Mover el trabajo de la consulta a la escritura | El fan-out no desaparece: se hace una vez por venta, en segundo plano, en lugar de una vez por consulta. |
+
+#### Event Sourcing
 
 En Event Sourcing el **log de eventos** es la fuente de verdad, no el estado actual. El estado actual de una entidad se obtiene reproduciendo todos los eventos en orden. Los eventos son inmutables y se agregan de forma append-only.
 
@@ -146,20 +155,11 @@ export class EventoPedido {
 
 Se agregó también el endpoint `GET /logistics/pedidos/:id/historial` en `pedido.controller.ts`, que delega a `EventoPedidoRepository.findByPedidoId()` (ya implementado).
 
-##### Publicación y suscripción
+#### Publicación y suscripción
 
 Ventas publica el evento `VentaCreada` en el bus de eventos sin saber quién lo va a usar. Una regla de EventBridge lo envía a una cola de SQS, de la que lee el consumidor de Inventario. Agregar un consumidor nuevo (por ejemplo, uno de analítica) no exige cambiar a Ventas: basta con otra regla y otra cola.
 
-#### 4.3.2 Tácticas de arquitectura
-
-| Táctica | Análisis |
-| --- | --- |
-| Mantener una copia de los datos lista para consultar (modelo de lectura) | Favorece la latencia de consulta: se lee un documento ya calculado. Desfavorece la consistencia: la copia puede estar unos segundos atrasada. |
-| Desacoplar en el tiempo con una cola | El productor no espera al consumidor. Favorece la disponibilidad del registro de ventas ante la caída del consumidor. Introduce el riesgo de que la cola crezca y los datos de consulta se atrasen. |
-| Cola de mensajes fallidos (DLQ) | Los mensajes que fallan tres veces se apartan para revisión, sin bloquear el resto. |
-| Mover el trabajo de la consulta a la escritura | El fan-out no desaparece: se hace una vez por venta, en segundo plano, en lugar de una vez por consulta. |
-
-##### Por qué EDA cambia el perfil de latencia
+#### Por qué EDA cambia el perfil de latencia
 
 **Fan-out secuencial — Lab 7 `GET /ventas/resumen-operativo`:**
 
@@ -177,7 +177,7 @@ El paralelismo reduce la latencia nominal, pero **no elimina el problema estruct
 
 Ambos patrones comparten la misma debilidad estructural: el **fan-out en tiempo de consulta** acopla temporalmente al orquestador con sus dependientes. EDA rompe ese acoplamiento moviendo el fan-out al tiempo de escritura, que es lo que usted va a medir en el experimento comparativo de este laboratorio.
 
-##### Trade-offs de confiabilidad en la publicación de eventos
+#### Trade-offs de confiabilidad en la publicación de eventos
 
 La implementación de este lab publica eventos a EventBridge directamente desde `VentaService.create()` tras guardar la venta en PostgreSQL. Esta es una entrega **at-most-once**: si EventBridge no está disponible en el momento exacto del write (error de red, throttle temporal), el evento se pierde aunque la venta esté guardada.
 
@@ -198,7 +198,7 @@ El patrón que resuelve este riesgo, el **Outbox** que usted implementó en el L
 > 2. Describa un escenario concreto en Cheapest donde esta garantía sería un problema real. ¿Qué estado quedaría inconsistente y cómo se manifestaría para el tendero?
 > 3. Proponga a alto nivel cómo lo resolvería sin cambiar el esquema de PostgreSQL. No es necesario implementarlo; basta con describir el mecanismo.
 
-#### 4.3.3 Estilos aplicados
+#### Estilos aplicados
 
 ##### Event-Driven Architecture (EDA)
 

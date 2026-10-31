@@ -75,15 +75,22 @@ El endpoint nuevo `GET /ventas/resumen-operativo` implementa este patrón: llama
 
 ### 4.3 Tácticas y patrones
 
-#### 4.3.1 Patrones de diseño
+En este laboratorio no se distingue entre táctica y patrón: lo que un autor llama táctica, otro lo llama patrón. La tabla resume el mecanismo nuevo y los que usted ya conoce; después se explica el modelo cuantitativo del mecanismo nuevo y por qué los conocidos no resuelven su problema estructural.
 
-El único patrón que se agrega es la **orquestación síncrona**: el nuevo endpoint `GET /ventas/resumen-operativo` del servicio de Ventas llama a Logística y luego a Inventario, espera cada respuesta, consulta su propia base de datos y combina todo en una sola respuesta. Las llamadas las hacen clientes HTTP dedicados con tiempo de espera configurable, como los que conoció en la migración a microservicios del Lab 4.
+| Táctica o patrón | Análisis |
+| --- | --- |
+| Orquestación síncrona (nuevo en este laboratorio) | Un servicio llama a los demás, espera cada respuesta y combina todo en una sola respuesta. Favorece la consistencia (los datos son actuales).<br>Desfavorece latencia, throughput y resiliencia: multiplica la carga sobre los servicios dependientes (fan-out) y acumula sus tiempos de respuesta. |
+| Escalamiento horizontal, timeouts, retry, cacheo y circuit breaker (labs anteriores) | Ya los conoce. Mitigan síntomas, pero ninguno elimina el fan-out ni la latencia compuesta (ver la tabla más abajo). |
 
-Lo que sigue es el modelo cuantitativo de ese patrón. Lo usará para **predecir** a qué carga se rompe el endpoint antes de medirlo.
+#### Orquestación síncrona
 
-El **fan-out** describe cuántas peticiones a servicios dependientes genera cada petición al orquestador. La **latencia compuesta** describe cómo las distribuciones de tiempo de respuesta se acumulan en una cadena síncrona. Estas dos propiedades son las razones estructurales por las que el patrón de orquestación síncrona tiene un límite de escalabilidad más bajo que la suma de sus partes.
+El único mecanismo que se agrega es la **orquestación síncrona**: el nuevo endpoint `GET /ventas/resumen-operativo` del servicio de Ventas llama a Logística y luego a Inventario, espera cada respuesta, consulta su propia base de datos y combina todo en una sola respuesta. Las llamadas las hacen clientes HTTP dedicados con tiempo de espera configurable, como los que conoció en la migración a microservicios del Lab 4.
 
-##### Fan-out de carga
+Lo que sigue es su modelo cuantitativo. Lo usará para **predecir** a qué carga se rompe el endpoint antes de medirlo.
+
+El **fan-out** describe cuántas peticiones a servicios dependientes genera cada petición al orquestador. La **latencia compuesta** describe cómo las distribuciones de tiempo de respuesta se acumulan en una cadena síncrona. Estas dos propiedades son las razones estructurales por las que la orquestación síncrona tiene un límite de escalabilidad más bajo que la suma de sus partes.
+
+#### Fan-out de carga
 
 Sea $L$ la tasa de peticiones al orquestador (req/s) y $N$ el número de servicios dependientes que llama síncronamente:
 
@@ -93,7 +100,7 @@ Donde $F$ es la carga total adicional generada sobre los servicios dependientes.
 
 > Si los servicios dependientes también reciben tráfico directo de otros clientes, la carga efectiva sobre ellos es $L_{\text{dep}} = L_{\text{directo}} + L_{\text{orquestador}}$.
 
-##### Latencia secuencial esperada
+#### Latencia secuencial esperada
 
 Para llamadas secuenciales, la latencia total mínima del orquestador es:
 
@@ -101,7 +108,7 @@ $$T_{\text{orquestado}} \geq \sum_{i=1}^{N} T_i + (N-1) \cdot \delta_{\text{red}
 
 Donde $T_i$ es el tiempo de respuesta del servicio $i$ y $\delta_{\text{red}}$ es el overhead de red por salto (generalmente 1–5 ms en AWS dentro de la misma VPC).
 
-##### Efecto del fan-out sobre la latencia bajo carga
+#### Efecto del fan-out sobre la latencia bajo carga
 
 Cuando el orquestador genera carga adicional sobre los servicios dependientes, la latencia de cada uno aumenta por efecto de cola.
 
@@ -111,7 +118,7 @@ Donde $\rho_i = \lambda_i / \mu_i$ es la utilización del servicio $i$ ($\lambda
 
 Como el orquestador incrementa $\lambda_i$ para cada servicio dependiente, **acelera el aumento de $\rho_i$** y, con él, la degradación de latencia.
 
-##### Compounding de percentiles de latencia
+#### Compounding de percentiles de latencia
 
 El p99 del orquestador bajo carga es **siempre mayor** que la suma de los p99 individuales, ya que las distribuciones de cola no se suman linealmente:
 
@@ -127,11 +134,11 @@ En la práctica, bajo carga sostenida, la brecha entre el p99 orquestado y la su
 > Para su estimación use los p99 individuales que mida en la primera fase de las pruebas (cada servicio por separado).
 > Compare luego su estimación con el resultado real y explique la diferencia.
 
-#### 4.3.2 Tácticas de arquitectura
+#### Mecanismos que ya conoce y por qué no bastan
 
-Este laboratorio no aplica tácticas nuevas. La tabla resume las tácticas que usted ya conoce y por qué ninguna resuelve el problema estructural del patrón:
+Este laboratorio no aplica mecanismos nuevos aparte de la orquestación. La tabla resume los que usted ya conoce y por qué ninguno resuelve el problema estructural de la orquestación síncrona:
 
-| Táctica | ¿Por qué no resuelve el problema estructural? |
+| Táctica o patrón | ¿Por qué no resuelve el problema estructural? |
 | --- | --- |
 | Escalamiento horizontal de ECS (servicios dependientes) | Reduce $\rho_i$ y mejora latencia individual, pero el fan-out sigue multiplicando la carga: escalar los servicios dependientes no elimina el compounding de p99. |
 | Timeouts más cortos en el orquestador | Reduce la latencia máxima pero aumenta el error %: cambiar el síntoma no corrige la causa. |
@@ -144,7 +151,7 @@ Este laboratorio no aplica tácticas nuevas. La tabla resume las tácticas que u
 > Proponga **una alternativa arquitectónica** al patrón de orquestación síncrona que permita entregar el resumen operativo a los tenderos con p99 < 500 ms, sin necesidad de que Ventas llame síncronamente a Logística e Inventario en el momento de la petición.
 > Analice los trade-offs de su propuesta en términos de consistencia de datos, complejidad operativa y costo de implementación para Cheapest.
 
-#### 4.3.3 Estilos aplicados
+#### Estilos aplicados
 
 | Estilo | Análisis |
 | --- | --- |

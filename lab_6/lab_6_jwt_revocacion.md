@@ -82,7 +82,7 @@ Hasta ahora los microservicios de Cheapest aceptaban cualquier petición: nadie 
 | ID    | Descripción                                                                                                                                                                                                                                                                                                            |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ASR-1 | Como agente de servicio al usuario, dado que un token ha sido comprometido, quiero revocar rápidamente sesiones comprometidas para minimizar el impacto de un secuestro de credenciales. Esto debe suceder, desde detección, revocar y verificar contención en menos de 2 minutos                                      |
-| ASR-2 | Como auditor, dado el sistema bajo prueba, quiero que los intentos de acceso indebido queden claramente diferenciados por tipo de falla para facilitar investigación y respuesta. Sin token: 401. Token válido sin grupo requerido: 403. Token inválido/tampered: 401 esto debe quedar registrado el 100% de las veces |
+| ASR-2 | Como auditor, dado que el sistema en operación recibe intentos de acceso indebido (peticiones sin token, con un token alterado o con el token de un usuario sin el rol requerido), quiero que los intentos de acceso indebido queden claramente diferenciados por tipo de falla para facilitar investigación y respuesta. Sin token: 401. Token válido sin grupo requerido: 403. Token inválido/tampered: 401 esto debe quedar registrado el 100% de las veces |
 
 
 > [!IMPORTANT]
@@ -92,25 +92,17 @@ Hasta ahora los microservicios de Cheapest aceptaban cualquier petición: nadie 
 
 ### 4.3 Tácticas y patrones
 
-#### 4.3.1 Patrones de diseño
+En este laboratorio no se distingue entre táctica y patrón: lo que un autor llama táctica, otro lo llama patrón. Todos son mecanismos para proteger el acceso a los microservicios y contener un incidente. La tabla los resume; después se explica cada uno y cómo se ve en Cheapest.
 
-| Patrón | Para qué se usa en este laboratorio |
+| Táctica o patrón | Análisis |
 | --- | --- |
-| Proveedor de identidad externo | La gestión de usuarios, contraseñas y emisión de tokens se delega en Amazon Cognito. Los microservicios no guardan contraseñas: solo verifican tokens. |
-| Access token más refresh token | Separa la credencial que viaja en cada petición (corta, de bajo riesgo) de la que permite renovarla (larga, que se puede revocar). |
-| Autenticación en la puerta de entrada (*gateway authorizer*) | API Gateway valida el token antes de reenviar la petición, de modo que el tráfico inválido no llega a los servicios. |
-| Guards y decoradores | En cada microservicio, un guard valida el token (`JwtAuthGuard`) y otro verifica el rol (`RolesGuard`); los decoradores `@Public()` y `@Roles(...)` declaran, sobre cada endpoint, qué protección aplica. |
+| Proveedor de identidad externo (Amazon Cognito) | La gestión de usuarios, contraseñas y emisión de tokens se delega en Cognito. Los microservicios no guardan contraseñas: solo verifican tokens.<br>Agrega una dependencia de un servicio externo para iniciar sesión y renovar tokens (no para validar cada petición). |
+| Autenticación en la puerta de entrada (API Gateway JWT authorizer) | Rechaza peticiones sin token o con un token inválido antes de que lleguen a los servicios.<br>No detecta un token robado que sigue vigente, y crea un falso sentido de seguridad si los servicios dejan de validar. |
+| Validación del JWT en cada microservicio (guards de Nest) | En cada servicio, `JwtAuthGuard` valida el token y los decoradores `@Public()` y `@Roles(...)` declaran sobre cada endpoint qué protección aplica. Cubre los accesos que no pasan por el gateway.<br>Agrega algo de procesamiento a cada petición. |
+| RBAC por grupo (`cognito:groups`) | `RolesGuard` evita que un usuario sin el grupo requerido ejecute acciones administrativas, y responde 403 en lugar de 401.<br>Un cambio de grupo solo aplica a los tokens que se emitan después. |
+| Access token de vida corta más refresh token revocable | Separa la credencial que viaja en cada petición (corta, de bajo riesgo) de la que permite renovarla (larga, que se puede revocar). La revocación o el global sign-out cortan la emisión de tokens nuevos y el TTL corto acota lo que sobrevive.<br>Un TTL más corto implica más renovaciones y más sensibilidad a fallos del flujo de refresh. |
 
-#### 4.3.2 Tácticas de arquitectura
-
-| Táctica                                                | Qué resuelve                                                     |
-| ------------------------------------------------------ | ---------------------------------------------------------------- |
-| Autenticación en el borde (API Gateway JWT authorizer) | Rechaza requests sin token/inválidos antes de llegar a servicios |
-| Validación JWT en microservicios                       | Defensa en profundidad ante bypass del gateway                   |
-| RBAC por grupo (`cognito:groups`)                      | Evita que un usuario ejecute acciones administrativas            |
-| TTL corto + revocación refresh/global sign-out         | Contención rápida del incidente                                  |
-
-##### Autenticación en el borde (API Gateway JWT authorizer)
+#### Autenticación en el borde (API Gateway JWT authorizer)
 
 **Qué hace**
 
@@ -129,7 +121,7 @@ Hasta ahora los microservicios de Cheapest aceptaban cualquier petición: nadie 
 - Pro: caída temprana, menor latencia promedio para requests inválidas, menor costo/consumo en backend.
 - Contra: riesgo de “falso sentido de seguridad” si los microservicios dejan de validar.
 
-##### Validación del JWT en los microservicios (defensa en profundidad)
+#### Validación del JWT en los microservicios (defensa en profundidad)
 
 **Por qué existe si ya hay gateway**
 
@@ -148,14 +140,14 @@ En microservicios, el gateway es un control potente pero no infalible. La valida
 
 Esto soporta el ASR-2: que cada intento de acceso indebido se diferencie de forma consistente por tipo de falla y quede registrado.
 
-##### RBAC por grupo (`cognito:groups`)
+#### RBAC por grupo (`cognito:groups`)
 
 **Qué hace**
 
 - Restringe acciones por rol/grupo (p. ej. `admin`, `ops`, `tendero`) usando la claim `cognito:groups` presente en el access token.
 - Permite que una misma API tenga endpoints públicos (health), autenticados (usuario) y privilegiados (admin) con reglas claras.
 
-##### TTL corto más revocación del refresh token o global sign-out (contención)
+#### TTL corto más revocación del refresh token o global sign-out (contención)
 
 JWT es “stateless”: una vez emitido, un access token firmado seguirá siendo aceptado por verificadores hasta que expire. Por eso, para contener un incidente realista:
 
@@ -172,19 +164,20 @@ JWT es “stateless”: una vez emitido, un access token firmado seguirá siendo
 - TTL más corto: mejor contención, pero más renovaciones y más sensibilidad a fallos del flujo de refresh.
 - TTL más largo: menos fricción, pero peor seguridad (más minutos de acceso tras robo).
 
-#### 4.3.3 Estilos aplicados
+#### Estilo aplicado y principio de seguridad
 
 | Estilo | Análisis |
 | --- | --- |
 | Microservicios con API Gateway | Es la misma arquitectura del Lab 4. La puerta de entrada única permite aplicar la autenticación en un solo punto para todos los servicios. |
-| Seguridad por capas (defensa en profundidad) | El token se valida dos veces, en API Gateway y en cada microservicio. Favorece la seguridad ante errores de configuración o accesos que no pasan por el gateway. Agrega algo de procesamiento a cada petición. |
+
+La validación del token en dos capas (API Gateway y cada microservicio) no es un estilo sino un **principio de seguridad**: la *defensa en profundidad*. Guía cómo se combinan las tácticas anteriores para que el fallo de una capa (por ejemplo, una ruta sin authorizer) no deje el sistema desprotegido.
 
 ### 4.4 Diseño del experimento
 
 #### 4.4.1 ¿Cómo se va a validar la hipótesis?
 
-- **Para la contención del incidente (H1):** se simula un incidente realista de secuestro de un refresh token, se aplica la contención desde Cognito y se miden los tiempos: cuándo se detecta, cuándo se revoca, cuándo se verifica que el atacante ya no puede renovar tokens y cuándo deja de funcionar el último access token que tenía.
-- **Para la diferenciación de accesos indebidos (H2):** se ejecuta cada fila de la tabla de políticas de acceso con el token correcto, sin token, con un token inválido y con un rol insuficiente, y se verifica el código de respuesta y su registro en los logs.
+- **Para la contención del incidente (H1):** se simula un incidente realista de secuestro de un refresh token, se aplica la contención desde Cognito y se miden los tiempos: cuándo se detecta, cuándo se revoca, cuándo se verifica que el atacante ya no puede renovar tokens y cuándo deja de funcionar el último access token que tenía. El incidente se ejecuta **dos veces** (dos corridas): la primera con la configuración del template (access token de 5 minutos y revocación del refresh token) y la segunda cambiando **una sola** de las dos variables que nombra H1: el TTL del access token (2 minutos, el otro extremo del rango de la hipótesis) o el mecanismo de contención (global sign-out en lugar de revocar el refresh token). Así se ve cómo cada variable afecta la ventana de exposición. Se ejecuta en la [sección 6.2](#62-prueba-de-h1-secuestro-del-refresh-token-y-contención).
+- **Para la diferenciación de accesos indebidos (H2):** se ejecuta cada fila de la tabla de políticas de acceso con el token correcto, sin token, con un token inválido y con un rol insuficiente, y se verifica el código de respuesta y su registro en los logs. Se ejecuta en la [sección 6.1](#61-prueba-de-h2-autenticación-y-autorización-por-rol).
 
 #### 4.4.2 ¿Qué componentes se van a diseñar o modificar?
 
@@ -345,9 +338,9 @@ aws ec2 revoke-security-group-ingress --group-id $SG_RDS_ID --protocol tcp --por
 
 #### Arquitectura de la implementación
 
-Se agregó una librería compartida `libs/shared/auth/` con los siguientes componentes:
+Se agregó una librería compartida `libs/shared/auth/` con los siguientes elementos (clases, decoradores y un middleware de Nest):
 
-| Componente | Archivo | Responsabilidad |
+| Elemento | Archivo | Responsabilidad |
 | --- | --- | --- |
 | `CognitoAuthModule` | `auth.module.ts` | Módulo global; registra todos los providers |
 | `CognitoJwtService` | `cognito-jwt.service.ts` | Verifica JWT contra el JWKS de Cognito (firma, `iss`, `token_use`, `exp`) |
@@ -356,6 +349,8 @@ Se agregó una librería compartida `libs/shared/auth/` con los siguientes compo
 | `@Public()` | `decorators/public.decorator.ts` | Marca rutas sin autenticación (health checks) |
 | `@Roles(...)` | `decorators/roles.decorator.ts` | Restringe un endpoint a grupos de Cognito específicos |
 | `AuthLoggerMiddleware` | `middleware/auth-logger.middleware.ts` | Loguea el 100 % de respuestas 401/403 (ASR-2) |
+
+**¿Cómo se despliega la librería?** No se despliega por separado ni corre como un servicio aparte. Es una librería del monorepo de Nest que cada microservicio importa: al construir la imagen Docker de un servicio (`npm run build:ventas`, por ejemplo), el código de la librería se compila dentro de esa imagen. Por eso cada uno de los tres microservicios lleva su propia copia y valida el token por su cuenta, sin depender de los otros. Si cambia algo en la librería, debe reconstruir y volver a publicar las tres imágenes.
 
 Los guards se aplican **globalmente** en el `main.ts` de cada microservicio vía `useGlobalGuards`.
 Las rutas de health tienen `@Public()` a nivel de clase, por lo que no requieren token.
@@ -399,7 +394,7 @@ Las rutas están escritas como se invocan **a través del API Gateway** (`<ApiGa
 
 ### 5.6 Crear los usuarios de prueba e iniciar sesión
 
-Los comandos están en [`recursos/auth_cli.md`](recursos/auth_cli.md). Siga sus tres primeros pasos:
+Siga estos pasos. Los comandos de cada uno están en las secciones 1 a 3 de [`recursos/auth_cli.md`](recursos/auth_cli.md):
 
 1. Cree un usuario de prueba en Cognito y asígnele una contraseña permanente. Asígnelo al grupo `operador`.
 2. Cree un segundo usuario y asígnelo al grupo `admin`, y un tercero **sin grupo**. Los necesitará para probar la autorización por rol.
@@ -408,23 +403,16 @@ Los comandos están en [`recursos/auth_cli.md`](recursos/auth_cli.md). Siga sus 
 
 ## 6. Realización de pruebas
 
-En la sección anterior dejó desplegado el stack, revisó cómo está implementada la seguridad y creó los usuarios de prueba. Aquí se explica qué puede modificar para ampliar o reducir la exposición del sistema, y qué pruebas debe ejecutar.
+En la sección anterior dejó desplegado el stack, revisó cómo está implementada la seguridad y creó los usuarios de prueba. Aquí se explica qué pruebas ejecutar. Cada prueba corresponde a una de las validaciones definidas en el [diseño del experimento](#44-diseño-del-experimento):
 
-### 6.1 Puntos de sensibilidad
+| Prueba | Hipótesis y ASR que valida | Métricas de la sección 4.4.3 que produce | Dónde se reporta |
+| --- | --- | --- | --- |
+| [6.1 Autenticación y autorización por rol](#61-prueba-de-h2-autenticación-y-autorización-por-rol) | H2 / ASR-2 | Código HTTP por caso de acceso indebido (401 / 401 / 403) y % de respuestas 401/403 registradas | Tabla de políticas y códigos obtenidos (7.1.2) |
+| [6.2 Secuestro del refresh token y contención](#62-prueba-de-h1-secuestro-del-refresh-token-y-contención) | H1 / ASR-1 | Tiempo entre detección y verificación de la contención (< 2 min) y ventana máxima de exposición (≤ TTL configurado) | Tabla de tiempos de las dos corridas del incidente (7.1.2) |
 
-| Punto de sensibilidad | Dónde se modifica | Efecto esperado |
-| --- | --- | --- |
-| **TTL del access token** | Parámetro `AccessTokenTtlMinutes` del template (por defecto 5). Vuelva a ejecutar `aws cloudformation deploy` agregando `AccessTokenTtlMinutes=<minutos>` a `--parameter-overrides`. También puede cambiarse en la consola: Cognito → su User Pool → *App clients* → su App Client → *Edit* → *Access token expiration*. | Es el punto de sensibilidad principal: define cuánto sobrevive un access token robado después de la revocación. Más corto: menor ventana de exposición, pero más renovaciones. |
-| **TTL del refresh token** | Parámetro `RefreshTokenTtlDays` del template (por defecto 1). | Define cuánto tiempo puede un atacante seguir renovando tokens si nadie detecta el robo. |
-| **Mecanismo de contención** | Comando que se ejecuta ante el incidente: revocar un refresh token (`aws cognito-idp revoke-token`) o cerrar todas las sesiones del usuario (`aws cognito-idp admin-user-global-sign-out`). | Revocar un token corta solo esa sesión; el global sign-out corta todas, incluidas las legítimas del usuario. |
-| **Grupo del usuario** | Cognito: `aws cognito-idp admin-add-user-to-group` y `admin-remove-user-from-group`. El cambio aparece en el siguiente token que se emita, no en los ya emitidos. | Determina qué operaciones puede ejecutar (RBAC). |
-| **Rol exigido por un endpoint** | Decorador `@Roles(...)` sobre el método del controlador, en el código del microservicio. | Un rol demasiado amplio da más permisos de los necesarios. |
-| **Capas que validan el token** | Authorizer de la ruta en API Gateway y guard global (`JwtAuthGuard`) de cada microservicio. | Si una ruta queda sin authorizer en el gateway, la única defensa es el guard del servicio. |
+### 6.1 Prueba de H2: autenticación y autorización por rol
 
-> [!NOTE]
-> Los tokens que ya fueron emitidos conservan el TTL con el que nacieron. Si cambia el TTL, vuelva a iniciar sesión para obtener tokens con el valor nuevo.
-
-### 6.2 Prueba de autenticación y autorización por rol
+Esta prueba valida H2 y ASR-2: que cada intento de acceso indebido reciba el código que le corresponde (401 o 403) y quede registrado.
 
 Para **cada fila** de la tabla de políticas de acceso, envíe la petición en estos cuatro casos y anote el código HTTP obtenido:
 
@@ -445,7 +433,11 @@ curl -i -X POST "<ApiGatewayUrl>/ventas/ventas" \
 
 Después de las pruebas, busque en CloudWatch los registros del `AuthLoggerMiddleware`: consola de CloudWatch → **Log groups** → el grupo de logs del microservicio que recibió la petición → abra el flujo de logs más reciente. Verifique que **cada** respuesta 401 y 403 que provocó quedó registrada. Tenga en cuenta que las peticiones sin token o con token inválido las rechaza API Gateway antes de que lleguen al microservicio: analice qué queda registrado en cada capa.
 
-### 6.3 El incidente: secuestro del refresh token
+### 6.2 Prueba de H1: secuestro del refresh token y contención
+
+Esta prueba valida H1 y ASR-1: que la contención se aplique y se verifique en menos de 2 minutos desde la detección, y que el atacante pierda todo acceso cuando expire el access token que ya tenía. Tiene tres partes: el incidente (6.2.1), la contención (6.2.2) y una segunda corrida de ambas cambiando una variable de H1 (6.2.3).
+
+#### 6.2.1 El incidente: secuestro del refresh token
 
 Este ejercicio simula que un atacante obtiene el **refresh token** de un usuario. Use el usuario `operador` y los comandos de [`recursos/auth_cli.md`](recursos/auth_cli.md):
 
@@ -457,7 +449,7 @@ Este ejercicio simula que un atacante obtiene el **refresh token** de un usuario
 > **Pregunta 4:**
 > Si el refresh token ya fue robado, ¿qué cambia (y qué NO cambia) si el usuario hace logout en el front-end?
 
-### 6.4 La contención: revocación rápida
+#### 6.2.2 La contención: revocación rápida
 
 Suponga que en este momento se detecta el robo. Anote la **hora de detección** y aplique la contención desde Cognito:
 
@@ -474,7 +466,19 @@ Registre:
 - Hora en que el último access token del atacante dejó de funcionar
 - Ventana máxima de exposición observada (desde la detección hasta que ese access token dejó de funcionar)
 
-**Variación.** Repita el incidente y la contención cambiando **un** punto de sensibilidad y compare la ventana de exposición: por ejemplo, despliegue de nuevo con `AccessTokenTtlMinutes=2`, o use el global sign-out en lugar de revocar el refresh token.
+Estos datos son la **corrida 1** de la tabla de tiempos del incidente (7.1.2).
+
+#### 6.2.3 Segunda corrida: cambiar una variable de H1
+
+H1 depende de dos variables: el TTL del access token (la hipótesis lo acota entre 2 y 5 minutos) y el mecanismo de contención. Repita 6.2.1 y 6.2.2 cambiando **solo una** de ellas, y registre los mismos datos como **corrida 2** (la variación):
+
+| Opción | Cómo se aplica | Qué permite comparar |
+| --- | --- | --- |
+| TTL del access token de 2 minutos | Vuelva a ejecutar el `aws cloudformation deploy` de la sección 5.2 agregando `AccessTokenTtlMinutes=2` a `--parameter-overrides` (también se puede cambiar en la consola: Cognito → su User Pool → *App clients* → su App Client → *Edit* → *Access token expiration*). | Cuánto se reduce la ventana de exposición con el TTL más corto del rango de H1. |
+| Global sign-out en lugar de revocar el refresh token | En el paso 1 de 6.2.2, use `aws cognito-idp admin-user-global-sign-out` (sección 6 de `auth_cli.md`) en lugar de `revoke-token`. | Si cambia la ventana de exposición y qué costo tiene: el global sign-out cierra también las sesiones legítimas del usuario. |
+
+> [!NOTE]
+> Los tokens que ya fueron emitidos conservan el TTL con el que nacieron. Si cambia el TTL, vuelva a iniciar sesión para obtener tokens con el valor nuevo antes de empezar la corrida 2.
 
 ## 7. Entregables
 
@@ -499,11 +503,12 @@ Describa, sin interpretar todavía:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | | | | | | | | | |
 
-**Tiempos del incidente:**
+**Tiempos de las dos corridas del incidente:** cada columna es una ejecución completa del incidente y la contención (6.2.1 y 6.2.2). La **corrida 1** usa la configuración del template (access token de 5 minutos y revocación del refresh token). La **corrida 2** es la variación de 6.2.3: anote en la fila "Qué cambió respecto a la corrida 1" la única variable que modificó (por ejemplo, "TTL de 2 minutos" o "global sign-out"). Las horas se anotan en formato `hh:mm:ss` y los tiempos en minutos y segundos.
 
-| Medida | Corrida base | Variación (indique qué cambió) |
+| Medida | Corrida 1 (configuración del template) | Corrida 2 (variación) |
 | --- | --- | --- |
-| TTL configurado del access token | | |
+| Qué cambió respecto a la corrida 1 | — | |
+| TTL configurado del access token | 5 min | |
 | Mecanismo de contención usado | | |
 | Hora de detección | | |
 | Hora de revocación | | |
