@@ -789,6 +789,14 @@ Resources:
       RouteKey: 'GET /ventas/health'
       Target: !Sub 'integrations/${VentasHealthIntegration}'
 
+  # Logs de acceso del API Gateway: registran cada petición, incluidas las que
+  # el JWT authorizer rechaza con 401 antes de llegar al microservicio (ASR-2)
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/apigateway/${AWS::StackName}-access'
+      RetentionInDays: 7
+
   # Stage con throttling habilitado (Táctica 3 del lab)
   # Rate y Burst se configuran manualmente desde la consola según las instrucciones del lab
   ApiStage:
@@ -797,6 +805,10 @@ Resources:
       ApiId: !Ref CheapestHttpApi
       StageName: lab
       AutoDeploy: true
+      AccessLogSettings:
+        DestinationArn: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${ApiAccessLogGroup}'
+        # Texto plano (no JSON): el motivo del rechazo puede traer comillas que romperían el JSON
+        Format: '$context.requestTime $context.httpMethod $context.path status=$context.status routeKey=$context.routeKey integrationStatus=$context.integrationStatus requestId=$context.requestId ip=$context.identity.sourceIp authorizerError=$context.authorizer.error'
       DefaultRouteSettings:
         # Throttling desactivado al inicio — se activa manualmente en la Parte 2, Táctica 3
         ThrottlingBurstLimit: 5000
@@ -823,6 +835,10 @@ Outputs:
   CognitoIssuerUrl:
     Description: Issuer URL para validar JWT (usar en servicios)
     Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}'
+
+  ApiAccessLogGroupName:
+    Description: Grupo de logs de CloudWatch con los logs de acceso del API Gateway (401 del JWT authorizer)
+    Value: !Ref ApiAccessLogGroup
 
   RDSEndpoint:
     Description: Endpoint de la base de datos RDS

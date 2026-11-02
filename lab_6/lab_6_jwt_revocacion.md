@@ -217,7 +217,7 @@ La validación del token en dos capas (API Gateway y cada microservicio) no es u
 
 #### 4.5.2 Elementos de arquitectura involucrados
 
-Amazon Cognito (emisor de tokens), API Gateway con JWT authorizer, microservicios de Logística, Inventario y Ventas con la librería de autenticación compartida, y CloudWatch Logs para la evidencia de las respuestas 401 y 403.
+Amazon Cognito (emisor de tokens), API Gateway con JWT authorizer, microservicios de Logística, Inventario y Ventas con la librería de autenticación compartida, y CloudWatch Logs para la evidencia de las respuestas 401 (logs de acceso del API Gateway) y 403 (logs del microservicio).
 
 ![Diagrama de componentes](./recursos/diagrama_componentes.png)
 
@@ -431,7 +431,14 @@ curl -i -X POST "<ApiGatewayUrl>/ventas/ventas" \
   -d '{"items":[{"productoId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","cantidad":1}]}'
 ```
 
-Después de las pruebas, busque en CloudWatch los registros del `AuthLoggerMiddleware`: consola de CloudWatch → **Log groups** → el grupo de logs del microservicio que recibió la petición → abra el flujo de logs más reciente. Verifique que **cada** respuesta 401 y 403 que provocó quedó registrada. Tenga en cuenta que las peticiones sin token o con token inválido las rechaza API Gateway antes de que lleguen al microservicio: analice qué queda registrado en cada capa.
+Después de las pruebas, verifique en CloudWatch (consola de CloudWatch → **Log groups**) que **cada** respuesta 401 y 403 que provocó quedó registrada. Cada código queda registrado en la capa que lo produce:
+
+| Capa | Qué rechaza | Dónde queda registrado |
+| --- | --- | --- |
+| API Gateway (JWT authorizer) | Peticiones sin token o con token inválido (401). No llegan al microservicio. | Grupo de logs de acceso del API Gateway (output `ApiAccessLogGroupName` del stack). Cada línea trae `status=401` y `authorizerError=` con el motivo del rechazo (por ejemplo `missing: token not provided` o `invalid_token: crypto/rsa: verification error`). |
+| Microservicio (`RolesGuard`) | Peticiones con token válido sin el grupo requerido (403). | Grupo de logs del microservicio que recibió la petición (por ejemplo `/ecs/Cheapest-ventas`), registrado por el `AuthLoggerMiddleware` como una línea `AUTH_FAIL 403 <método> <ruta> - user=<sub> groups=[…]`. |
+
+Para ubicar una petición puntual en los logs de acceso, anote la hora en que la envió o escriba el patrón `"status=401"` (con las comillas) en **Search log group**. En los logs del microservicio, filtre por `AUTH_FAIL`.
 
 ### 6.2 Prueba de H1: secuestro del refresh token y contención
 
@@ -560,7 +567,7 @@ Incluya las respuestas argumentadas a las cuatro preguntas planteadas a lo largo
 
 ### 7.6 Evidencias
 
-- **Verificación de JWT y RBAC:** para cada fila de su tabla de políticas, la petición real con el código obtenido (éxito con el rol correcto, 401 sin token o con token inválido, 403 con un rol insuficiente) y los logs de CloudWatch del `AuthLoggerMiddleware` registrando esos 401 y 403.
+- **Verificación de JWT y RBAC:** para cada fila de su tabla de políticas, la petición real con el código obtenido (éxito con el rol correcto, 401 sin token o con token inválido, 403 con un rol insuficiente) y los logs de CloudWatch que registran cada rechazo: los 401 en los logs de acceso del API Gateway y los 403 en los logs del `AuthLoggerMiddleware` del microservicio.
 - **Evidencia del incidente:**
   - Inicio de sesión del usuario de prueba (obtención de `ACCESS_TOKEN` y `REFRESH_TOKEN`).
   - Peticiones exitosas usando el refresh token (antes de revocar).
